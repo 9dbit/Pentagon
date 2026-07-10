@@ -1,0 +1,149 @@
+/* ── Defense Center Page ── */
+
+/* Page header */
+.defensePage header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;margin-bottom:14px;flex-wrap:wrap}
+.defensePage .brand h1{margin:0 0 4px;font-size:20px;font-weight:800;letter-spacing:-.3px}
+.defensePage .brand p{margin:0;color:var(--muted);font-size:12px}
+.defensePage header .toolbar{display:flex;gap:6px;align-items:center;flex-shrink:0}
+.primaryBtn{background:var(--green);color:#001b0b;font-weight:800}
+.primaryBtn:hover{filter:brightness(1.1)}
+
+/* Form */
+.inputGrid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px}
+.modeInput,.projectSelect,.projectNew,.keywordInput,.targetInput,.singleDomain,.domainInput,.submitArea{display:flex;flex-direction:column;gap:4px}
+.domainInput{grid-column:1/-1}
+.submitArea{justify-content:flex-end;align-items:flex-start}
+.fieldLabel{font-size:11px;font-weight:800;color:#9facbc;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
+.submitBtn{background:var(--green);color:#001b0b;font-weight:800;padding:8px 18px}
+.notice{margin-top:10px;padding:10px 12px;background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.25);border-radius:9px;color:#ffd680;font-size:12px}
+
+/* Keyword group grid */
+.kwGrid{display:flex;flex-direction:column;gap:14px}
+.kw{background:#0d131b;border:1px solid #202a35;border-radius:14px;padding:14px}
+
+/* Group card header */
+.kwHead{display:flex;align-items:flex-start;gap:10px;margin-bottom:14px;flex-wrap:wrap}
+.kwInfo{flex:1;min-width:0}
+.kwInfo h2{margin:0 0 2px;font-size:16px;font-weight:800;letter-spacing:-.2px;word-break:break-word}
+.kwLast{white-space:nowrap;font-size:12px;color:var(--muted);flex-shrink:0;padding-top:3px}
+.kwLastLbl{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#4b5a6a;margin-right:2px}
+.kwRight{display:flex;align-items:center;gap:8px;flex-shrink:0;flex-wrap:wrap}
+.kwRight .toolbar{display:flex;gap:6px}
+
+/* Pill badges (used by Pill component) */
+.pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;line-height:1.4}
+.pill.ok{background:rgba(0,212,90,.18);color:var(--green)}
+.pill.ext{background:rgba(96,165,250,.14);color:#60a5fa}
+.pill.bad{background:rgba(255,77,79,.18);color:#ff8a8c}
+.pill.warn{background:rgba(255,176,32,.14);color:#ffb84d}
+
+/* Two-pane layout */
+.cols{display:flex;gap:12px;align-items:flex-start}
+.sub{flex:1;min-width:0;background:#0a1018;border:1px solid #202a35;border-radius:11px;padding:10px}
+.suspiciousPane{border-color:rgba(255,176,32,.2);background:rgba(255,176,32,.03)}
+
+/* Whitelisted domains table */
+.tableWrap{overflow-x:auto;-webkit-overflow-scrolling:touch}
+.tableWrap table{width:100%;border-collapse:collapse;font-size:12px;min-width:360px;table-layout:auto}
+.tableWrap th,.tableWrap td{border-bottom:1px solid rgba(255,255,255,.06);padding:7px 8px;text-align:left;vertical-align:middle}
+.tableWrap th{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
+.wlLink{color:#5fd4a0;text-decoration:none;font-size:12px;word-break:break-all}
+.wlLink:hover{text-decoration:underline;color:var(--green)}
+
+/* RankMetric */
+.rankMetric{display:inline-flex;align-items:baseline;gap:3px;font-size:12px}
+.rankMetric small{font-size:9px;color:var(--muted)}
+.rankMetric b{font-weight:700}
+.rankMetric.empty{color:var(--muted)}
+.rankMetric.trophy{color:#ffd700}
+.trophyIcon{font-size:11px;line-height:1}
+
+/* Result list & cards */
+.resultList{display:flex;flex-direction:column;gap:8px}
+.resultRow{background:#0d131c;border:1px solid #202a35;border-radius:10px;padding:9px 10px;display:flex;flex-direction:column;gap:7px}
+.hostLine{display:flex;flex-direction:column;gap:3px}
+
+/* Top row: domain link + rank badge side-by-side */
+.resultTopRow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
+.resultTopRow a{color:#5fd4a0;font-size:12.5px;font-weight:600;text-decoration:none;word-break:break-all;min-width:0;flex:1}
+.resultTopRow a:hover{text-decoration:underline;color:var(--green)}
+.rankLabel{font-size:10.5px;color:var(--muted);white-space:nowrap;flex-shrink:0;background:rgba(255,255,255,.05);border-radius:5px;padding:1px 6px;line-height:1.5}
+
+.titleLine{font-size:11.5px;color:#b0bcc8;line-height:1.4;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.reasonLine{font-size:10.5px;color:#6b7f8f;line-height:1.4}
+
+/* Result footer: pill + actions */
+.resultFooter{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.resultActions{display:flex;align-items:center;gap:6px;flex-wrap:nowrap;margin-left:auto}
+.intelBtn{font-size:11px;font-weight:800;padding:4px 10px;min-height:26px;background:rgba(96,165,250,.12);border:1px solid rgba(96,165,250,.3);color:#60a5fa;border-radius:7px;flex-shrink:0;white-space:nowrap}
+.intelBtn:hover{background:rgba(96,165,250,.22);border-color:rgba(96,165,250,.5)}
+
+/* ── Breakpoints ── */
+
+/* Tablet: two-pane → single column */
+@media(max-width:900px){
+  .cols{flex-direction:column}
+  .sub{width:100%;box-sizing:border-box}
+  .inputGrid{grid-template-columns:1fr 1fr}
+}
+
+/* Mobile */
+@media(max-width:640px){
+  .defensePage header{flex-direction:column;gap:8px}
+  .defensePage header .toolbar{width:100%}
+  .defensePage header .toolbar button{flex:1}
+
+  .kwHead{gap:6px}
+  .kwLast{order:-1;width:100%;padding-top:0}
+  .kwRight{width:100%;justify-content:space-between}
+  .kwRight .toolbar button{flex:1}
+
+  .inputGrid{grid-template-columns:1fr}
+  .domainInput{grid-column:auto}
+  .submitArea{align-items:stretch}
+  .submitBtn{width:100%}
+
+  /* Hide desktop-only table columns */
+  .wlDeskOnly{display:none!important}
+
+  /* Responsive table: stack rows as labeled cards */
+  .tableWrap{overflow-x:unset}
+  .tableWrap table{min-width:0;table-layout:auto}
+  .tableWrap thead{display:none}
+  .tableWrap tbody tr{display:flex;flex-direction:column;gap:5px;padding:8px 4px;border-bottom:1px solid rgba(255,255,255,.06)}
+  .tableWrap tbody tr:last-child{border-bottom:none}
+  .tableWrap td{display:flex;align-items:center;gap:8px;border-bottom:none;padding:1px 0;font-size:12px;overflow-wrap:anywhere}
+  .tableWrap td::before{content:attr(data-label);font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:#4b5a6a;min-width:52px;flex-shrink:0}
+  .tableWrap td.domain::before{content:"Domain"}
+
+  /* Move dropdown: full row on mobile */
+  .moveDropdown{max-width:100%!important;width:100%;box-sizing:border-box}
+
+  /* Result actions: stack below pill */
+  .resultFooter{flex-direction:column;align-items:stretch;gap:6px}
+  .resultFooter>.pill{align-self:flex-start}
+  .resultActions{margin-left:0;width:100%;flex-wrap:nowrap}
+  .resultActions .moveDropdown{flex:1;min-width:0}
+  .intelBtn{flex-shrink:0}
+
+  /* Rank label wraps below the domain link */
+  .rankLabel{font-size:10px;width:max-content}
+
+  .kw{padding:10px}
+  .sub{padding:8px}
+}
+
+/* Override global table{min-width:780px} at 760px breakpoint for defense tables */
+@media(max-width:760px){
+  .tableWrap table{min-width:0}
+}
+
+/* ── Node Rank Grid ── */
+.nodeRankGrid{margin-top:10px}
+.nodeRankGrid .tableWrap table{min-width:0}
+.nodeRankGrid .tableWrap td,.nodeRankGrid .tableWrap th{padding:5px 7px;text-align:center}
+.nodeRankGrid .tableWrap td.domain{text-align:left;font-size:11px;color:#9dbfcb;word-break:break-all;max-width:140px}
+.nodeRankGrid .tableWrap th:first-child{text-align:left}
+.nodeRankGrid .rankMetric{font-size:11px}
+.nodeRankGrid .rankMetric b{font-size:12px}
+.subGroupLabel{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.06em;color:#4b5a6a;padding:0 0 6px;border-bottom:1px solid rgba(255,255,255,.05);margin-bottom:8px}

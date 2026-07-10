@@ -1,0 +1,39 @@
+{
+  "name": "domain-radar",
+  "version": "1.2.1",
+  "description": "Domain monitor with DNS, HTTP, proxy, provider-node checks, rank checker, history, and Telegram alerts.",
+  "main": "server/index.js",
+  "scripts": {
+    "dev": "concurrently \"npm run server\" \"npm run client\"",
+    "server": "node server/index.js",
+    "client": "vite --host 0.0.0.0 --port 5000",
+    "build": "vite build",
+    "start": "node server/index.js",
+    "agent": "node agent/provider-agent.js",
+    "agent:poll": "node agent/provider-poll-agent.js",
+    "nodes:seed": "node scripts/seed-polling-nodes.js",
+    "db:init": "node server/db/init.js"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^4.3.4",
+    "axios": "^1.7.9",
+    "cheerio": "^1.0.0",
+    "concurrently": "^9.1.2",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.18.3",
+    "express-session": "^1.18.1",
+    "https-proxy-agent": "^7.0.6",
+    "jspdf": "^4.2.1",
+    "jspdf-autotable": "^5.0.8",
+    "lucide-react": "^0.468.0",
+    "node-cron": "^3.0.3",
+    "openai": "^6.45.0",
+    "pg": "^8.13.1",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1",
+    "socks-proxy-agent": "^8.0.5",
+    "vite": "^5.4.11"
+  }
+}

@@ -1,0 +1,318 @@
+const express = require("express");
+const axios = require("axios");
+const { pool } = require("./db");
+
+const router = express.Router();
+
+async function ensureNodeTable() {
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS provider_nodes (
+      id SERIAL PRIMARY KEY,
+      name TEXT NOT NULL UNIQUE,
+      provider_name TEXT NOT NULL,
+      network_type TEXT DEFAULT 'broadband',
+      endpoint_url TEXT NOT NULL,
+      secret_key TEXT DEFAULT '',
+      is_active BOOLEAN DEFAULT TRUE,
+      last_health_status TEXT DEFAULT 'unknown',
+      last_ping_at TIMESTAMP,
+      created_at TIMESTAMP DEFAULT NOW()
+    )
+  `);
+
+  await pool.query(`
+    CREATE TABLE IF NOT EXISTS node_telemetry (
+      node_id INT PRIMARY KEY REFERENCES provider_nodes(id) ON DELETE CASCADE,
+      battery_percent INT,
+      is_charging BOOLEAN,
+      battery_status TEXT,
+      battery_health TEXT,
+      battery_temperature_c NUMERIC,
+      signal_percent INT,
+      signal_dbm INT,
+      signal_asu INT,
+      signal_level INT,
+      signal_label TEXT,
+      network_operator TEXT,
+      network_type_label TEXT,
+      ip TEXT,
+      user_agent TEXT,
+      last_seen_at TIMESTAMP DEFAULT NOW(),
+      last_low_battery_alert_at TIMESTAMP
+    )
+  `);
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_percent INT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_dbm INT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_asu INT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_level INT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_label TEXT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS network_operator TEXT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS network_type_label TEXT");
+}
+
+function cleanBase(url) {
+  const raw = String(url || "").trim();
+  if (raw.toLowerCase().startsWith("poll://")) return raw.replace(/\/+$/, "");
+  return raw.replace(/\/+$/, "");
+}
+
+function defaultSecret(name) {
+  return `${String(name || "node").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "")}-secret-001`;
+}
+
+function pollingPresets() {
+  return [
+    { name: "TELKOMSEL-JKT-01", provider_name: "Telkomsel", network_type: "mobile" },
+    { name: "XL-JKT-01", provider_name: "XL", network_type: "mobile" },
+    { name: "INDOSAT-JKT-01", provider_name: "Indosat", network_type: "mobile" },
+    { name: "TRI-JKT-01", provider_name: "Tri", network_type: "mobile" },
+    { name: "SMARTFREN-JKT-01", provider_name: "Smartfren", network_type: "mobile" },
+    { name: "BIZNET-JKT-01", provider_name: "Biznet", network_type: "broadband" },
+    { name: "INDIHOME-JKT-01", provider_name: "IndiHome", network_type: "broadband" }
+  ].map((n) => ({ ...n, endpoint_url: `poll://${n.name}`, secret_key: defaultSecret(n.name) }));
+}
+
+function quantizeBatteryPercent(value) {
+  if (value === null || value === undefined) return null;
+  const n = Number(value);
+  if (!Number.isFinite(n)) return null;
+  const clamped = Math.max(0, Math.min(100, n));
+  if (clamped === 0) return 0;
+  if (clamped < 10) return 10;
+  return Math.floor(clamped / 10) * 10;
+}
+
+function formatSignalLabel(node) {
+  if (node.signal_dbm !== null && node.signal_dbm !== undefined) return `${node.signal_dbm} dBm`;
+  if (node.signal_percent !== null && node.signal_percent !== undefined) return `${node.signal_percent}%`;
+  if (node.signal_level !== null && node.signal_level !== undefined) return `${node.signal_level}/4`;
+  if (node.signal_label && /\d/.test(String(node.signal_label))) return node.signal_label;
+  return "n/a";
+}
+
+function mapNetworkTypeLabel(raw) {
+  if (!raw) return "";
+  const key = String(raw).toLowerCase().trim();
+  const map = {
+    lte: "LTE", nr: "5G", nsa: "5G", sa: "5G",
+    edge: "EDGE", gprs: "GPRS", gsm: "GSM",
+    umts: "3G", wcdma: "3G", hsdpa: "HSPA", hsupa: "HSPA",
+    hspa: "HSPA", hspap: "HSPA+", ehrpd: "4G", cdma: "CDMA",
+    evdo: "EVDO", "1xrtt": "1xRTT", iwlan: "WIFI"
+  };
+  return map[key] || "";
+}
+
+function liveHealthForPollingNode(node) {
+  const url = String(node.endpoint_url || "").toLowerCase();
+  if (!url.startsWith("poll://")) return null;
+  const lastSeen = node.telemetry_last_seen_at;
+  if (!lastSeen) return "waiting";
+  const ageMs = Date.now() - new Date(lastSeen).getTime();
+  if (Number.isFinite(ageMs) && ageMs <= 5 * 60 * 1000) return "online";
+  return "waiting";
+}
+
+function enrichNodeForUi(node) {
+  const originalProviderName = node.provider_name;
+  const originalNetworkType = node.network_type;
+  const rawBatteryPercent = node.battery_percent;
+  const visualBatteryPercent = quantizeBatteryPercent(rawBatteryPercent);
+  const hasBattery = visualBatteryPercent !== null && visualBatteryPercent !== undefined;
+  const batteryLabel = hasBattery ? `${visualBatteryPercent}%` : "n/a";
+  const chargingLabel = node.is_charging === null || node.is_charging === undefined ? "n/a" : node.is_charging ? "Yes" : "No";
+  const lastSeenLabel = node.telemetry_last_seen_at ? new Date(node.telemetry_last_seen_at).toLocaleString("id-ID", { timeZone: "Asia/Jakarta" }) : "never";
+  const signalLabel = formatSignalLabel(node);
+  const networkTypeParts = [originalNetworkType];
+  if (node.network_type_label) networkTypeParts.push(node.network_type_label);
+  if (node.network_operator) networkTypeParts.push(node.network_operator);
+  const iconLine = `${networkTypeParts.join(" · ")} · 📶 Signal ${signalLabel} · 🔋 ${batteryLabel} · ⚡ ${chargingLabel}`;
+  const networkLabel = mapNetworkTypeLabel(node.network_type_label);
+  const liveHealth = liveHealthForPollingNode(node);
+  return {
+    ...node,
+    raw_provider_name: originalProviderName,
+    raw_network_type: originalNetworkType,
+    raw_battery_percent: rawBatteryPercent,
+    battery_percent: visualBatteryPercent,
+    provider_name: originalProviderName,
+    network_type: iconLine,
+    battery_label: batteryLabel,
+    charging_label: chargingLabel,
+    signal_label: signalLabel,
+    signal_quality: signalLabel !== "n/a" ? signalLabel : "",
+    network_label: networkLabel,
+    last_seen_label: lastSeenLabel,
+    last_health_status: liveHealth !== null ? liveHealth : (node.last_health_status || "unknown")
+  };
+}
+
+async function pingNode(node) {
+  if (String(node.endpoint_url || "").toLowerCase().startsWith("poll://")) {
+    return { ok: true, mode: "polling", data: { ok: true, message: "Polling node waits for device agent heartbeat", node_name: node.name } };
+  }
+  const started = Date.now();
+  const url = `${cleanBase(node.endpoint_url)}/health`;
+  const { data } = await axios.get(url, {
+    timeout: 12000,
+    headers: node.secret_key ? { "x-domain-radar-secret": node.secret_key } : {}
+  });
+  return { ok: true, latency_ms: Date.now() - started, data };
+}
+
+async function getPollingNodeHealth(nodeId) {
+  const { rows } = await pool.query(
+    `SELECT last_seen_at, NOW() - last_seen_at AS age
+     FROM node_telemetry
+     WHERE node_id=$1
+     LIMIT 1`,
+    [nodeId]
+  );
+
+  const lastSeenAt = rows[0]?.last_seen_at;
+  if (!lastSeenAt) return { health: "waiting", reason: "waiting for device agent heartbeat" };
+
+  const ageMs = Date.now() - new Date(lastSeenAt).getTime();
+  if (Number.isFinite(ageMs) && ageMs <= 2 * 60 * 1000) {
+    return { health: "online", reason: "active polling heartbeat" };
+  }
+
+  return { health: "waiting", reason: "polling heartbeat stale" };
+}
+
+router.get("/", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    const tenant = req.tenant || 'admin';
+    const { rows } = await pool.query(`
+      SELECT n.*,
+        t.battery_percent,
+        t.is_charging,
+        t.battery_status,
+        t.battery_health,
+        t.battery_temperature_c,
+        t.signal_percent,
+        t.signal_dbm,
+        t.signal_asu,
+        t.signal_level,
+        t.signal_label,
+        t.network_operator,
+        t.network_type_label,
+        t.ip AS telemetry_ip,
+        t.last_seen_at AS telemetry_last_seen_at,
+        t.last_low_battery_alert_at
+      FROM provider_nodes n
+      LEFT JOIN node_telemetry t ON t.node_id = n.id
+      WHERE n.tenant=$1
+      ORDER BY n.id DESC
+    `, [tenant]);
+    res.json(rows.map(enrichNodeForUi));
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.get("/presets", async (req, res) => {
+  res.json(pollingPresets());
+});
+
+router.post("/presets", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    const inserted = [];
+    for (const node of pollingPresets()) {
+      const { rows } = await pool.query(
+        `INSERT INTO provider_nodes (name, provider_name, network_type, endpoint_url, secret_key)
+         VALUES ($1,$2,$3,$4,$5)
+         ON CONFLICT (name) DO UPDATE SET provider_name=EXCLUDED.provider_name, network_type=EXCLUDED.network_type, endpoint_url=EXCLUDED.endpoint_url, secret_key=EXCLUDED.secret_key
+         RETURNING *`,
+        [node.name, node.provider_name, node.network_type, node.endpoint_url, node.secret_key]
+      );
+      inserted.push(rows[0]);
+    }
+    res.json({ ok: true, count: inserted.length, nodes: inserted });
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    const name = String(req.body.name || "").trim();
+    const provider = String(req.body.provider_name || "").trim();
+    const network = String(req.body.network_type || "broadband").trim();
+    const endpoint = cleanBase(req.body.endpoint_url || "");
+    const secret = String(req.body.secret_key || "").trim();
+    if (!name || !provider || !endpoint) return res.status(400).json({ error: "Name, provider, and endpoint URL are required" });
+
+    const { rows } = await pool.query(
+      `INSERT INTO provider_nodes (name, provider_name, network_type, endpoint_url, secret_key)
+       VALUES ($1,$2,$3,$4,$5)
+       ON CONFLICT (name) DO UPDATE SET provider_name=EXCLUDED.provider_name, network_type=EXCLUDED.network_type, endpoint_url=EXCLUDED.endpoint_url, secret_key=EXCLUDED.secret_key
+       RETURNING *`,
+      [name, provider, network, endpoint, secret]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.post("/:id/ping", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    const { rows } = await pool.query("SELECT * FROM provider_nodes WHERE id=$1", [req.params.id]);
+    if (!rows[0]) return res.status(404).json({ error: "Node not found" });
+
+    try {
+      const result = await pingNode(rows[0]);
+      let health = "online";
+      let reason = "ping ok";
+
+      if (result.mode === "polling") {
+        const polling = await getPollingNodeHealth(req.params.id);
+        health = polling.health;
+        reason = polling.reason;
+      }
+
+      await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
+      await pool.query(
+        "UPDATE provider_nodes SET last_health_status=$1, last_health_reason=$2, last_ping_at=NOW() WHERE id=$3",
+        [health, reason, req.params.id]
+      );
+      res.json({ ...result, health, reason });
+    } catch (err) {
+      await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [req.params.id]);
+      res.json({ ok: false, error: err.message });
+    }
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.patch("/:id", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    const { is_active } = req.body;
+    const { rows } = await pool.query(
+      "UPDATE provider_nodes SET is_active=COALESCE($1,is_active) WHERE id=$2 RETURNING *",
+      [is_active, req.params.id]
+    );
+    res.json(rows[0]);
+  } catch (err) {
+    next(err);
+  }
+});
+
+router.delete("/:id", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    await pool.query("DELETE FROM provider_nodes WHERE id=$1", [req.params.id]);
+    res.json({ ok: true });
+  } catch (err) {
+    next(err);
+  }
+});
+
+module.exports = { router, ensureNodeTable, pingNode, cleanBase, pollingPresets };

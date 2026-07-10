@@ -1,0 +1,99 @@
+/* Domain Radar logo: transparent radar icon (rotating) + cropped white text on black (screen blend) */
+
+/* ── Sidebar (aside h1) ───────────────────────────────────────────── */
+aside h1 {
+  font-size: 0 !important;
+  display: flex !important;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px !important;
+  letter-spacing: 0 !important;
+  line-height: 1 !important;
+}
+
+img.logoIcon {
+  width: 36px;
+  height: 36px;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+  animation: domainRadarLogoSpin 6s linear infinite;
+  filter: drop-shadow(0 0 7px rgba(80, 255, 100, .55));
+}
+
+img.logoText {
+  height: 44px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  margin-left: -30px;
+  margin-bottom: 0px;
+  margin-top: 10px;
+}
+
+/* ── Mobile header ────────────────────────────────────────────────── */
+.mobileHeaderLogo {
+  display: flex !important;
+  align-items: center;
+  gap: 7px;
+  font-size: 0 !important;
+}
+
+img.radarIconSm {
+  width: 32px;
+  height: 32px;
+  display: block;
+  object-fit: contain;
+  animation: domainRadarLogoSpin 6s linear infinite;
+  filter: drop-shadow(0 0 5px rgba(80, 255, 100, .5));
+}
+
+img.logoTextSm {
+  height: 34px;
+  width: auto;
+  display: block;
+  object-fit: contain;
+  mix-blend-mode: screen;
+}
+
+/* ── Login page brand ─────────────────────────────────────────────── */
+.loginBrand {
+  background: transparent !important;
+  border: none !important;
+  padding: 4px 0 10px !important;
+  gap: 14px !important;
+}
+
+img.logoIconLg {
+  width: 56px;
+  height: 56px;
+  display: block;
+  flex: 0 0 auto;
+  object-fit: contain;
+  animation: domainRadarLogoSpin 6s linear infinite;
+  filter: drop-shadow(0 0 10px rgba(80, 255, 100, .6));
+}
+
+img.logoTextLg {
+  width: min(480px, 55vw);
+  height: auto;
+  display: block;
+  object-fit: contain;
+  mix-blend-mode: screen;
+  margin-left: -60px;
+  margin-bottom: -20px;
+}
+
+/* ── Spin animation ───────────────────────────────────────────────── */
+@keyframes domainRadarLogoSpin {
+  to { transform: rotate(360deg); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  img.logoIcon,
+  img.radarIconSm,
+  img.logoIconLg {
+    animation: none;
+  }
+}

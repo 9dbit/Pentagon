@@ -1,0 +1,297 @@
+Bro, kalau OpenAI dipakai sebagai SEO Audit + Deep Content Inspector, point penilaiannya sebaiknya dibagi jadi beberapa layer ini:
+
+1. Keyword & Search Intent
+
+Cek apakah setiap halaman benar-benar menjawab intent keyword.
+
+Yang dinilai:
+
+Keyword utama per halaman jelas atau tidak
+Intent: informational, commercial, transactional, navigational
+Konten sesuai kebutuhan user di SERP atau cuma “ngejar keyword”
+Ada keyword turunan, sinonim, entity, dan pertanyaan terkait
+Tidak ada keyword cannibalization antar halaman
+
+Google sendiri menekankan konten harus membantu user, bukan dibuat terutama untuk manipulasi ranking.
+
+2. Content Quality
+
+Ini inti deep inspect-nya.
+
+Yang dinilai:
+
+Konten unik atau generik
+Jawaban lengkap atau tipis
+Ada insight asli, data, contoh, pengalaman, atau hanya rewrite
+Pembukaan langsung menjawab kebutuhan user
+Struktur heading rapi
+Tidak terlalu banyak fluff
+Ada FAQ yang relevan
+Ada update freshness untuk topik yang butuh info terbaru
+3. E-E-A-T & Trust Signal
+
+Untuk brand/project yang ingin kuat di SERP, halaman harus terlihat punya otoritas.
+
+Yang dicek:
+
+Ada author/editor/reviewer
+Ada About, Contact, Privacy, Terms
+Ada brand story dan entity jelas
+Ada sumber/referensi kredibel
+Ada bukti pengalaman: studi kasus, foto, review, data, portfolio
+Ada konsistensi nama brand, alamat, sosial media, schema
+
+Google juga menyarankan evaluasi konten dengan konsep Who, How, Why, terutama saat memakai AI-generated content.
+
+4. Topical Authority
+
+Bukan cuma satu artikel rank, tapi satu ekosistem konten.
+
+Yang dinilai:
+
+Website punya cluster konten atau tidak
+Ada pillar page
+Ada supporting article
+Ada internal linking antar topik
+Ada coverage keyword dari basic sampai advanced
+Ada halaman comparison, tutorial, FAQ, review, glossary, city page, use case page
+
+Contoh struktur:
+
+Pillar:
+- Panduan Lengkap Brand / Produk / Niche
+
+Support:
+- Cara daftar
+- Review
+- Tutorial
+- FAQ
+- Perbandingan
+- Kota / lokasi
+- Masalah umum
+- Solusi
+- Update berita
+5. On-Page SEO
+
+Audit elemen halaman satu per satu.
+
+Yang dicek:
+
+Title tag
+Meta description
+H1 hanya satu
+H2/H3 logis
+URL slug pendek
+Image alt text
+Anchor text internal link
+Keyword placement natural
+CTA jelas
+Schema markup
+Table of content bila artikel panjang
+
+Google SEO Starter Guide menekankan agar halaman mudah di-crawl, di-index, dan dipahami mesin pencari.
+
+6. SERP Competitor Gap
+
+OpenAI harus bandingkan konten kita vs top 10 Google.
+
+Yang dibandingkan:
+
+Panjang dan kedalaman konten
+Heading structure kompetitor
+Subtopik yang belum kita bahas
+FAQ yang muncul berulang
+Entity penting yang belum masuk
+Kelebihan dan kelemahan konten kita
+Angle unik supaya tidak jadi artikel pasaran
+
+Output ideal:
+
+Missing Topics:
+- ...
+Content Gap:
+- ...
+Entity Gap:
+- ...
+Suggested Additions:
+- ...
+Priority:
+High / Medium / Low
+7. Internal Linking
+
+Ini sering jadi mesin bawah tanah SEO.
+
+Yang dinilai:
+
+Halaman penting dapat link dari banyak halaman
+Anchor text natural dan bervariasi
+Tidak ada orphan page
+Pillar page mengalirkan authority ke support page
+Support page balik link ke money page
+Link tidak terlalu spammy
+Ada breadcrumb
+8. Technical SEO Basic
+
+Walaupun fokus deep content, teknikal tetap wajib dicek.
+
+Yang dinilai:
+
+Indexable atau noindex
+Canonical benar
+Sitemap valid
+Robots.txt tidak blokir halaman penting
+Status code 200
+Tidak ada redirect chain
+Mobile friendly
+Core Web Vitals
+Page speed
+Duplicate title/meta
+Broken internal link
+9. Structured Data / Schema
+
+Schema membantu Google memahami entity halaman.
+
+Yang dicek:
+
+Organization schema
+Website schema
+Breadcrumb schema
+Article schema
+FAQ schema
+Product schema jika ada produk
+Review schema kalau valid dan bukan manipulatif
+LocalBusiness schema jika ada lokasi
+10. Spam & Risk Audit
+
+Ini penting, apalagi kalau banyak project/brand.
+
+Yang dicek:
+
+Konten massal low quality
+Doorway page
+Auto-generated content tanpa value
+Parasite/third-party content berisiko
+Duplicate antar domain
+Keyword stuffing
+Link keluar ke situs tidak relevan
+Cloaking, hidden text, redirect manipulatif
+Thin affiliate page
+
+Google punya spam policies yang bisa membuat halaman atau website turun ranking bahkan dihapus dari Search jika melanggar.
+
+11. Brand Entity Strength
+
+Untuk keyword brand, ini sangat penting.
+
+Yang dicek:
+
+Nama brand konsisten
+Ada halaman resmi brand
+Ada logo, social profile, contact
+Ada mention brand di berbagai aset
+Ada sameAs schema
+Ada halaman “tentang brand”
+Ada knowledge footprint: sosial, directory, artikel, press release, profile page
+Ada branded search intent yang jelas
+12. Conversion & UX SEO
+
+Ranking tanpa conversion itu cuma parade kosong di jalan sepi.
+
+Yang dicek:
+
+CTA jelas
+Above the fold kuat
+Navigasi mudah
+Artikel tidak bikin user kabur
+Ada trust badge/testimoni
+Form/WhatsApp/button mudah ditemukan
+Layout mobile enak dibaca
+Pop-up tidak mengganggu
+13. Freshness & Update Signal
+
+Untuk niche yang kompetitif, konten harus hidup.
+
+Yang dicek:
+
+Tanggal update
+Bagian “last updated”
+Ada update berkala
+Ada konten berita/tren
+Ada halaman evergreen yang diperbarui
+Data lama diganti
+Link mati dibersihkan
+14. Backlink & Authority Context
+
+AI audit juga perlu membaca apakah konten layak diberi backlink.
+
+Yang dicek:
+
+Halaman money page punya supporting links
+Artikel pendukung mengalirkan link ke target keyword
+Anchor text terlalu exact match atau natural
+Domain rujukan relevan atau tidak
+Backlink toxic/spam
+Distribusi link ke homepage vs inner page
+15. Final Scoring System
+
+Saya sarankan setiap halaman diberi score seperti ini:
+
+SEO Score: 0-100
+
+Breakdown:
+- Search Intent Match: 0-10
+- Content Depth: 0-15
+- Uniqueness: 0-10
+- E-E-A-T: 0-10
+- On-Page SEO: 0-10
+- Internal Linking: 0-10
+- Entity Coverage: 0-10
+- Technical SEO: 0-10
+- SERP Gap: 0-10
+- Spam Risk: 0-5
+Output yang ideal dari OpenAI Audit
+
+Untuk setiap URL, hasilnya jangan cuma “bagus/jelek”. Formatnya begini:
+
+URL:
+Target Keyword:
+Search Intent:
+Current SEO Score:
+Ranking Potential:
+Main Problems:
+Content Gap:
+Entity Gap:
+Internal Link Suggestion:
+Title Suggestion:
+Meta Description Suggestion:
+Heading Improvement:
+Paragraphs to Rewrite:
+FAQ to Add:
+Schema Recommendation:
+Priority Action:
+Estimated Impact:
+Kesimpulan singkat
+
+Point paling penting untuk audit SEO pakai OpenAI:
+
+Intent match
+Content quality
+Topical authority
+Entity coverage
+E-E-A-T
+SERP gap
+Internal linking
+On-page SEO
+Technical indexability
+Spam risk
+Brand entity
+Conversion UX
+Freshness
+Backlink context
+Actionable recommendation
+
+Formula besarnya:
+
+Rank kuat = Helpful Content + Topical Authority + Entity Trust + Internal Link + Technical Clean + Brand Signal
+
+Jadi OpenAI-nya jangan dipakai cuma sebagai “writer”, tapi sebagai SEO Inspector Engine yang membaca halaman seperti detektif kecil bawa kaca pembesar, lalu keluarin diagnosis, skor, dan resep optimasi per URL.

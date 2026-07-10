@@ -1,0 +1,1 @@
+- [Demo tenant isolation pattern](demo-tenant-isolation.md) — tenant='demo' column on all data tables; getTenant(req)/requireNotDemo middleware in index.js; demoSeed.js must call ensureRankTables() before seeding rank data
