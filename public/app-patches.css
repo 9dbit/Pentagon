@@ -137,25 +137,12 @@
   .aiPromptChips button { min-height: 36px; }
   .aiRefreshFull { display: none; }
   .aiAdvisorToggle { right: 18px; bottom: 18px; z-index: 150; width: 62px; height: 62px; }
-  /* Mobile table: card layout */
-  .panel:has(table) { overflow: hidden; }
-  .panel table { display: block; width: 100%; max-width: 100%; min-width: 0; }
-  .panel thead { display: none; }
-  .panel tbody { display: grid; gap: 10px; width: 100%; }
-  .panel tbody tr { display: block; width: 100%; background: #202124; border: 1px solid #303136; border-radius: 16px; padding: 12px; overflow: hidden; }
-  .panel tbody td { display: grid; grid-template-columns: 92px minmax(0,1fr); gap: 8px; align-items: start; width: 100%; border: 0; border-bottom: 1px solid rgba(255,255,255,.06); padding: 8px 0; font-size: 14px; line-height: 1.35; word-break: break-word; overflow-wrap: anywhere; }
-  .panel tbody td:last-child { border-bottom: 0; }
-  .panel tbody td::before { color: #9ca3af; font-size: 10px; font-weight: 1000; text-transform: uppercase; letter-spacing: .06em; line-height: 1.2; }
-  .panel tbody td:nth-child(1)::before { content: 'Domain'; }
-  .panel tbody td:nth-child(2)::before { content: 'Project'; }
-  .panel tbody td:nth-child(3)::before { content: 'Status'; }
-  .panel tbody td:nth-child(4)::before { content: 'Last'; }
-  .panel tbody td:nth-child(5)::before { content: 'Checked'; }
-  .panel tbody td:nth-child(6)::before { content: 'Active'; }
-  .panel tbody td:nth-child(7)::before { content: 'Actions'; }
-  .panel tbody td:nth-child(7) { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
-  .panel tbody td:nth-child(7)::before { width: 92px; flex: 0 0 92px; }
-  .panel tbody td:nth-child(7) button { width: 42px; height: 42px; border-radius: 12px; }
+  /* Data tables: keep real <thead> and scroll horizontally so column
+     headers always match the data. The Dashboard domain list has its own
+     .domainCards view that takes over below 640px (see dashboard-patches.css). */
+  .panel { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .panel table { min-width: 720px; }
+  .domainListWrap table { min-width: 640px; }
   .domainCell { font-family: ui-monospace,SFMono-Regular,Menlo,Monaco,Consolas,monospace; font-weight: 900; }
   .badge { writing-mode: horizontal-tb; display: inline-flex; min-width: auto; width: auto; height: auto; padding: 6px 10px; line-height: 1; white-space: nowrap; }
   .cards { gap: 12px; }
@@ -168,8 +155,4 @@
 @media (max-width: 640px) {
   body { padding-bottom: 92px; }
   .aiAdvisorToggle { right: 18px; bottom: 18px; }
-}
-@media (max-width: 420px) {
-  .panel tbody td { grid-template-columns: 82px minmax(0,1fr); }
-  .panel tbody td:nth-child(7)::before { width: 82px; flex-basis: 82px; }
 }
