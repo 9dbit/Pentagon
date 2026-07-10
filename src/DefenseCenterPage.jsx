@@ -334,7 +334,7 @@ export default function DefenseCenterPage({ isDemo = false }) {
   const suspiciousTotal = results.filter((r) => r.classification === "suspicious").length;
 
   return (
-    <div className="defensePage contentMain">
+    <div className="defensePage">
       <header>
         <div className="brand">
           <h1>Rank Defense Center</h1>
