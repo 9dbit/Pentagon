@@ -129,9 +129,13 @@ aside button.navActive, aside a.navActive, .sideNav .navActive {
   }
 }
 
-/* ── Responsive: horizontal nav bar at small screens ── */
+/* ── Responsive: horizontal nav bar at small screens ──
+   Scoped to .sideNav (the standalone rank-defense.html page) only.
+   The React app's <aside> is handled by src/style.css (hidden here, with a
+   hamburger header taking over) — keeping `aside` out of these rules avoids a
+   display:none vs display:flex conflict that used to depend on CSS load order. */
 @media (max-width: 640px) {
-  aside, .sideNav {
+  .sideNav {
     position: sticky;
     top: 0;
     height: auto;
@@ -148,8 +152,8 @@ aside button.navActive, aside a.navActive, .sideNav .navActive {
     border-right: none;
     border-bottom: 1px solid var(--line, #202a35);
   }
-  aside h1, .sideNav h1, aside > p, .sideNav > p, aside .sideNotice, .sideNotice { display: none; }
-  aside button, aside a, .sideNav a, .sideNav button {
+  .sideNav h1, .sideNav > p, .sideNav .sideNotice { display: none; }
+  .sideNav a, .sideNav button {
     flex: 0 0 auto;
     width: 44px;
     height: 44px;
