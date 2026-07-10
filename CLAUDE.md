@@ -276,3 +276,52 @@ Agent (provider-node-kit): `PROVIDER_NAME`, `NETWORK_TYPE`, `AGENT_SECRET`, `AGE
 3. Ikuti pola migrasi lazy untuk perubahan schema.
 4. Jaga isolasi tenant demo untuk setiap route/tabel baru.
 5. Commit dengan pesan deskriptif; jangan push rahasia.
+
+---
+
+## 12. Arsitektur CSS & catatan cleanup (frontend)
+
+CSS di project ini **berlapis** dari dua sumber. Pahami ini sebelum mengubah styling.
+
+### Dua jalur pemuatan CSS
+- **Bundle Vite** (di-import dari `src/App.jsx`): `src/style.css`, `src/dashboard-patches.css`,
+  `src/DefenseCenterPage.css`. Ikut proses build.
+- **Statis via `<link>` di `index.html`** (tidak lewat Vite, tidak butuh rebuild):
+  `public/sidebar.css`, `public/app-patches.css`, `public/logo-rotation.css`,
+  `public/rank-defense-v2.css`, `public/serp-alerts-polish.css`, plus `<style>` inline.
+
+`public/app-patches.css` sengaja jadi **layer konsolidasi/override** ("Consolidated app patches —
+merged from all patch CSS files"). Kalau ada aturan yang sama di dua file, pemenangnya
+bergantung urutan load — jadi ubah nilai di **satu tempat** dan cek hasilnya.
+
+### Sistem layout & sidebar
+- Layout utama app = **CSS grid** `.app{grid-template-columns:240px 1fr}` (`src/style.css`).
+- Sidebar React (`<aside>`): desktop = kolom grid; ≤980px = icon-rail 64px (`public/sidebar.css`);
+  ≤640px = **disembunyikan**, diganti hamburger (`renderMobileHeader`/`renderMobileDropdown`).
+- Aturan mobile di `public/sidebar.css` **khusus `.sideNav`** (halaman statis `rank-defense.html`),
+  jangan tambahkan `aside` ke situ — dulu bikin konflik `display:none` vs `display:flex`.
+- Jangan pakai class `.contentMain` di komponen React yang dirender di dalam `<main>`
+  (menambah `margin-left:240px` → dobel offset). `.contentMain` hanya untuk `rank-defense.html`.
+
+### Tabel di mobile
+- Tabel data mempertahankan `<thead>` asli dan **scroll horizontal** di ≤760px (lihat
+  `public/app-patches.css`). **Jangan** kembalikan transform `.panel table→card` berbasis
+  `td:nth-child(n)::before` — itu meng-hardcode label kolom dan salah untuk tabel non-domain.
+- Tabel domain Dashboard punya tampilan kartu khusus `.domainCards` yang aktif di ≤640px
+  (`src/dashboard-patches.css`); tabelnya di-`display:none` di lebar itu.
+- Input form di mobile = `font-size:16px` (mencegah auto-zoom iOS). Pertahankan.
+
+### Utang teknis CSS (butuh uji visual sebelum dibereskan)
+- Beberapa aturan terduplikasi di `dashboard-patches.css` **dan** `app-patches.css` dengan nilai
+  sedikit beda (`.analyticsHero`, `.analyticsGridTop`, `.analyticsCard`, `.analyticsSamples`,
+  `.nodeStatusGrid`). Konsolidasikan ke satu file **sambil membandingkan tampilan**, karena
+  pemenang cascade bergantung urutan load.
+- Token `--side` didefinisikan 2x beda warna (`#05070b` di `style.css`, `#0d1117` di
+  `sidebar.css`). `sidebar.css` dipakai `rank-defense.html` yang tidak load `style.css`, jadi
+  jangan asal hapus — samakan nilainya kalau memang ingin konsisten.
+
+### File orphan / mati (tidak di-load di mana pun)
+- `public/node-terminal-ui.{css,js}`, `public/node-terminal-activity.{css,js}` — fitur "node
+  terminal radar" yang tidak dirujuk kode aktif mana pun. Aman dihapus kalau tidak dipakai.
+- `public/serp-alerts-polish.js` — sudah digantikan oleh `public/ui-polish.js` (yang merender
+  panel SERP alerts). CSS-nya (`serp-alerts-polish.css`) TETAP dipakai dan sudah di-link.
