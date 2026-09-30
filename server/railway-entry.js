@@ -3,16 +3,22 @@ require("dotenv").config();
 const scheduler = require("./scheduler");
 const schedulerEnabled = String(process.env.SCHEDULER_ENABLED || "true").toLowerCase() !== "false";
 
-try {
-  if (process.env.DATABASE_URL) {
-    const dbUrl = new URL(process.env.DATABASE_URL);
-    console.log(`[Railway] DB target host=${dbUrl.hostname} database=${dbUrl.pathname.replace(/^\//, "") || "postgres"}`);
-  } else {
-    console.log("[Railway] DB target missing DATABASE_URL");
+function logDbTarget(name) {
+  try {
+    const value = process.env[name];
+    if (!value) {
+      console.log(`[Railway] ${name} target missing`);
+      return;
+    }
+    const dbUrl = new URL(value);
+    console.log(`[Railway] ${name} target host=${dbUrl.hostname} database=${dbUrl.pathname.replace(/^\//, "") || "postgres"}`);
+  } catch (err) {
+    console.log(`[Railway] ${name} target parse error: ${err.message}`);
   }
-} catch (err) {
-  console.log(`[Railway] DB target parse error: ${err.message}`);
 }
+
+logDbTarget("DATABASE_URL");
+logDbTarget("DATABASE_URL_DEVELOPMENT");
 
 if (!schedulerEnabled) {
   scheduler.startScheduler = () => {
