@@ -5,11 +5,13 @@ WORKDIR /app
 ENV NODE_ENV=development
 
 COPY package.json package-lock.json ./
-RUN npm install -g npm@10.9.2 \
-  && env -u NPM_CONFIG_PRODUCTION -u NODE_ENV npm install --include=dev --no-audit --no-fund
+RUN corepack enable \
+  && corepack prepare pnpm@9.15.4 --activate \
+  && pnpm import \
+  && pnpm install --prod=false --no-frozen-lockfile
 
 COPY . .
-RUN env -u NPM_CONFIG_PRODUCTION NODE_ENV=development npm run build
+RUN pnpm run build
 
 ENV NODE_ENV=production
 ENV PORT=3000
