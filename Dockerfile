@@ -6,7 +6,7 @@ ENV NODE_ENV=development
 ENV NPM_CONFIG_PRODUCTION=false
 
 COPY package.json package-lock.json ./
-RUN npm ci --include=dev --no-audit --no-fund
+RUN npm install --include=dev --no-audit --no-fund
 
 COPY . .
 RUN npm run build
