@@ -1,35 +1,30 @@
-/* Domain Radar logo: transparent radar icon (rotating) + cropped white text on black (screen blend) */
+/* Pentagon logo: fire-eagle icon + Bridge Officer text */
 
 /* ── Sidebar (aside h1) ───────────────────────────────────────────── */
 aside h1 {
   font-size: 0 !important;
   display: flex !important;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   margin: 0 0 6px !important;
   letter-spacing: 0 !important;
   line-height: 1 !important;
 }
 
 img.logoIcon {
-  width: 36px;
-  height: 36px;
+  width: 48px;
+  height: 48px;
   display: block;
   flex: 0 0 auto;
   object-fit: contain;
-  animation: domainRadarLogoSpin 6s linear infinite;
-  filter: drop-shadow(0 0 7px rgba(80, 255, 100, .55));
+  filter: drop-shadow(0 0 6px rgba(249,115,22,.5));
 }
 
 img.logoText {
-  height: 44px;
+  height: 28px;
   width: auto;
   display: block;
   object-fit: contain;
-  mix-blend-mode: screen;
-  margin-left: -30px;
-  margin-bottom: 0px;
-  margin-top: 10px;
 }
 
 /* ── Mobile header ────────────────────────────────────────────────── */
@@ -41,20 +36,18 @@ img.logoText {
 }
 
 img.radarIconSm {
-  width: 32px;
-  height: 32px;
+  width: 38px;
+  height: 38px;
   display: block;
   object-fit: contain;
-  animation: domainRadarLogoSpin 6s linear infinite;
-  filter: drop-shadow(0 0 5px rgba(80, 255, 100, .5));
+  filter: drop-shadow(0 0 5px rgba(249,115,22,.45));
 }
 
 img.logoTextSm {
-  height: 34px;
+  height: 24px;
   width: auto;
   display: block;
   object-fit: contain;
-  mix-blend-mode: screen;
 }
 
 /* ── Login page brand ─────────────────────────────────────────────── */
@@ -66,34 +59,33 @@ img.logoTextSm {
 }
 
 img.logoIconLg {
-  width: 56px;
-  height: 56px;
+  width: 80px;
+  height: 80px;
   display: block;
   flex: 0 0 auto;
   object-fit: contain;
-  animation: domainRadarLogoSpin 6s linear infinite;
-  filter: drop-shadow(0 0 10px rgba(80, 255, 100, .6));
+  filter: drop-shadow(0 0 14px rgba(249,115,22,.65));
 }
 
 img.logoTextLg {
-  width: min(480px, 55vw);
-  height: auto;
+  height: 52px;
+  width: auto;
+  max-width: min(440px, 50vw);
   display: block;
   object-fit: contain;
-  mix-blend-mode: screen;
-  margin-left: -60px;
-  margin-bottom: -20px;
 }
 
-/* ── Spin animation ───────────────────────────────────────────────── */
-@keyframes domainRadarLogoSpin {
+/* Railway parity: rotate the real Pentagon fire-eagle icon, keep wordmark static. */
+img.logoIcon,
+img.radarIconSm,
+img.logoIconLg {
+  animation: pentagonLogoSpin 6s linear infinite;
+  transform-origin: 50% 50%;
+  will-change: transform;
+}
+@keyframes pentagonLogoSpin {
   to { transform: rotate(360deg); }
 }
-
 @media (prefers-reduced-motion: reduce) {
-  img.logoIcon,
-  img.radarIconSm,
-  img.logoIconLg {
-    animation: none;
-  }
+  img.logoIcon, img.radarIconSm, img.logoIconLg { animation: none; }
 }

@@ -1,66 +1,29 @@
-html.pentagonLoginActive .loginPage{
-  min-height:100vh;
-  display:grid;
-  grid-template-columns:minmax(0,1.1fr) minmax(360px,.9fr);
-  gap:40px;
-  align-items:center;
-  padding:64px;
-  background:
-    radial-gradient(circle at 18% 12%,rgba(255,106,0,.22),transparent 32%),
-    radial-gradient(circle at 82% 18%,rgba(255,119,0,.12),transparent 30%),
-    linear-gradient(180deg,#090b0f 0%,#0a0c10 38%,#090a0d 100%);
-  position:relative;
-  overflow:hidden;
+/* Pentagon production login parity. No DOM patcher required. */
+.loginPage{
+  min-height:100vh;display:grid;grid-template-columns:minmax(0,1.15fr) minmax(340px,.85fr);
+  gap:28px;align-items:center;padding:54px;position:relative;overflow:hidden;
+  background:radial-gradient(circle at 20% 15%,rgba(249,115,22,.22),transparent 28%),radial-gradient(circle at 85% 20%,rgba(249,115,22,.12),transparent 28%),linear-gradient(135deg,#05070b,#100a04 55%,#0a0804)
 }
-html.pentagonLoginActive .loginPage::before{
-  content:"";position:absolute;inset:0;pointer-events:none;opacity:.22;
-  background-image:linear-gradient(rgba(255,122,0,.12) 1px,transparent 1px),linear-gradient(90deg,rgba(255,122,0,.12) 1px,transparent 1px);
-  background-size:72px 72px;
-}
-html.pentagonLoginActive .loginHero,html.pentagonLoginActive .loginCard{position:relative;z-index:1}
-html.pentagonLoginActive .loginHero{max-width:820px}
-html.pentagonLoginActive .loginBrand{display:flex;align-items:center;gap:18px;margin-bottom:34px}
-html.pentagonLoginActive .loginBrand .logoIconLg{width:120px!important;height:120px!important;object-fit:contain;filter:drop-shadow(0 0 24px rgba(255,106,0,.72))!important}
-html.pentagonLoginActive .loginBrand .logoTextLg{width:min(380px,70vw)!important;max-height:92px!important;object-fit:contain}
-html.pentagonLoginActive .loginHero h1{font-size:clamp(46px,5vw,76px);line-height:.98;letter-spacing:-.055em;margin:0 0 28px;font-weight:900;color:#f7f7f8;max-width:860px}
-html.pentagonLoginActive .loginHero p{font-size:clamp(20px,2vw,30px);line-height:1.55;color:#b9bec7;max-width:900px;margin:0}
-html.pentagonLoginActive .loginFeatures{display:none!important}
-html.pentagonLoginActive .loginCard{background:linear-gradient(180deg,rgba(14,17,23,.98),rgba(11,14,19,.98));border:1px solid rgba(255,117,24,.28);box-shadow:0 28px 80px rgba(0,0,0,.42),0 0 0 1px rgba(255,102,0,.05) inset;border-radius:36px;padding:48px;max-width:620px;width:100%;justify-self:end}
-html.pentagonLoginActive .loginIcon{width:84px;height:84px;border-radius:26px;display:grid;place-items:center;color:#ff7417;border:1px solid rgba(255,116,23,.35);background:rgba(255,116,23,.06);position:relative;margin-bottom:28px}
-html.pentagonLoginActive .loginIcon::before{content:"";position:absolute;inset:-14px;border-radius:32px;border:1px dashed rgba(255,116,23,.30)}
-html.pentagonLoginActive .loginIcon svg{width:36px;height:36px}
-html.pentagonLoginActive .loginCard h2{font-size:clamp(34px,3vw,50px);line-height:1.05;letter-spacing:-.03em;margin:0 0 24px;color:#f3f4f6}
-html.pentagonLoginActive .loginCard>p{font-size:20px;line-height:1.5;color:#aeb5c0;margin:0 0 34px;max-width:520px}
-html.pentagonLoginActive .loginCard input{height:66px;border-radius:14px;border:1px solid #293442;background:#0b1118;color:#f5f7fa;font-size:20px;padding:0 18px;margin-bottom:18px}
-html.pentagonLoginActive .loginCard input:focus{border-color:#ff6f12;box-shadow:0 0 0 2px rgba(255,111,18,.28)}
-html.pentagonLoginActive .pentagonPasswordWrap{position:relative}
-html.pentagonLoginActive .pentagonPasswordWrap input{padding-right:74px;margin-bottom:18px}
-html.pentagonLoginActive .pentagonEyeBtn{position:absolute;right:10px;top:9px;width:48px;height:48px;border:0;border-radius:12px;background:#ff6c0c;color:white;display:grid;place-items:center;padding:0;min-height:0}
-html.pentagonLoginActive .loginCard>button[type="submit"]{width:100%;height:66px;border:0;border-radius:14px;background:linear-gradient(90deg,#ff720f,#ff5f00);box-shadow:0 14px 32px rgba(255,100,0,.22);font-size:19px;font-weight:900;color:#fff;margin-top:4px}
-html.pentagonLoginActive .loginCard>small{display:none}
-html.pentagonLoginActive .errorBox{border-color:rgba(255,111,18,.4);background:rgba(255,111,18,.08);color:#ffd4b5}
-@media(max-width:900px){
-  html.pentagonLoginActive .loginPage{grid-template-columns:1fr;padding:32px 28px 90px;gap:34px;align-items:start}
-  html.pentagonLoginActive .loginHero{max-width:none}
-  html.pentagonLoginActive .loginBrand{gap:14px;margin:14px 0 30px}
-  html.pentagonLoginActive .loginBrand .logoIconLg{width:112px!important;height:112px!important}
-  html.pentagonLoginActive .loginBrand .logoTextLg{width:min(360px,66vw)!important}
-  html.pentagonLoginActive .loginHero h1{font-size:52px;max-width:680px;margin-bottom:26px}
-  html.pentagonLoginActive .loginHero p{font-size:23px;line-height:1.55}
-  html.pentagonLoginActive .loginCard{justify-self:stretch;max-width:none;border-radius:34px;padding:48px 42px}
-}
-@media(max-width:560px){
-  html.pentagonLoginActive .loginPage{padding:24px 18px 80px;gap:28px}
-  html.pentagonLoginActive .loginBrand{gap:10px;margin:10px 0 28px}
-  html.pentagonLoginActive .loginBrand .logoIconLg{width:88px!important;height:88px!important}
-  html.pentagonLoginActive .loginBrand .logoTextLg{width:min(270px,68vw)!important}
-  html.pentagonLoginActive .loginHero h1{font-size:43px;line-height:1.02;margin-bottom:22px}
-  html.pentagonLoginActive .loginHero p{font-size:19px;line-height:1.55}
-  html.pentagonLoginActive .loginCard{padding:34px 26px 38px;border-radius:30px}
-  html.pentagonLoginActive .loginIcon{width:72px;height:72px;border-radius:22px;margin-bottom:26px}
-  html.pentagonLoginActive .loginCard h2{font-size:38px;margin-bottom:20px}
-  html.pentagonLoginActive .loginCard>p{font-size:18px;margin-bottom:28px}
-  html.pentagonLoginActive .loginCard input{height:58px;font-size:18px}
-  html.pentagonLoginActive .pentagonEyeBtn{width:44px;height:44px;top:7px}
-  html.pentagonLoginActive .loginCard>button[type="submit"]{height:58px;font-size:18px}
-}
+.loginPage::before{content:"";position:absolute;inset:0;background-image:linear-gradient(rgba(255,255,255,.03) 1px,transparent 1px),linear-gradient(90deg,rgba(255,255,255,.03) 1px,transparent 1px);background-size:42px 42px;-webkit-mask-image:radial-gradient(circle at center,black,transparent 78%);mask-image:radial-gradient(circle at center,black,transparent 78%);pointer-events:none}
+.loginHero,.loginCard{position:relative;z-index:2}
+.loginHero h1{margin:0;max-width:760px;font-size:54px;line-height:.98;letter-spacing:-2.4px;color:#f5f7fa}
+.loginHero p{max-width:640px;margin:18px 0 0;color:#b8c5d3;font-size:15px;line-height:1.7}
+.loginBrand{display:inline-flex;gap:14px;align-items:center;padding:4px 0 10px!important;border:0!important;background:transparent!important;border-radius:0!important;color:#fed7aa;font-weight:900;margin-bottom:18px}
+.loginFeatures{display:flex;gap:10px;flex-wrap:wrap;margin-top:24px}
+.loginFeatures span{display:inline-flex;align-items:center;gap:7px;padding:9px 11px;border-radius:12px;background:#f9731612;border:1px solid rgba(249,115,22,.18);color:#fddcb5;font-weight:800}
+.loginCard{width:min(430px,100%);justify-self:end;background:#0d131bd1;-webkit-backdrop-filter:blur(18px);backdrop-filter:blur(18px);border:1px solid rgba(249,115,22,.18);border-radius:22px;overflow:hidden;padding:28px;display:flex;flex-direction:column;gap:13px;box-shadow:0 30px 90px #0000006b,0 0 0 1px #f973160f}
+.loginIcon{width:48px;height:48px;border-radius:15px;display:grid;place-items:center;background:#f973161a;border:1px solid rgba(249,115,22,.3);color:#f97316;position:relative}
+.loginIcon::after{content:"";position:absolute;inset:-10px;border-radius:50%;border:1.5px dashed rgba(249,115,22,.45);animation:radarSpin 4s linear infinite;pointer-events:none}
+.loginCard h2{font-size:25px;margin:0;color:#f5f7fa}
+.loginCard p{margin:0 0 4px;color:#aeb9c7;line-height:1.5}
+.loginCard small{color:#7f8d9e}
+.loginCard input{border-color:#263241!important;background:#091019!important;color:#f5f7fa!important}
+.loginPage input:focus,.loginPage textarea:focus,.loginPage select:focus{border-color:#f97316!important;box-shadow:0 0 0 2px #f973162e!important}
+.loginCard button{background:linear-gradient(135deg,#f97316,#ea580c)!important;border-color:#f9731659!important;box-shadow:0 4px 18px #f9731647;color:#fff!important}
+.loginCard button:hover{filter:brightness(1.1)}
+.aiOrb{position:absolute;border-radius:999px;filter:blur(10px);opacity:.65}
+.aiOrb.one{width:260px;height:260px;left:-80px;bottom:-80px;background:#f973163d}
+.aiOrb.two{width:220px;height:220px;right:12%;top:9%;background:#f9731621}
+@keyframes radarSpin{to{transform:rotate(360deg)}}
+@media(max-width:900px){.loginPage{grid-template-columns:1fr;padding:28px}.loginCard{justify-self:stretch}.loginHero h1{font-size:42px}}
+@media(max-width:560px){.loginPage{padding:18px}.loginHero h1{font-size:34px}.loginBrand{gap:10px}.loginFeatures{display:none}.loginCard{width:100%;padding:26px 22px}.loginCard button{min-height:54px}}
