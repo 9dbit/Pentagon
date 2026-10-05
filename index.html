@@ -66,6 +66,15 @@
       .nodeTelemetryRow {
         gap: 4px !important;
       }
+      html[data-brand="pentagon"] .logoIconLg,
+      html[data-brand="pentagon"] .brandIcon,
+      html[data-brand="pentagon"] .sidebarBrand img:first-child {
+        filter: drop-shadow(0 0 16px rgba(255,106,0,.55));
+      }
+      html[data-brand="pentagon"] .logoTextLg {
+        width: min(360px, 72vw) !important;
+        height: auto !important;
+      }
     </style>
   </head>
   <body>
@@ -75,5 +84,6 @@
     <script src="/ui-polish.js" defer></script>
     <script src="/seo-project-ui.js" defer></script>
     <script src="/settings-all-ui.js" defer></script>
+    <script src="/pentagon-branding.js" defer></script>
   </body>
 </html>
