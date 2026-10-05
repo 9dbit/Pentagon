@@ -3,19 +3,23 @@ require("dotenv").config();
 const scheduler = require("./scheduler");
 const schedulerEnabled = String(process.env.SCHEDULER_ENABLED || "true").toLowerCase() !== "false";
 
-// Railway/Safari cache hardening: auth bootstrap must never resolve as 304.
-// Patch the Express factory before the main app is created so the runtime app
-// has ETags disabled and auth API responses are explicitly no-store.
+// Railway/Safari cache hardening: bootstrap HTML and auth must never resolve
+// from a stale shell or conditional cache entry.
 const expressModulePath = require.resolve("express");
 const expressOriginal = require(expressModulePath);
 function expressNoCache(...args) {
   const app = expressOriginal(...args);
   app.disable("etag");
   app.use((req, res, next) => {
-    if (String(req.path || req.url || "").startsWith("/api/auth/")) {
-      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    const requestPath = String(req.path || req.url || "").split("?")[0];
+    const isAuth = requestPath.startsWith("/api/auth/");
+    const isHtmlShell = requestPath === "/" || requestPath === "/index.html" || requestPath.endsWith(".html");
+
+    if (isAuth || isHtmlShell) {
+      res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
       res.setHeader("Pragma", "no-cache");
       res.setHeader("Expires", "0");
+      res.setHeader("Surrogate-Control", "no-store");
       res.removeHeader("ETag");
     }
     next();
