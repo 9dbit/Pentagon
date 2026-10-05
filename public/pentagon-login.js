@@ -1,19 +1,20 @@
 (() => {
   const EYE = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M2.4 12s3.4-6 9.6-6 9.6 6 9.6 6-3.4 6-9.6 6-9.6-6-9.6-6Z"/><circle cx="12" cy="12" r="2.7"/></svg>';
+  const DESC = 'Enter your account details to open the monitoring console.';
 
   function enhanceLogin() {
     const page = document.querySelector('.loginPage');
-    if (!page) return;
+    if (!page) return false;
     document.documentElement.classList.add('pentagonLoginActive');
 
     const card = page.querySelector('.loginCard');
-    if (!card) return;
+    if (!card) return false;
 
     const desc = card.querySelector(':scope > p');
-    if (desc) desc.textContent = 'Enter your account details to open the monitoring console.';
+    if (desc && desc.textContent !== DESC) desc.textContent = DESC;
 
     const email = card.querySelector('input[type="email"]');
-    if (email) email.placeholder = 'Email';
+    if (email && email.placeholder !== 'Email') email.placeholder = 'Email';
 
     const password = card.querySelector('input[type="password"], input[data-pentagon-password]');
     if (password && !password.closest('.pentagonPasswordWrap')) {
@@ -38,10 +39,17 @@
     }
 
     const submit = card.querySelector('button[type="submit"]');
-    if (submit && !submit.disabled) submit.textContent = 'Launch Dashboard';
+    if (submit && !submit.disabled && submit.textContent !== 'Launch Dashboard') {
+      submit.textContent = 'Launch Dashboard';
+    }
+
+    return true;
   }
 
-  enhanceLogin();
-  const observer = new MutationObserver(enhanceLogin);
-  observer.observe(document.documentElement, {childList:true, subtree:true});
+  if (enhanceLogin()) return;
+
+  const observer = new MutationObserver(() => {
+    if (enhanceLogin()) observer.disconnect();
+  });
+  observer.observe(document.documentElement, { childList: true, subtree: true });
 })();
