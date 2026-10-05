@@ -74,18 +74,3 @@ img.logoTextLg {
   display: block;
   object-fit: contain;
 }
-
-/* Railway parity: rotate the real Pentagon fire-eagle icon, keep wordmark static. */
-img.logoIcon,
-img.radarIconSm,
-img.logoIconLg {
-  animation: pentagonLogoSpin 6s linear infinite;
-  transform-origin: 50% 50%;
-  will-change: transform;
-}
-@keyframes pentagonLogoSpin {
-  to { transform: rotate(360deg); }
-}
-@media (prefers-reduced-motion: reduce) {
-  img.logoIcon, img.radarIconSm, img.logoIconLg { animation: none; }
-}
