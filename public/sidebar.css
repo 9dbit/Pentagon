@@ -8,9 +8,9 @@
   --line2: #263342;
   --text: #edf6ff;
   --muted: #8b98a8;
-  --green: #00d45a;
-  --green2: #00f06a;
-  --greenSoft: rgba(0,212,90,.16);
+  --green: #f97316;
+  --green2: #fb923c;
+  --greenSoft: rgba(249,115,22,.16);
   --red: #ff4d4f;
   --yellow: #ffb020;
 }
@@ -77,9 +77,9 @@ aside button:hover, aside a:hover, .sideNav a:hover, .sideNav button:hover {
 
 /* Active state — green left-border highlight */
 aside button.navActive, aside a.navActive, .sideNav .navActive {
-  background: rgba(0,212,90,.1);
-  color: var(--green, #00d45a);
-  box-shadow: inset 3px 0 0 var(--green, #00d45a);
+  background: rgba(249,115,22,.1);
+  color: var(--green, #f97316);
+  box-shadow: inset 3px 0 0 var(--green, #f97316);
   font-weight: 800;
 }
 

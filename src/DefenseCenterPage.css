@@ -5,7 +5,7 @@
 .defensePage .brand h1{margin:0 0 4px;font-size:20px;font-weight:800;letter-spacing:-.3px}
 .defensePage .brand p{margin:0;color:var(--muted);font-size:12px}
 .defensePage header .toolbar{display:flex;gap:6px;align-items:center;flex-shrink:0}
-.primaryBtn{background:var(--green);color:#001b0b;font-weight:800}
+.primaryBtn{background:var(--green);color:#fff;font-weight:800}
 .primaryBtn:hover{filter:brightness(1.1)}
 
 /* Form */
@@ -14,7 +14,7 @@
 .domainInput{grid-column:1/-1}
 .submitArea{justify-content:flex-end;align-items:flex-start}
 .fieldLabel{font-size:11px;font-weight:800;color:#9facbc;letter-spacing:.04em;text-transform:uppercase;margin-bottom:2px}
-.submitBtn{background:var(--green);color:#001b0b;font-weight:800;padding:8px 18px}
+.submitBtn{background:var(--green);color:#fff;font-weight:800;padding:8px 18px}
 .notice{margin-top:10px;padding:10px 12px;background:rgba(255,176,32,.08);border:1px solid rgba(255,176,32,.25);border-radius:9px;color:#ffd680;font-size:12px}
 
 /* Keyword group grid */
@@ -32,7 +32,7 @@
 
 /* Pill badges (used by Pill component) */
 .pill{display:inline-flex;align-items:center;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:700;white-space:nowrap;line-height:1.4}
-.pill.ok{background:rgba(0,212,90,.18);color:var(--green)}
+.pill.ok{background:rgba(249,115,22,.18);color:var(--green)}
 .pill.ext{background:rgba(96,165,250,.14);color:#60a5fa}
 .pill.bad{background:rgba(255,77,79,.18);color:#ff8a8c}
 .pill.warn{background:rgba(255,176,32,.14);color:#ffb84d}
@@ -47,7 +47,7 @@
 .tableWrap table{width:100%;border-collapse:collapse;font-size:12px;min-width:360px;table-layout:auto}
 .tableWrap th,.tableWrap td{border-bottom:1px solid rgba(255,255,255,.06);padding:7px 8px;text-align:left;vertical-align:middle}
 .tableWrap th{font-size:10px;font-weight:900;text-transform:uppercase;letter-spacing:.04em;color:var(--muted)}
-.wlLink{color:#5fd4a0;text-decoration:none;font-size:12px;word-break:break-all}
+.wlLink{color:inherit;text-decoration:none;font-size:12px;word-break:break-all}
 .wlLink:hover{text-decoration:underline;color:var(--green)}
 
 /* RankMetric */
@@ -65,7 +65,7 @@
 
 /* Top row: domain link + rank badge side-by-side */
 .resultTopRow{display:flex;align-items:baseline;gap:8px;flex-wrap:wrap;min-width:0}
-.resultTopRow a{color:#5fd4a0;font-size:12.5px;font-weight:600;text-decoration:none;word-break:break-all;min-width:0;flex:1}
+.resultTopRow a{color:#69a8ff;font-size:12.5px;font-weight:600;text-decoration:none;word-break:break-all;min-width:0;flex:1}
 .resultTopRow a:hover{text-decoration:underline;color:var(--green)}
 .rankLabel{font-size:10.5px;color:var(--muted);white-space:nowrap;flex-shrink:0;background:rgba(255,255,255,.05);border-radius:5px;padding:1px 6px;line-height:1.5}
 

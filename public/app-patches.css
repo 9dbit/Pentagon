@@ -56,7 +56,7 @@
 }
 .mobileDropMenu a:hover, .mobileDropMenu button:hover { background: rgba(255,255,255,.07); }
 .mobileDropMenu .navActive {
-  background: rgba(0,212,90,.1); color: var(--green);
+  background: rgba(249,115,22,.1); color: var(--green);
   box-shadow: inset 3px 0 0 var(--green);
 }
 .drawerBackdrop {

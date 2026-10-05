@@ -160,7 +160,7 @@ const SCORE_DIMS = [
 const INTENT_COLORS = {
   informational:  { bg: "rgba(99,179,237,.15)",  color: "#63b3ed" },
   commercial:     { bg: "rgba(154,102,255,.15)", color: "#9a66ff" },
-  transactional:  { bg: "rgba(0,212,90,.15)",    color: "#00d45a" },
+  transactional:  { bg: "rgba(249,115,22,.15)",    color: "#f97316" },
   navigational:   { bg: "rgba(255,176,32,.15)",  color: "#ffb020" },
 };
 
@@ -172,7 +172,7 @@ const INTENT_ID = {
 };
 
 const THREAT_COLORS = {
-  low:      { bg: "rgba(0,212,90,.15)",    color: "#00d45a", label: "Ancaman Rendah" },
+  low:      { bg: "rgba(249,115,22,.15)",    color: "#f97316", label: "Ancaman Rendah" },
   medium:   { bg: "rgba(255,176,32,.15)",  color: "#ffb020", label: "Ancaman Sedang" },
   high:     { bg: "rgba(255,80,80,.15)",   color: "#ff6b6b", label: "Ancaman Tinggi" },
   critical: { bg: "rgba(220,38,38,.2)",    color: "#ef4444", label: "Ancaman Kritis" },
@@ -249,7 +249,7 @@ function ScoreInfoPopup({ dimKey, onClose }) {
 
 function ScoreRing({ score, size = 120, thickness = 9 }) {
   const s = Math.max(0, Math.min(100, score || 0));
-  const color = s >= 70 ? "#00d45a" : s >= 45 ? "#ffb020" : "#ef4444";
+  const color = s >= 70 ? "#f97316" : s >= 45 ? "#ffb020" : "#ef4444";
   const r = (size / 2) - thickness;
   const circ = 2 * Math.PI * r;
   const offset = circ * (1 - s / 100);
@@ -283,7 +283,7 @@ function ScoreSparkline({ history }) {
     return [x, y];
   });
   const first = scores[0], last = scores[scores.length - 1];
-  const trendColor = last > first ? "#00d45a" : last < first ? "#ef4444" : "#ffb020";
+  const trendColor = last > first ? "#f97316" : last < first ? "#ef4444" : "#ffb020";
   const polyline = pts.map(p => p.join(",")).join(" ");
   const gradId = "sg" + Math.random().toString(36).slice(2, 7);
   return (
@@ -378,9 +378,9 @@ function DomainAuditCard({ audit, projectName }) {
   }
 
   const score = audit.seo_score || 0;
-  const scoreColor = score >= 70 ? "#00d45a" : score >= 45 ? "#ffb020" : "#ef4444";
+  const scoreColor = score >= 70 ? "#f97316" : score >= 45 ? "#ffb020" : "#ef4444";
   const intentStyle = INTENT_COLORS[audit.search_intent] || { bg: "rgba(255,255,255,.08)", color: "#9facbc" };
-  const impactMap = { High: { bg: "rgba(255,80,80,.15)", color: "#ff6b6b" }, Medium: { bg: "rgba(255,176,32,.15)", color: "#ffb020" }, Low: { bg: "rgba(0,212,90,.12)", color: "#5fd4a0" } };
+  const impactMap = { High: { bg: "rgba(255,80,80,.15)", color: "#ff6b6b" }, Medium: { bg: "rgba(255,176,32,.15)", color: "#ffb020" }, Low: { bg: "rgba(249,115,22,.12)", color: "#fdba74" } };
   const impactStyle = impactMap[audit.estimated_impact] || impactMap.Low;
   const intentLabel = INTENT_ID[audit.search_intent] || audit.search_intent;
   const impactLabel = IMPACT_ID[audit.estimated_impact] || audit.estimated_impact;
@@ -872,7 +872,7 @@ export default function AnalyticsPage() {
                   const prev = scoreHistory[i - 1];
                   const delta = prev ? entry.seo_score - prev.seo_score : null;
                   const isLatest = i === scoreHistory.length - 1;
-                  const color = entry.seo_score >= 70 ? "#00d45a" : entry.seo_score >= 45 ? "#ffb020" : "#ef4444";
+                  const color = entry.seo_score >= 70 ? "#f97316" : entry.seo_score >= 45 ? "#ffb020" : "#ef4444";
                   return (
                     <div key={entry.id} className={`seoHistoryRow${isLatest ? " seoHistoryRowLatest" : ""}`}>
                       <span className="seoHistoryDate">
