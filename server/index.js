@@ -90,6 +90,24 @@ app.get("/api/provider-node/releases/latest", async (req, res) => {
     return res.status(500).json({ error: err.message || "Release lookup failed" });
   }
 });
+app.get("/api/provider-node/releases/cloud/latest", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
+    res.set("Pragma", "no-cache");
+    res.set("Expires", "0");
+    const base = String(process.env.PROVIDER_NODE_CLOUD_RELEASE_URL || "").replace(/\/+$/, "");
+    if (!base) return res.status(503).json({ error: "Cloud provider node release channel is not configured" });
+    const response = await axios.get(`${base}/latest.json?t=${Date.now()}`, {
+      timeout: 12000,
+      headers: { "Cache-Control": "no-cache", "Pragma": "no-cache", "User-Agent": "PentagonReleaseProxy/1.0" },
+      validateStatus: (status) => status >= 200 && status < 500
+    });
+    if (response.status !== 200) return res.status(502).json({ error: "Release service unavailable", upstream_status: response.status });
+    return res.json(response.data);
+  } catch (err) {
+    return res.status(502).json({ error: err.message || "Cloud release lookup failed" });
+  }
+});
 app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScanCycleHealth()); });
 app.get("/api/auth/me", (req, res) => res.json({ authenticated: !adminPassword || Boolean(req.session && req.session.isAdmin), email: req.session?.adminEmail || "", isDemo: Boolean(req.session?.isDemo), tenant: req.session?.tenant || "admin" }));
 app.post("/api/auth/login", (req, res) => { const email = normalizeEmail(req.body.email || ""); const password = String(req.body.password || ""); const demoPassword = process.env.DEMO_PASSWORD || "Domainradar123"; if (email === "demo@domain-radar.org" && password === demoPassword) { req.session.isAdmin = true; req.session.isDemo = true; req.session.tenant = "demo"; req.session.adminEmail = email; return res.json({ ok: true, email, isDemo: true }); } if (!adminPassword) { req.session.isAdmin = true; req.session.isDemo = false; req.session.tenant = "admin"; req.session.adminEmail = email; return res.json({ ok: true }); } if (password !== adminPassword) return res.status(401).json({ error: "Invalid password" }); if (isEmailWhitelistEnabled() && !email) return res.status(401).json({ error: "Email required" }); if (!isEmailAllowed(email)) return res.status(403).json({ error: "Email not whitelisted" }); req.session.isAdmin = true; req.session.isDemo = false; req.session.tenant = "admin"; req.session.adminEmail = email; res.json({ ok: true, email }); });

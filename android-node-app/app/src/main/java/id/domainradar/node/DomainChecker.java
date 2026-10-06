@@ -49,7 +49,7 @@ class DomainChecker {
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(18000);
             conn.setReadTimeout(18000);
-            conn.setRequestProperty("User-Agent", "PentagonNodeAndroid/1.6.0 " + provider);
+            conn.setRequestProperty("User-Agent", "PentagonProviderNode/" + BuildConfig.VERSION_NAME + " " + provider);
             http = conn.getResponseCode();
             finalUrl = conn.getURL().toString();
 

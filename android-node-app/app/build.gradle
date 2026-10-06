@@ -2,13 +2,19 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'id.domainradar.node'
+    buildFeatures { buildConfig true }
     compileSdk 35
 
     defaultConfig {
-        applicationId 'id.domainradar.node'
+        applicationId 'com.pentagon.providernode'
         minSdk 26
         targetSdk 35
-        versionCode 160
-        versionName '1.6.0'
+        versionCode 170
+        versionName '1.7.0'
     }
+}
+
+
+dependencies {
+    implementation 'androidx.core:core:1.13.1'
 }

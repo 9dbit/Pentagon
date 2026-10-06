@@ -30,7 +30,7 @@ final class TrustPositifProbe {
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(20000);
             conn.setReadTimeout(20000);
-            conn.setRequestProperty("User-Agent", "PentagonNodeAndroid/1.6.0");
+            conn.setRequestProperty("User-Agent", "PentagonProviderNode/" + BuildConfig.VERSION_NAME);
             conn.setRequestProperty("Accept", "*/*");
 
             int code = conn.getResponseCode();
@@ -59,7 +59,7 @@ final class TrustPositifProbe {
             conn.setInstanceFollowRedirects(true);
             conn.setConnectTimeout(20000);
             conn.setReadTimeout(20000);
-            conn.setRequestProperty("User-Agent", "PentagonNodeAndroid/1.6.0");
+            conn.setRequestProperty("User-Agent", "PentagonProviderNode/" + BuildConfig.VERSION_NAME);
             conn.setRequestProperty("Accept", "application/octet-stream,*/*");
             conn.setRequestProperty("Range", "bytes=0-65535");
 
