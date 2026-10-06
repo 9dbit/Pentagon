@@ -17,7 +17,7 @@ class ApiClient {
         conn.setConnectTimeout(30000);
         conn.setReadTimeout(30000);
         conn.setRequestProperty("Content-Type", "application/json");
-        conn.setRequestProperty("User-Agent", "PentagonNodeAndroid/1.6.0");
+        conn.setRequestProperty("User-Agent", "PentagonProviderNode/" + BuildConfig.VERSION_NAME);
         conn.setDoOutput(true);
         try (OutputStream os = conn.getOutputStream()) { os.write(body.toString().getBytes("UTF-8")); }
         int code = conn.getResponseCode();

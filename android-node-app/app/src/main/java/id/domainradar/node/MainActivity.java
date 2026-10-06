@@ -28,7 +28,7 @@ public class MainActivity extends Activity {
         root.setPadding(36, 36, 36, 36);
         root.setBackgroundColor(Color.rgb(5, 10, 18));
         sv.addView(root);
-        title("Pentagon Node 1.6.0");
+        title("Pentagon Node " + BuildConfig.VERSION_NAME);
 
         EditText central = input("Central URL", Prefs.central(this));
         EditText node = input("Node Name", Prefs.nodeName(this));
@@ -70,12 +70,17 @@ public class MainActivity extends Activity {
         clearLogs.setOnClickListener(v -> { Prefs.put(this, "logs", ""); refreshStatus(); });
         root.addView(clearLogs);
 
+        Button checkUpdate = btn("Check Update");
+        checkUpdate.setOnClickListener(v -> AppUpdater.check(this, true));
+        root.addView(checkUpdate);
+
         status = text("", 16, Color.WHITE);
         logs = text("", 13, Color.LTGRAY);
         root.addView(status);
         root.addView(logs);
         setContentView(sv);
         refreshStatus();
+        AppUpdater.check(this, false);
     }
 
     private void startNode() {

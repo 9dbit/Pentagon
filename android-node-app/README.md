@@ -1,43 +1,26 @@
-# Pentagon Node APK 1.6.0
+# Pentagon Provider Node 1.7.0
 
-Android provider-node app for Pentagon.
+Canonical cloud-native Android provider node for Pentagon.
 
-## What changed in 1.6.0
+## Production identity
 
-- Central URL defaults to Railway Pentagon.
-- Legacy domain-radar.org, pentagon.quest, and demo.pentagon.quest settings are redirected to Railway during this migration build.
-- Mobile checks use Android TRANSPORT_CELLULAR directly.
-- A valid subscription ID is diagnostic only, not a requirement to perform checks.
-- DNS resolution and HTTPS checks run through the selected cellular Network.
-- Supports trustpositif_fetch tasks.
-- TrustPositif availability uses HEAD / 64 KB Range probe, so nodes do not download the full ~208 MB domains_isp file just to prove availability.
-- Telemetry reports cellular_available, subscription_id, and subscription_reason.
+- applicationId: `com.pentagon.providernode`
+- versionCode: `170`
+- versionName: `1.7.0`
+- central API: Railway Pentagon
+- update channel: `/api/provider-node/releases/cloud/latest`
 
-## Mobile node behavior
+## Runtime behavior
 
-For Network Type = mobile, Pentagon requires a cellular network with Internet capability. If Android has a usable cellular transport even when subscription metadata is missing, checks continue.
+- Provider checks can be forced through Android `TRANSPORT_CELLULAR`.
+- Subscription ID is diagnostic, not a hard requirement.
+- Supports `trustpositif_fetch` using HEAD / 64 KB Range probe.
+- Reports cellular availability, subscription diagnostics, operator, network type and device telemetry.
+- Starts as a foreground service and can resume after boot.
+- Includes in-app self-update with package-name and SHA-256 validation.
 
-If no cellular transport is available, the node reports NO_CELLULAR_TRANSPORT. It does not report the domain as safe or blocked.
+## Cloud release architecture
 
-## Configuration
+GitHub is the source of truth. Railway builds and signs the release APK. The signing key is generated once and persisted on a Railway volume, never committed to this public repository. The release service exposes `/latest.json`, `/latest.apk`, and `/health`.
 
-Example Telkomsel:
-
-Central URL: https://pentagon-web-production.up.railway.app
-Node Name: TELKOMSEL-JKT-01
-Provider: Telkomsel
-Network Type: mobile
-Agent Secret: telkomsel-jkt-01-secret-001
-Poll Interval: 3000
-
-Use the matching node name and secret configured in Pentagon.
-
-## Required permissions
-
-Internet, location, phone state, and notifications. Set battery usage to unrestricted on provider phones.
-
-## Build
-
-GitHub Actions workflow: Build Pentagon Node APK
-
-Artifact: PentagonNode-v1.6.0-debug-apk
+The legacy Replit build is not required for this release channel.
