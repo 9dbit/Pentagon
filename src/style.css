@@ -7,7 +7,7 @@ aside { background:var(--side); border-right:1px solid var(--line); }
 aside h1 { margin:0 0 6px; font-size:20px; line-height:1; letter-spacing:-.04em; }
 aside p { margin:0 0 18px; color:var(--muted); font-size:12px; }
 main { grid-column:2; padding:20px 24px 28px; max-width:1680px; }
-button, .smallBtn { background:#008f3a; border:1px solid rgba(255,255,255,.08); color:white; padding:7px 10px; border-radius:9px; cursor:pointer; display:inline-flex; gap:6px; align-items:center; justify-content:center; font-weight:800; font-size:12px; transition:filter .12s ease, background .12s ease; min-height:30px; text-decoration:none; }
+button, .smallBtn { background:#f97316; border:1px solid rgba(255,255,255,.08); color:white; padding:7px 10px; border-radius:9px; cursor:pointer; display:inline-flex; gap:6px; align-items:center; justify-content:center; font-weight:800; font-size:12px; transition:filter .12s ease, background .12s ease; min-height:30px; text-decoration:none; }
 button:hover, .smallBtn:hover { filter:brightness(1.12); }
 button:active, .smallBtn:active, .iconBtn:active, .ghostBtn:active, .chipDelete:active { transform:scale(0.92) translateY(1px); transition:transform 0.06s ease; }
 button, .smallBtn, .iconBtn, .ghostBtn, .chipDelete { transition:filter .12s ease, background .12s ease, transform 0.06s ease; }

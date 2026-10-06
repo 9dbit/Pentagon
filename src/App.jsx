@@ -138,7 +138,7 @@ function AiEndpointCard() {
         const opacity = 0.1 + 0.45 * (0.5 + 0.5 * Math.sin(t * d.speed + d.phase));
         ctx.beginPath();
         ctx.arc(d.x * w, d.y * h, d.r, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(0,233,107,${opacity.toFixed(3)})`;
+        ctx.fillStyle = `rgba(249,115,22,${opacity.toFixed(3)})`;
         ctx.fill();
       }
       raf = requestAnimationFrame(draw);
@@ -438,7 +438,7 @@ function Dashboard({ onLogout, isDemo = false }) {
     const totalPeriodSec=userGroups.reduce((s,u)=>s+u.periodSec,0);
     const topUser=userGroups.find(u=>u.periodSec>0);
 
-    const liveColor={active:'#00e96b',idle:'#ffb020',off:'#64748b',never:'#374151'};
+    const liveColor={active:'#f97316',idle:'#ffb020',off:'#64748b',never:'#374151'};
     const liveLabel={active:'● Online',idle:'◐ Idle',off:'○ Offline',never:'— Never'};
 
     const periodLabel=isToday?'Today':watchPeriod==='weekly'?'This Week':watchPeriod==='monthly'?'This Month':'Daily';
@@ -447,7 +447,7 @@ function Dashboard({ onLogout, isDemo = false }) {
       if(isNever)return{label:'Never',color:'#4b5a6a',bg:'rgba(75,90,106,.1)'};
       const threshActive=isToday?1800:watchPeriod==='weekly'?10800:watchPeriod==='monthly'?21600:3600;
       const threshMod=isToday?300:watchPeriod==='weekly'?1800:watchPeriod==='monthly'?3600:600;
-      if(periodSec>=threshActive)return{label:'Active',color:'#00e96b',bg:'rgba(0,233,107,.1)'};
+      if(periodSec>=threshActive)return{label:'Active',color:'#f97316',bg:'rgba(249,115,22,.1)'};
       if(periodSec>=threshMod)return{label:'Moderate',color:'#ffb020',bg:'rgba(255,176,32,.1)'};
       return{label:'Inactive',color:'#ff4d4f',bg:'rgba(255,77,79,.1)'};
     }
@@ -635,7 +635,7 @@ function Dashboard({ onLogout, isDemo = false }) {
                           {sec>0&&<rect x={30+h*18} y={8+44-bH} width={16} height={bH} rx="1.5"
                             fill={`hsl(${hue},70%,${isNow?65:55}%)`} opacity={0.88}/>}
                           <rect x={30+h*18} y={8+44-1.5} width={16} height={1.5} rx="0.75" fill="rgba(255,255,255,.04)"/>
-                          <text x={30+h*18+8} y={80} textAnchor="middle" fontSize="8" fill={isNow?'rgba(0,233,107,.95)':'rgba(255,255,255,.82)'}>{String(h).padStart(2,'0')}</text>
+                          <text x={30+h*18+8} y={80} textAnchor="middle" fontSize="8" fill={isNow?'rgba(249,115,22,.95)':'rgba(255,255,255,.82)'}>{String(h).padStart(2,'0')}</text>
                         </g>;
                       })}
                     </svg>

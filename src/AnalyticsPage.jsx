@@ -319,7 +319,7 @@ function ScoreSparkline({ history }) {
 
 function ScoreDimBar({ dim, value, onInfo }) {
   const pct = Math.round(((value || 0) / dim.max) * 100);
-  const color = pct >= 70 ? "#00e96b" : pct >= 40 ? "#ffb020" : "#ef4444";
+  const color = pct >= 70 ? "#f97316" : pct >= 40 ? "#ffb020" : "#ef4444";
   return (
     <div className="seoDimBar">
       <div className="seoDimTop">
@@ -740,7 +740,7 @@ export default function AnalyticsPage() {
 
       <div className="seoAuditHeader">
         <div className="seoAuditTitleRow">
-          <Activity size={22} style={{ color: "#00e96b", flexShrink: 0 }}/>
+          <Activity size={22} style={{ color: "#f97316", flexShrink: 0 }}/>
           <div>
             <h2>Mesin Audit SEO dengan AI</h2>
             <p>Analisis ekosistem SEO per proyek/brand untuk naik peringkat di SERP &amp; melindungi dari situs phishing</p>
@@ -802,7 +802,7 @@ export default function AnalyticsPage() {
 
       {!loading && !data && !error && (
         <div className="seoEmptyState">
-          <div className="seoEmptyIcon"><Activity size={36} style={{ color: "#00e96b" }}/></div>
+          <div className="seoEmptyIcon"><Activity size={36} style={{ color: "#f97316" }}/></div>
           <h3>Mesin Audit SEO</h3>
           <p>Pilih proyek di atas lalu klik <b>Jalankan Audit SEO</b> untuk analisis mendalam tentang:</p>
           <div className="seoEmptyGrid">
@@ -856,7 +856,7 @@ export default function AnalyticsPage() {
               <p className="seoAssessment">{data.overall_assessment}</p>
               {data.serp_strategy && (
                 <div className="seoSerpStrategy">
-                  <Shield size={13} style={{ color: "#00e96b", flexShrink: 0 }}/>
+                  <Shield size={13} style={{ color: "#f97316", flexShrink: 0 }}/>
                   <span>{data.serp_strategy}</span>
                 </div>
               )}
