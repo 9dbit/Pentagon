@@ -2,6 +2,7 @@ plugins { id 'com.android.application' }
 
 android {
     namespace 'id.domainradar.node'
+    buildFeatures { buildConfig true }
     compileSdk 35
 
     defaultConfig {
