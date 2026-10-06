@@ -211,7 +211,8 @@ router.get("/trustpositif/status", async (req, res, next) => {
     const { rows: nodeRows } = await pool.query(
       `SELECT n.id, n.name, n.provider_name, n.network_type, n.endpoint_url, n.is_active,
               n.last_health_status, n.last_health_reason, n.last_ping_at,
-              t.network_operator, t.network_type_label, t.last_seen_at,
+              t.network_operator, t.network_type_label, t.cellular_available,
+              t.subscription_id, t.subscription_reason, t.last_seen_at,
               c.ok AS trust_ok, c.http_status AS trust_http_status,
               c.latency_ms AS trust_latency_ms, c.payload_bytes AS trust_payload_bytes,
               c.entry_count AS trust_entry_count, c.reason AS trust_reason,

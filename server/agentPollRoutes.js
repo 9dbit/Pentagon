@@ -43,6 +43,9 @@ async function ensureTaskTable() {
       signal_label TEXT,
       network_operator TEXT,
       network_type_label TEXT,
+      cellular_available BOOLEAN,
+      subscription_id INT,
+      subscription_reason TEXT,
       ip TEXT,
       user_agent TEXT,
       last_seen_at TIMESTAMP DEFAULT NOW(),
@@ -56,6 +59,9 @@ async function ensureTaskTable() {
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_label TEXT");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS network_operator TEXT");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS network_type_label TEXT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS cellular_available BOOLEAN");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_id INT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_reason TEXT");
 }
 
 function cleanName(name) {
@@ -101,7 +107,10 @@ function normalizeTelemetry(raw = {}) {
     signal_level: Number.isFinite(signalLevel) ? Math.max(0, Math.min(4, Math.round(signalLevel))) : null,
     signal_label: raw.signal_label ? String(raw.signal_label).slice(0, 80) : "",
     network_operator: raw.network_operator ? String(raw.network_operator).slice(0, 120) : "",
-    network_type_label: raw.network_type_label ? String(raw.network_type_label).slice(0, 80) : ""
+    network_type_label: raw.network_type_label ? String(raw.network_type_label).slice(0, 80) : "",
+    cellular_available: typeof raw.cellular_available === "boolean" ? raw.cellular_available : null,
+    subscription_id: toNumberOrNull(raw.subscription_id),
+    subscription_reason: raw.subscription_reason ? String(raw.subscription_reason).slice(0, 200) : ""
   };
 }
 
@@ -115,9 +124,10 @@ async function upsertTelemetry(node, telemetryRaw, req) {
     `INSERT INTO node_telemetry (
         node_id, battery_percent, is_charging, battery_status, battery_health, battery_temperature_c,
         signal_percent, signal_dbm, signal_asu, signal_level, signal_label, network_operator, network_type_label,
+        cellular_available, subscription_id, subscription_reason,
         ip, user_agent, last_seen_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
       ON CONFLICT (node_id) DO UPDATE SET
         battery_percent=EXCLUDED.battery_percent,
         is_charging=EXCLUDED.is_charging,
@@ -131,6 +141,9 @@ async function upsertTelemetry(node, telemetryRaw, req) {
         signal_label=EXCLUDED.signal_label,
         network_operator=EXCLUDED.network_operator,
         network_type_label=EXCLUDED.network_type_label,
+        cellular_available=EXCLUDED.cellular_available,
+        subscription_id=EXCLUDED.subscription_id,
+        subscription_reason=EXCLUDED.subscription_reason,
         ip=EXCLUDED.ip,
         user_agent=EXCLUDED.user_agent,
         last_seen_at=NOW()`,
@@ -148,6 +161,9 @@ async function upsertTelemetry(node, telemetryRaw, req) {
       telemetry.signal_label,
       telemetry.network_operator,
       telemetry.network_type_label,
+      telemetry.cellular_available,
+      telemetry.subscription_id,
+      telemetry.subscription_reason,
       String(ip).slice(0, 200),
       String(userAgent).slice(0, 300)
     ]

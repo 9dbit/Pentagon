@@ -35,6 +35,9 @@ async function ensureNodeTable() {
       signal_label TEXT,
       network_operator TEXT,
       network_type_label TEXT,
+      cellular_available BOOLEAN,
+      subscription_id INT,
+      subscription_reason TEXT,
       ip TEXT,
       user_agent TEXT,
       last_seen_at TIMESTAMP DEFAULT NOW(),
@@ -48,6 +51,9 @@ async function ensureNodeTable() {
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS signal_label TEXT");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS network_operator TEXT");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS network_type_label TEXT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS cellular_available BOOLEAN");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_id INT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_reason TEXT");
 }
 
 function cleanBase(url) {
@@ -198,6 +204,9 @@ router.get("/", async (req, res, next) => {
         t.signal_label,
         t.network_operator,
         t.network_type_label,
+        t.cellular_available,
+        t.subscription_id,
+        t.subscription_reason,
         t.ip AS telemetry_ip,
         t.last_seen_at AS telemetry_last_seen_at,
         t.last_low_battery_alert_at

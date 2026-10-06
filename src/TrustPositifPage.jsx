@@ -216,6 +216,13 @@ export default function TrustPositifPage() {
                   <Wifi size={14}/>
                   <span>{node.network_operator || "operator n/a"} · {node.network_type_label || "network n/a"}</span>
                 </div>
+                <div className="tpCellularLine">
+                  <span className={node.cellular_available === true ? "tpCellOk" : node.cellular_available === false ? "tpCellBad" : "tpCellUnknown"}>
+                    Cellular {node.cellular_available === true ? "YES" : node.cellular_available === false ? "NO" : "UNKNOWN"}
+                  </span>
+                  <span>Sub ID: {node.subscription_id ?? "n/a"}</span>
+                  <span>{node.subscription_reason || "no subscription diagnostic yet"}</span>
+                </div>
                 <div className="tpNodeStats">
                   <div><span>Node Health</span><b>{node.last_health_status || "unknown"}</b></div>
                   <div><span>HTTP</span><b>{node.trust_http_status ?? "—"}</b></div>
