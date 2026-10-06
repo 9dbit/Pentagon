@@ -23,7 +23,10 @@ async function ensureTaskTable() {
       completed_at TIMESTAMP
     )
   `);
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS task_type TEXT DEFAULT 'domain_check'");
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS payload JSONB");
   await pool.query("CREATE INDEX IF NOT EXISTS idx_provider_node_tasks_node_status ON provider_node_tasks(node_id, status, created_at)");
+  await pool.query("CREATE INDEX IF NOT EXISTS idx_provider_node_tasks_type_status ON provider_node_tasks(task_type, status, created_at)");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS node_telemetry (
@@ -194,12 +197,14 @@ async function syncDomainStatusFromTask(taskId, node, result) {
   );
 }
 
-async function enqueueNodeTask(node, domain) {
+async function enqueueNodeTask(node, domain, options = {}) {
   await ensureTaskTable();
   const id = randomUUID();
+  const taskType = String(options.task_type || "domain_check").trim() || "domain_check";
+  const payload = options.payload && typeof options.payload === "object" ? options.payload : null;
   await pool.query(
-    "INSERT INTO provider_node_tasks (id, node_id, domain, status) VALUES ($1,$2,$3,'queued')",
-    [id, node.id, domain]
+    "INSERT INTO provider_node_tasks (id, node_id, domain, status, task_type, payload) VALUES ($1,$2,$3,'queued',$4,$5::jsonb)",
+    [id, node.id, domain, taskType, payload ? JSON.stringify(payload) : null]
   );
   return id;
 }
@@ -244,7 +249,7 @@ router.post("/poll", async (req, res, next) => {
          ORDER BY created_at ASC
          LIMIT 1
        )
-       RETURNING id, domain`,
+       RETURNING id, domain, COALESCE(task_type,'domain_check') AS task_type, payload`,
       [node.id]
     );
 
@@ -264,6 +269,11 @@ router.post("/result", async (req, res, next) => {
     if (!taskId) return res.status(400).json({ error: "task_id required" });
 
     const result = req.body.result || {};
+    const { rows: taskRows } = await pool.query(
+      "SELECT COALESCE(task_type,'domain_check') AS task_type FROM provider_node_tasks WHERE id=$1 AND node_id=$2 LIMIT 1",
+      [taskId, node.id]
+    );
+    const taskType = taskRows[0]?.task_type || "domain_check";
 
     const { rows: healthRows } = await pool.query(
       "SELECT last_health_status, last_health_reason FROM provider_nodes WHERE id=$1 LIMIT 1",
@@ -293,7 +303,9 @@ router.post("/result", async (req, res, next) => {
        WHERE id=$2 AND node_id=$3`,
       [JSON.stringify(result), taskId, node.id]
     );
-    await syncDomainStatusFromTask(taskId, node, result);
+    if (taskType === "domain_check") {
+      await syncDomainStatusFromTask(taskId, node, result);
+    }
     await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason='result submitted', last_ping_at=NOW() WHERE id=$1", [node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);

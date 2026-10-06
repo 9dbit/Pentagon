@@ -170,6 +170,91 @@ async function checkDomain(domain) {
   return { provider_name: PROVIDER_NAME, network_type: NETWORK_TYPE, status, http_status: httpStatus, final_url: finalUrl, dns_result: dnsResult, latency_ms: Date.now() - started, reason };
 }
 
+async function fetchTrustPositifSource(payload = {}) {
+  const sourceUrl = String(payload.source_url || "https://trustpositif.komdigi.go.id/assets/db/domains_isp").trim();
+  const started = Date.now();
+
+  try {
+    const response = await axios.head(sourceUrl, {
+      timeout: 20000,
+      maxRedirects: 5,
+      validateStatus: () => true,
+      headers: { "User-Agent": `PentagonTrustPositifNode/1.0 ${PROVIDER_NAME}`, "Accept": "*/*" }
+    });
+    const payloadBytes = Number(response.headers?.["content-length"] || 0);
+    const ok = response.status >= 200 && response.status < 300 && payloadBytes > 1000;
+    if (ok) {
+      return {
+        trustpositif_fetch: true,
+        probe_only: true,
+        ok: true,
+        status: "working",
+        source_url: sourceUrl,
+        http_status: response.status,
+        latency_ms: Date.now() - started,
+        payload_bytes: payloadBytes,
+        entry_count: 0,
+        content_type: String(response.headers?.["content-type"] || ""),
+        fetched_at: new Date().toISOString(),
+        matches: {},
+        reason: "SOURCE_AVAILABLE"
+      };
+    }
+    if (response.status !== 405 && response.status !== 403) {
+      return {
+        trustpositif_fetch: true, probe_only: true, ok: false, status: "warning",
+        source_url: sourceUrl, http_status: response.status,
+        latency_ms: Date.now() - started, payload_bytes: payloadBytes,
+        entry_count: 0, fetched_at: new Date().toISOString(), matches: {},
+        reason: `SOURCE_UNAVAILABLE_HTTP_${response.status}`
+      };
+    }
+  } catch (_) {}
+
+  try {
+    const response = await axios.get(sourceUrl, {
+      timeout: 20000,
+      maxRedirects: 5,
+      responseType: "arraybuffer",
+      validateStatus: () => true,
+      maxContentLength: 128 * 1024,
+      headers: {
+        "User-Agent": `PentagonTrustPositifNode/1.0 ${PROVIDER_NAME}`,
+        "Accept": "application/octet-stream,*/*",
+        "Range": "bytes=0-65535"
+      }
+    });
+    const contentRange = String(response.headers?.["content-range"] || "");
+    const totalMatch = contentRange.match(/\/(\d+)$/);
+    const payloadBytes = totalMatch ? Number(totalMatch[1]) : Number(response.headers?.["content-length"] || response.data?.byteLength || 0);
+    const ok = [200, 206].includes(response.status) && Number(response.data?.byteLength || 0) > 0;
+    return {
+      trustpositif_fetch: true,
+      probe_only: true,
+      ok,
+      status: ok ? "working" : "warning",
+      source_url: sourceUrl,
+      http_status: response.status,
+      latency_ms: Date.now() - started,
+      payload_bytes: payloadBytes,
+      probe_bytes: Number(response.data?.byteLength || 0),
+      entry_count: 0,
+      content_type: String(response.headers?.["content-type"] || ""),
+      fetched_at: new Date().toISOString(),
+      matches: {},
+      reason: ok ? "SOURCE_AVAILABLE_RANGE_PROBE" : `SOURCE_UNAVAILABLE_HTTP_${response.status}`
+    };
+  } catch (err) {
+    return {
+      trustpositif_fetch: true, probe_only: true, ok: false, status: "warning",
+      source_url: sourceUrl, http_status: err.response?.status || null,
+      latency_ms: Date.now() - started, payload_bytes: 0, probe_bytes: 0,
+      entry_count: 0, fetched_at: new Date().toISOString(), matches: {},
+      reason: `SOURCE_UNAVAILABLE: ${err.code || err.message}`
+    };
+  }
+}
+
 async function pollOnce() {
   const telemetry = getBatteryTelemetry();
   const net = await getPublicNetworkInfo();
@@ -188,9 +273,11 @@ async function pollOnce() {
 
   const { data } = await axios.post(`${CENTRAL_URL}/api/agent/poll`, { node_name: NODE_NAME, secret_key: AGENT_SECRET, telemetry, network_ok: true, network_reason: net.reason }, { timeout: 30000 });
   if (!data.task) return;
-  const { id, domain } = data.task;
-  console.log(`[${new Date().toISOString()}] Task ${id}: ${domain}`);
-  const result = await checkDomain(domain);
+  const { id, domain, task_type: taskType = "domain_check", payload = null } = data.task;
+  console.log(`[${new Date().toISOString()}] Task ${id} [${taskType}]: ${domain}`);
+  const result = taskType === "trustpositif_fetch"
+    ? await fetchTrustPositifSource(payload || {})
+    : await checkDomain(domain);
   await axios.post(`${CENTRAL_URL}/api/agent/result`, { node_name: NODE_NAME, secret_key: AGENT_SECRET, task_id: id, result, telemetry: getBatteryTelemetry() }, { timeout: 30000 });
   console.log(`[${new Date().toISOString()}] Done ${domain}: ${result.status} / ${result.reason}`);
 }
