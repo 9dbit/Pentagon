@@ -25,6 +25,5 @@ ENV VERSION_CODE=170
 ENV VERSION_NAME=1.7.0
 ENV PACKAGE_NAME=com.pentagon.providernode
 ENV RELEASE_NOTES="Pentagon Provider Node 1.7.0: cloud-native release channel, cellular transport checks, TrustPositif probe, telemetry, and secure self-update."
-VOLUME ["/data"]
 EXPOSE 8080
 CMD ["bash", "/opt/release/release-entrypoint.sh"]
