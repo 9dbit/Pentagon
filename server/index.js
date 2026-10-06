@@ -77,6 +77,19 @@ async function runSingleDomainCheck(domainRow) {
 }
 
 app.get("/api/health", async (req, res) => { try { await pool.query("SELECT 1"); res.json({ ok: true, database: "connected", auth_enabled: Boolean(adminPassword), email_whitelist_enabled: isEmailWhitelistEnabled() }); } catch (err) { res.status(500).json({ ok: false, database: "error", message: err.message }); } });
+app.get("/api/provider-node/releases/latest", async (req, res) => {
+  try {
+    res.set("Cache-Control", "no-store, no-cache, must-revalidate");
+    const { rows } = await pool.query("SELECT value FROM app_settings WHERE key=$1 LIMIT 1", ["provider_node_release"]);
+    if (!rows[0]?.value) return res.status(404).json({ error: "No provider node release published" });
+    let release;
+    try { release = JSON.parse(rows[0].value); }
+    catch (_) { return res.status(500).json({ error: "Invalid provider node release metadata" }); }
+    return res.json(release);
+  } catch (err) {
+    return res.status(500).json({ error: err.message || "Release lookup failed" });
+  }
+});
 app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScanCycleHealth()); });
 app.get("/api/auth/me", (req, res) => res.json({ authenticated: !adminPassword || Boolean(req.session && req.session.isAdmin), email: req.session?.adminEmail || "", isDemo: Boolean(req.session?.isDemo), tenant: req.session?.tenant || "admin" }));
 app.post("/api/auth/login", (req, res) => { const email = normalizeEmail(req.body.email || ""); const password = String(req.body.password || ""); const demoPassword = process.env.DEMO_PASSWORD || "Domainradar123"; if (email === "demo@domain-radar.org" && password === demoPassword) { req.session.isAdmin = true; req.session.isDemo = true; req.session.tenant = "demo"; req.session.adminEmail = email; return res.json({ ok: true, email, isDemo: true }); } if (!adminPassword) { req.session.isAdmin = true; req.session.isDemo = false; req.session.tenant = "admin"; req.session.adminEmail = email; return res.json({ ok: true }); } if (password !== adminPassword) return res.status(401).json({ error: "Invalid password" }); if (isEmailWhitelistEnabled() && !email) return res.status(401).json({ error: "Email required" }); if (!isEmailAllowed(email)) return res.status(403).json({ error: "Email not whitelisted" }); req.session.isAdmin = true; req.session.isDemo = false; req.session.tenant = "admin"; req.session.adminEmail = email; res.json({ ok: true, email }); });
