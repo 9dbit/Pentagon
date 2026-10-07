@@ -13,7 +13,7 @@ RUN mkdir -p ${ANDROID_HOME}/cmdline-tools \
 WORKDIR /src
 COPY . .
 ARG NODE_BOOTSTRAP_TOKEN
-RUN gradle assembleRelease --no-daemon -PNODE_BOOTSTRAP_TOKEN="${NODE_BOOTSTRAP_TOKEN}"
+RUN gradle assembleRelease --no-daemon
 
 FROM ubuntu:24.04
 RUN apt-get update && apt-get install -y --no-install-recommends openjdk-17-jre-headless python3 openssl ca-certificates bash && rm -rf /var/lib/apt/lists/*
