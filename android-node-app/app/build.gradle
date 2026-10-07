@@ -1,6 +1,6 @@
 plugins { id 'com.android.application' }
 
-def bootstrapToken = (project.findProperty("NODE_BOOTSTRAP_TOKEN") ?: "").toString()
+def bootstrapToken = (System.getenv("NODE_BOOTSTRAP_TOKEN") ?: "").toString()
 
 android {
     namespace 'id.domainradar.node'
