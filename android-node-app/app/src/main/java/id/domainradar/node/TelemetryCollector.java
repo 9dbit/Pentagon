@@ -66,10 +66,16 @@ class TelemetryCollector {
                 CellSignalStrength cs = null;
                 if (info instanceof CellInfoLte) { cs = ((CellInfoLte)info).getCellSignalStrength(); s.type = "lte"; s.label = "4G LTE"; }
                 if (cs != null) {
-                    s.dbm = cs.getDbm();
-                    s.asu = cs.getAsuLevel();
-                    s.level = cs.getLevel();
-                    s.percent = Math.max(0, Math.min(100, Math.round((s.level / 4f) * 100)));
+                    int dbm = cs.getDbm();
+                    int asu = cs.getAsuLevel();
+                    int level = cs.getLevel();
+
+                    s.dbm = (dbm <= -20 && dbm >= -200) ? dbm : 0;
+                    s.asu = (asu >= 0 && asu <= 255) ? asu : -1;
+                    s.level = (level >= 0 && level <= 4) ? level : -1;
+                    s.percent = s.level >= 0
+                            ? Math.max(0, Math.min(100, Math.round((s.level / 4f) * 100)))
+                            : -1;
                     break;
                 }
             }
