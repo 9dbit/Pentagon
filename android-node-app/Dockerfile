@@ -22,9 +22,9 @@ COPY --from=build /src/app/build/outputs/apk/release/app-release-unsigned.apk /o
 COPY release-entrypoint.sh release-server.py /opt/release/
 ENV PATH=/opt/android-build-tools:${PATH}
 ENV PORT=8080
-ENV VERSION_CODE=172
-ENV VERSION_NAME=1.7.2
+ENV VERSION_CODE=173
+ENV VERSION_NAME=1.7.3
 ENV PACKAGE_NAME=com.pentagon.providernode
-ENV RELEASE_NOTES="Pentagon Provider Node 1.7.2: new Pentagon app launcher icon, zero-config SIM provider detection, automatic node provisioning, telemetry, TrustPositif probe, and secure self-update."
+ENV RELEASE_NOTES="Pentagon Provider Node 1.7.3: redesigned dashboard UI with structured node status, telemetry cards, quick actions, readable logs, zero-config provisioning, TrustPositif probe, and secure self-update."
 EXPOSE 8080
 CMD ["bash", "/opt/release/release-entrypoint.sh"]
