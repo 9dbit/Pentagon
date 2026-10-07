@@ -90,9 +90,16 @@ function normalizeTelemetry(raw = {}) {
   const batteryPercent = toNumberOrNull(raw.battery_percent);
   const temp = toNumberOrNull(raw.battery_temperature_c);
   const signalPercent = toNumberOrNull(raw.signal_percent);
-  const signalDbm = toNumberOrNull(raw.signal_dbm);
-  const signalAsu = toNumberOrNull(raw.signal_asu);
-  const signalLevel = toNumberOrNull(raw.signal_level);
+  const signalDbmRaw = toNumberOrNull(raw.signal_dbm);
+  const signalAsuRaw = toNumberOrNull(raw.signal_asu);
+  const signalLevelRaw = toNumberOrNull(raw.signal_level);
+
+  const signalDbm = Number.isFinite(signalDbmRaw) && signalDbmRaw <= -20 && signalDbmRaw >= -200
+    ? signalDbmRaw : null;
+  const signalAsu = Number.isFinite(signalAsuRaw) && signalAsuRaw >= 0 && signalAsuRaw <= 255
+    ? signalAsuRaw : null;
+  const signalLevel = Number.isFinite(signalLevelRaw) && signalLevelRaw >= 0 && signalLevelRaw <= 4
+    ? signalLevelRaw : null;
 
   const clippedSignalPercent = Number.isFinite(signalPercent)
     ? Math.max(0, Math.min(100, Math.round(signalPercent)))
