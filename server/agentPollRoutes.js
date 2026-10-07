@@ -261,6 +261,12 @@ router.post("/bootstrap", async (req, res, next) => {
       return res.status(403).json({ error: "Pentagon Provider Node client required" });
     }
 
+    const configuredBootstrapToken = String(process.env.NODE_BOOTSTRAP_TOKEN || "");
+    const suppliedBootstrapToken = String(req.headers["x-pentagon-bootstrap"] || "");
+    if (!configuredBootstrapToken || suppliedBootstrapToken !== configuredBootstrapToken) {
+      return res.status(403).json({ error: "Invalid bootstrap credential" });
+    }
+
     const operator = String(req.body.operator || "").trim();
     const installId = String(req.body.install_id || "").trim();
     const provider = providerFromOperator(operator);
