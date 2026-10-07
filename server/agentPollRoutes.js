@@ -262,8 +262,13 @@ router.post("/bootstrap", async (req, res, next) => {
     }
 
     const configuredBootstrapToken = String(process.env.NODE_BOOTSTRAP_TOKEN || "");
+    const previousBootstrapToken = String(process.env.NODE_BOOTSTRAP_TOKEN_PREVIOUS || "");
     const suppliedBootstrapToken = String(req.headers["x-pentagon-bootstrap"] || "");
-    if (!configuredBootstrapToken || suppliedBootstrapToken !== configuredBootstrapToken) {
+    const validBootstrapToken =
+      configuredBootstrapToken &&
+      (suppliedBootstrapToken === configuredBootstrapToken ||
+       (previousBootstrapToken && suppliedBootstrapToken === previousBootstrapToken));
+    if (!validBootstrapToken) {
       return res.status(403).json({ error: "Invalid bootstrap credential" });
     }
 
