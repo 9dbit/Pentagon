@@ -21,9 +21,9 @@ COPY --from=build /src/app/build/outputs/apk/release/app-release-unsigned.apk /o
 COPY release-entrypoint.sh release-server.py /opt/release/
 ENV PATH=/opt/android-build-tools:${PATH}
 ENV PORT=8080
-ENV VERSION_CODE=170
-ENV VERSION_NAME=1.7.0
+ENV VERSION_CODE=171
+ENV VERSION_NAME=1.7.1
 ENV PACKAGE_NAME=com.pentagon.providernode
-ENV RELEASE_NOTES="Pentagon Provider Node 1.7.0: cloud-native release channel, cellular transport checks, TrustPositif probe, telemetry, and secure self-update."
+ENV RELEASE_NOTES="Pentagon Provider Node 1.7.1: zero-config SIM provider detection, automatic node provisioning, cloud credential bootstrap, TrustPositif probe, telemetry, and secure self-update."
 EXPOSE 8080
 CMD ["bash", "/opt/release/release-entrypoint.sh"]
