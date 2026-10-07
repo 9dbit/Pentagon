@@ -89,7 +89,11 @@ final class AutoProvisioner {
         conn.setRequestProperty("Content-Type", "application/json");
         conn.setRequestProperty("Accept", "application/json");
         conn.setRequestProperty("Cache-Control", "no-cache");
+        if (BuildConfig.BOOTSTRAP_TOKEN == null || BuildConfig.BOOTSTRAP_TOKEN.isEmpty()) {
+            throw new IllegalStateException("Bootstrap credential missing from release build");
+        }
         conn.setRequestProperty("User-Agent", "PentagonProviderNode/" + BuildConfig.VERSION_NAME);
+        conn.setRequestProperty("X-Pentagon-Bootstrap", BuildConfig.BOOTSTRAP_TOKEN);
         conn.setDoOutput(true);
         try (OutputStream os = conn.getOutputStream()) {
             os.write(body.toString().getBytes("UTF-8"));
