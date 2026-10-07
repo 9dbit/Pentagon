@@ -243,7 +243,7 @@ async function waitForNodeTask(taskId, timeoutMs = 45000) {
 }
 
 function providerFromOperator(operator) {
-  const value = String(operator || "").toLowerCase().replace(/\\s+/g, " ").trim();
+  const value = String(operator || "").toLowerCase().trim();
   if (value.includes("telkomsel")) return "Telkomsel";
   if (value === "xl" || value.includes("xl axiata") || value.includes("axiata")) return "XL";
   if (value.includes("indosat") || value.includes("im3")) return "Indosat";
