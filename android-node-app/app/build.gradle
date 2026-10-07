@@ -1,5 +1,7 @@
 plugins { id 'com.android.application' }
 
+def bootstrapToken = (project.findProperty("NODE_BOOTSTRAP_TOKEN") ?: "").toString()
+
 android {
     namespace 'id.domainradar.node'
     buildFeatures { buildConfig true }
@@ -9,11 +11,11 @@ android {
         applicationId 'com.pentagon.providernode'
         minSdk 26
         targetSdk 35
-        versionCode 170
-        versionName '1.7.0'
+        versionCode 171
+        versionName '1.7.1'
+        buildConfigField "String", "BOOTSTRAP_TOKEN", "\"${bootstrapToken}\""
     }
 }
-
 
 dependencies {
     implementation 'androidx.core:core:1.13.1'

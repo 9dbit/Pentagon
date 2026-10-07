@@ -20,10 +20,17 @@ class Prefs {
         }
         return value;
     }
-    static String nodeName(Context c) { return get(c, "node", "INDOSAT-JKT-01"); }
-    static String provider(Context c) { return get(c, "provider", "Indosat"); }
+    static String nodeName(Context c) { return get(c, "node", ""); }
+    static String provider(Context c) { return get(c, "provider", ""); }
     static String networkType(Context c) { return get(c, "network_type", "mobile"); }
-    static String expectedOrg(Context c) { return get(c, "expected_org", "indosat"); }
+    static String expectedOrg(Context c) { return get(c, "expected_org", ""); }
     static String secret(Context c) { return get(c, "secret", ""); }
+    static String installId(Context c) {
+        String current = get(c, "install_id", "");
+        if (!current.isEmpty()) return current;
+        String created = java.util.UUID.randomUUID().toString();
+        put(c, "install_id", created);
+        return created;
+    }
     static int pollMs(Context c) { try { return Integer.parseInt(get(c, "poll_ms", "3000")); } catch(Exception e) { return 3000; } }
 }

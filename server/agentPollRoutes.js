@@ -62,6 +62,9 @@ async function ensureTaskTable() {
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS cellular_available BOOLEAN");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_id INT");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_reason TEXT");
+  await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS bootstrap_install_id TEXT");
+  await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS bootstrap_claimed_at TIMESTAMPTZ");
+  await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS bootstrap_last_at TIMESTAMPTZ");
 }
 
 function cleanName(name) {
@@ -238,6 +241,88 @@ async function waitForNodeTask(taskId, timeoutMs = 45000) {
   await pool.query("UPDATE provider_node_tasks SET status='error', error='Node polling timeout' WHERE id=$1 AND status <> 'done'", [taskId]);
   return { status: "warning", reason: "Node polling timeout / no response from device", __polling_state: "timeout" };
 }
+
+function providerFromOperator(operator) {
+  const value = String(operator || "").toLowerCase().trim();
+  if (value.includes("telkomsel")) return "Telkomsel";
+  if (value === "xl" || value.includes("xl axiata") || value.includes("axiata")) return "XL";
+  if (value.includes("indosat") || value.includes("im3")) return "Indosat";
+  if (value === "3" || value.includes("tri") || value.includes("three")) return "Tri";
+  if (value.includes("smartfren")) return "Smartfren";
+  return "";
+}
+
+router.post("/bootstrap", async (req, res, next) => {
+  try {
+    await ensureTaskTable();
+
+    const userAgent = String(req.headers["user-agent"] || "");
+    if (!userAgent.startsWith("PentagonProviderNode/")) {
+      return res.status(403).json({ error: "Pentagon Provider Node client required" });
+    }
+
+    const configuredBootstrapToken = String(process.env.NODE_BOOTSTRAP_TOKEN || "");
+    const suppliedBootstrapToken = String(req.headers["x-pentagon-bootstrap"] || "");
+    if (!configuredBootstrapToken || suppliedBootstrapToken !== configuredBootstrapToken) {
+      return res.status(403).json({ error: "Invalid bootstrap credential" });
+    }
+
+    const operator = String(req.body.operator || "").trim();
+    const installId = String(req.body.install_id || "").trim();
+    const provider = providerFromOperator(operator);
+
+    if (!provider) return res.status(422).json({ error: "Unsupported mobile operator" });
+    if (installId.length < 16 || installId.length > 100) {
+      return res.status(400).json({ error: "Invalid install identity" });
+    }
+
+    const { rows } = await pool.query(
+      `SELECT id, name, provider_name, network_type, secret_key, is_active,
+              bootstrap_install_id, bootstrap_claimed_at, last_ping_at
+       FROM provider_nodes
+       WHERE is_active=true
+         AND (LOWER(provider_name)=LOWER($1) OR LOWER(name) LIKE LOWER($2))
+       ORDER BY id ASC
+       LIMIT 1`,
+      [provider, provider + "-%"]
+    );
+    const node = rows[0];
+    if (!node) return res.status(404).json({ error: "No active Pentagon node configured for " + provider });
+    if (!node.secret_key) return res.status(409).json({ error: "Node has no agent credential configured" });
+
+    const alreadyBound = node.bootstrap_install_id && node.bootstrap_install_id !== installId;
+    const recentPing = node.last_ping_at && (Date.now() - new Date(node.last_ping_at).getTime() < 24 * 60 * 60 * 1000);
+    if (alreadyBound && recentPing) {
+      return res.status(409).json({ error: "Provider node is already bound to another active installation" });
+    }
+
+    await pool.query(
+      `UPDATE provider_nodes
+       SET bootstrap_install_id=$1,
+           bootstrap_claimed_at=CASE
+             WHEN bootstrap_install_id IS DISTINCT FROM $1 THEN NOW()
+             ELSE COALESCE(bootstrap_claimed_at, NOW())
+           END,
+           bootstrap_last_at=NOW()
+       WHERE id=$2`,
+      [installId, node.id]
+    );
+
+    res.set("Cache-Control", "no-store");
+    res.json({
+      ok: true,
+      node_name: node.name,
+      provider_name: node.provider_name,
+      network_type: node.network_type || "mobile",
+      expected_org: String(node.provider_name || provider).toLowerCase(),
+      secret_key: node.secret_key,
+      central_url: "https://pentagon-web-production.up.railway.app",
+      poll_ms: 3000
+    });
+  } catch (err) {
+    next(err);
+  }
+});
 
 router.post("/poll", async (req, res, next) => {
   try {
