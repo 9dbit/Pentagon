@@ -41,6 +41,11 @@ public class NodeService extends Service {
     }
 
     private void pollOnce() throws Exception {
+        AutoProvisioner.Result provisioned = AutoProvisioner.ensure(this);
+        if (provisioned.changed) {
+            log("Auto-configured " + provisioned.nodeName + " from operator " + provisioned.operator);
+            updateNotification("Configured " + provisioned.provider);
+        }
         String mode = Prefs.networkType(this);
         boolean mobile = "mobile".equalsIgnoreCase(mode);
         CellularNetworkHelper.Info cell = CellularNetworkHelper.inspect(this);
