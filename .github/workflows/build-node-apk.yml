@@ -6,6 +6,7 @@ on:
     paths:
       - 'android-node-app/**'
       - 'server/agentPollRoutes.js'
+      - 'server/trustpositifRoutes.js'
       - '.github/workflows/build-node-apk.yml'
 
 jobs:
@@ -16,7 +17,9 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Check backend syntax
-        run: node --check server/agentPollRoutes.js
+        run: |
+          node --check server/agentPollRoutes.js
+          node --check server/trustpositifRoutes.js
 
       - name: Set up JDK
         uses: actions/setup-java@v4
