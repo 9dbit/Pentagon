@@ -60,4 +60,6 @@ jobs:
             exit 0
           fi
           git commit -m "Import Pentagon landing assets from Replit"
+          git fetch origin migration/landing-replit-cutover
+          git rebase origin/migration/landing-replit-cutover
           git push origin HEAD:migration/landing-replit-cutover
