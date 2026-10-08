@@ -3,7 +3,7 @@ const axios = require("axios");
 const fs = require("fs");
 const os = require("os");
 const path = require("path");
-const readline = require("readline");
+const readline = require("readline");\nconst { once } = require("events");
 const { pool } = require("./db");
 const { ensureNodeTable } = require("./nodeRoutes");
 const { ensureTaskTable, enqueueNodeTask, waitForNodeTask } = require("./agentPollRoutes");
@@ -43,21 +43,154 @@ function cacheInfo() {
   }
 }
 
-async function scanCachedSource(domains = []) {
-  const targets = new Set(normalizeDomainList(domains));
-  const matches = {};
-  for (const domain of targets) matches[domain] = false;
-
-  let entryCount = 0;
-  const input = fs.createReadStream(CACHE_PATH, { encoding: "utf8" });
-  const rl = readline.createInterface({ input, crlfDelay: Infinity });
-  for await (const line of rl) {
-    const value = normalizeDomain(line);
-    if (!value) continue;
-    entryCount += 1;
-    if (targets.has(value)) matches[value] = true;
+function bucketId(domain) {
+  let hash = 0x811c9dc5;
+  for (let i = 0; i < domain.length; i += 1) {
+    hash ^= domain.charCodeAt(i);
+    hash = Math.imul(hash, 0x01000193);
   }
-  return { entryCount, matches };
+  return hash & 0xff;
+}
+
+function bucketPath(id, base = INDEX_DIR) {
+  return path.join(base, id.toString(16).padStart(2, "0") + ".txt");
+}
+
+function readIndexMeta() {
+  try {
+    return JSON.parse(fs.readFileSync(INDEX_META_PATH, "utf8"));
+  } catch (_) {
+    return null;
+  }
+}
+
+function indexInfo() {
+  const meta = readIndexMeta();
+  if (!meta) return { ready: false, entry_count: 0, built_at: null, buckets: INDEX_BUCKETS };
+  return {
+    ready: true,
+    entry_count: Number(meta.entry_count || 0),
+    built_at: meta.built_at || null,
+    source_mtime_ms: Number(meta.source_mtime_ms || 0),
+    buckets: Number(meta.buckets || INDEX_BUCKETS)
+  };
+}
+
+function indexMatchesCache() {
+  try {
+    const stat = fs.statSync(CACHE_PATH);
+    const meta = readIndexMeta();
+    return Boolean(meta)
+      && Number(meta.buckets) === INDEX_BUCKETS
+      && Math.abs(Number(meta.source_mtime_ms || 0) - stat.mtimeMs) < 2;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function buildIndexFromCache() {
+  if (indexBuildPromise) return indexBuildPromise;
+  indexBuildPromise = (async () => {
+    const stat = fs.statSync(CACHE_PATH);
+    const tmpDir = `${INDEX_DIR}.tmp-${process.pid}-${Date.now()}`;
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+    fs.mkdirSync(tmpDir, { recursive: true });
+
+    const streams = Array.from({ length: INDEX_BUCKETS }, (_, id) =>
+      fs.createWriteStream(bucketPath(id, tmpDir), { encoding: "utf8" })
+    );
+
+    let entryCount = 0;
+    try {
+      const input = fs.createReadStream(CACHE_PATH, { encoding: "utf8" });
+      const rl = readline.createInterface({ input, crlfDelay: Infinity });
+      for await (const line of rl) {
+        const value = normalizeDomain(line);
+        if (!value) continue;
+        entryCount += 1;
+        const stream = streams[bucketId(value)];
+        if (!stream.write(value + "\n")) await once(stream, "drain");
+      }
+      await Promise.all(streams.map(stream => new Promise((resolve, reject) => {
+        stream.on("error", reject);
+        stream.end(resolve);
+      })));
+
+      fs.writeFileSync(path.join(tmpDir, "meta.json"), JSON.stringify({
+        source_mtime_ms: stat.mtimeMs,
+        source_bytes: stat.size,
+        entry_count: entryCount,
+        buckets: INDEX_BUCKETS,
+        built_at: new Date().toISOString()
+      }));
+
+      fs.rmSync(INDEX_DIR, { recursive: true, force: true });
+      fs.renameSync(tmpDir, INDEX_DIR);
+      bucketCache.clear();
+      return indexInfo();
+    } catch (err) {
+      for (const stream of streams) {
+        try { stream.destroy(); } catch (_) {}
+      }
+      fs.rmSync(tmpDir, { recursive: true, force: true });
+      throw err;
+    } finally {
+      indexBuildPromise = null;
+    }
+  })();
+  return indexBuildPromise;
+}
+
+async function ensureIndexForCache() {
+  if (indexMatchesCache()) return { ...indexInfo(), built: false };
+  return { ...(await buildIndexFromCache()), built: true };
+}
+
+function loadBucket(id) {
+  if (bucketCache.has(id)) {
+    const hit = bucketCache.get(id);
+    bucketCache.delete(id);
+    bucketCache.set(id, hit);
+    return hit;
+  }
+
+  let values = new Set();
+  try {
+    values = new Set(
+      fs.readFileSync(bucketPath(id), "utf8")
+        .split(/\r?\n/)
+        .map(v => v.trim())
+        .filter(Boolean)
+    );
+  } catch (_) {}
+
+  bucketCache.set(id, values);
+  while (bucketCache.size > INDEX_BUCKET_CACHE_LIMIT) {
+    const oldest = bucketCache.keys().next().value;
+    bucketCache.delete(oldest);
+  }
+  return values;
+}
+
+async function lookupIndexedDomains(domains = []) {
+  const targets = normalizeDomainList(domains);
+  const matches = {};
+  const groups = new Map();
+
+  for (const domain of targets) {
+    matches[domain] = false;
+    const id = bucketId(domain);
+    if (!groups.has(id)) groups.set(id, []);
+    groups.get(id).push(domain);
+  }
+
+  for (const [id, group] of groups) {
+    const values = loadBucket(id);
+    for (const domain of group) matches[domain] = values.has(domain);
+  }
+
+  const meta = readIndexMeta();
+  return { entryCount: Number(meta?.entry_count || 0), matches };
 }
 
 async function probeOfficialSource() {
@@ -151,6 +284,12 @@ async function ensureSourceCache() {
     };
   }
   return downloadSourceCache();
+}
+
+async function ensureIndexedCache() {
+  const source = await ensureSourceCache();
+  const index = await ensureIndexForCache();
+  return { ...source, index };
 }
 
 async function ensureTrustPositifTable() {
@@ -262,7 +401,7 @@ router.post("/trustpositif/check", async (req, res, next) => {
     const started = Date.now();
     let cacheResult;
     try {
-      cacheResult = await ensureSourceCache();
+      cacheResult = await ensureIndexedCache();
     } catch (err) {
       const result = {
         ok: false, status: "unavailable", source_url: SOURCE_URL,
@@ -274,7 +413,7 @@ router.post("/trustpositif/check", async (req, res, next) => {
       return res.json({ ...result, domains: domains.map(domain => ({ domain, listed: false, status: "Unknown" })) });
     }
 
-    const scan = await scanCachedSource(domains);
+    const scan = await lookupIndexedDomains(domains);
     const result = {
       ...cacheResult,
       ok: true,
@@ -283,7 +422,9 @@ router.post("/trustpositif/check", async (req, res, next) => {
       entry_count: scan.entryCount,
       matches: scan.matches,
       cache: cacheInfo(),
-      reason: cacheResult.downloaded ? "SOURCE_CACHE_DOWNLOADED" : "SOURCE_CACHE_HIT"
+      reason: cacheResult.downloaded
+        ? "SOURCE_CACHE_DOWNLOADED_INDEXED"
+        : (cacheResult.index?.built ? "SOURCE_CACHE_INDEX_BUILT" : "SOURCE_CACHE_INDEX_HIT")
     };
     await recordCheck(tenant, "direct", result);
 

@@ -48,7 +48,9 @@ public class NodeService extends Service {
         }
         String mode = Prefs.networkType(this);
         boolean mobile = "mobile".equalsIgnoreCase(mode);
-        CellularNetworkHelper.Info cell = CellularNetworkHelper.inspect(this);
+        CellularNetworkHelper.Info cell = mobile
+                ? CellularNetworkHelper.ensureCellular(this, 3500L)
+                : CellularNetworkHelper.inspect(this);
 
         JSONObject telemetry = TelemetryCollector.collect(this);
         JSONObject poll = base();
@@ -152,6 +154,7 @@ public class NodeService extends Service {
 
     @Override public void onDestroy() {
         running = false;
+        CellularNetworkHelper.releaseCellular(this);
         if (Prefs.getBool(this, "enabled", false)) {
             try { startService(new Intent(this, NodeService.class)); } catch (Exception ignored) {}
         }
