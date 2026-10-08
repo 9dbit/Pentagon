@@ -259,8 +259,18 @@ app.get("/api/ai-endpoint-status", requireAdmin, async (req, res) => {
 
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: err.message || "Internal server error" }); });
 const distPath = path.join(__dirname, "../dist");
-app.use(express.static(distPath));
-app.get("*", (req, res) => { const indexPath = path.join(distPath, "index.html"); if (fs.existsSync(indexPath)) return res.sendFile(indexPath); res.json({ ok: true, message: "API server is running. Run npm run client for the dashboard during development." }); });
+const importedFrontendIndex = path.join(distPath, "replit-index.html");
+app.get("/", (req, res, next) => {
+  if (fs.existsSync(importedFrontendIndex)) return res.sendFile(importedFrontendIndex);
+  next();
+});
+app.use(express.static(distPath, { index: false }));
+app.get("*", (req, res) => {
+  if (fs.existsSync(importedFrontendIndex)) return res.sendFile(importedFrontendIndex);
+  const indexPath = path.join(distPath, "index.html");
+  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  res.json({ ok: true, message: "API server is running. Run npm run client for the dashboard during development." });
+});
 const port = process.env.PORT || 3000;
 async function boot() { try { await pool.query("ALTER TABLE domains ADD COLUMN IF NOT EXISTS label TEXT DEFAULT ''"); } catch(e) { console.warn("label migration:", e.message); } for (const t of ['domains','proxies','projects','provider_nodes']) { try { await pool.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS tenant TEXT NOT NULL DEFAULT 'admin'`); } catch(e) { console.warn(`tenant col ${t}:`, e.message); } } try { await pool.query(`CREATE TABLE IF NOT EXISTS user_sessions (session_id TEXT PRIMARY KEY, user_agent TEXT, ip TEXT, page TEXT DEFAULT 'dashboard', email TEXT DEFAULT '', nickname TEXT DEFAULT '', country TEXT DEFAULT '', first_seen_at TIMESTAMPTZ DEFAULT NOW(), last_seen_at TIMESTAMPTZ DEFAULT NOW(), heartbeat_count INT DEFAULT 1)`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS page TEXT DEFAULT 'dashboard'`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS country TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ DEFAULT NOW()`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT NOW()`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS heartbeat_count INT DEFAULT 1`); await pool.query(`DELETE FROM user_sessions WHERE last_seen_at < NOW() - INTERVAL '90 days'`); console.log("user_sessions table ready, old rows pruned"); } catch(e) { console.warn("user_sessions migration:", e.message); } try { await seedDemoData(); console.log("Demo data seeded"); } catch(e) { console.warn("Demo seed:", e.message); } try { await loadSettings(); console.log("Settings loaded from database"); } catch (err) { console.error("Settings load failed, using env defaults:", err.message); } app.listen(port, () => { console.log(`Server running on ${port}`); startScheduler(); }); }
 boot();
