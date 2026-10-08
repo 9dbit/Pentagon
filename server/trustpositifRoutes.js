@@ -292,6 +292,24 @@ async function ensureIndexedCache() {
   return { ...source, index };
 }
 
+if (process.env.TRUSTPOSITIF_PREWARM !== "false") {
+  const timer = setTimeout(() => {
+    ensureIndexedCache()
+      .then((info) => {
+        console.log("[trustpositif] cache ready", {
+          downloaded: Boolean(info.downloaded),
+          bytes: Number(info.payload_bytes || 0),
+          indexed: Boolean(info.index?.ready),
+          entries: Number(info.index?.entry_count || 0)
+        });
+      })
+      .catch((err) => {
+        console.error("[trustpositif] cache prewarm failed:", err?.message || err);
+      });
+  }, 1500);
+  if (typeof timer.unref === "function") timer.unref();
+}
+
 async function ensureTrustPositifTable() {
   await ensureNodeTable();
   await pool.query(`
