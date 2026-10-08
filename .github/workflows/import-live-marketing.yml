@@ -1,0 +1,57 @@
+name: Import live Pentagon marketing frontend
+
+on:
+  push:
+    branches:
+      - migration/replit-marketing-frontend
+    paths:
+      - ".github/workflows/import-live-marketing.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/replit-marketing-frontend
+          fetch-depth: 0
+
+      - name: Import current live frontend bundle
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://pentagon.quest"
+          mkdir -p public/assets
+          curl --fail --location --retry 3 "$base/" -o public/replit-index.html
+
+          js_path="$(grep -oE 'src="/assets/index-[^"]+\.js"' public/replit-index.html | head -1 | sed 's/^src="//;s/"$//')"
+          css_path="$(grep -oE 'href="/assets/index-[^"]+\.css"' public/replit-index.html | head -1 | sed 's/^href="//;s/"$//')"
+
+          test -n "$js_path"
+          test -n "$css_path"
+
+          curl --fail --location --retry 3 "$base$js_path" -o "public$js_path"
+          curl --fail --location --retry 3 "$base$css_path" -o "public$css_path"
+
+          echo "Imported $js_path"
+          echo "Imported $css_path"
+
+          grep -q "Pentagon — Search Defense Cockpit" public/replit-index.html
+          grep -q "Simple, transparent plans" "public$js_path"
+          grep -q "Pentagon ShieldLink" "public$js_path"
+          grep -q "Ready to take control?" "public$js_path"
+
+      - name: Commit imported frontend
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "pentagon-migration-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/replit-index.html public/assets/
+          git commit -m "Import live Pentagon marketing frontend"
+          git fetch origin migration/replit-marketing-frontend
+          git rebase origin/migration/replit-marketing-frontend
+          git push origin HEAD:migration/replit-marketing-frontend
