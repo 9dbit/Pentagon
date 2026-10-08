@@ -16,7 +16,7 @@
 
   function isSettingsActive() {
     const active = Array.from(document.querySelectorAll('aside button.navActive'));
-    return active.some((b) => /settings/i.test(b.textContent || '')) || Boolean(document.querySelector('main .panelHead h2')?.textContent?.match(/settings/i));
+    return active.some((b) => (b.textContent || '').trim().toLowerCase() === 'settings');
   }
 
   function pageShell() {
@@ -37,7 +37,17 @@
   function hideOriginalSettings() {
     document.querySelectorAll('main > .panel').forEach((panel) => {
       const title = panel.querySelector('.panelHead h2')?.textContent || '';
-      if (/settings/i.test(title) && panel.id !== PAGE_ID) panel.style.display = 'none';
+      if (/^settings$/i.test(title.trim()) && panel.id !== PAGE_ID) {
+        panel.dataset.settingsAllHidden = 'true';
+        panel.style.display = 'none';
+      }
+    });
+  }
+
+  function restoreOriginalSettings() {
+    document.querySelectorAll('[data-settings-all-hidden="true"]').forEach((panel) => {
+      panel.style.removeProperty('display');
+      delete panel.dataset.settingsAllHidden;
     });
   }
 
@@ -45,6 +55,7 @@
     if (!isSettingsActive()) {
       const page = document.getElementById(PAGE_ID);
       if (page) page.style.display = 'none';
+      restoreOriginalSettings();
       return;
     }
 
