@@ -1,0 +1,63 @@
+name: Import Pentagon landing assets from Replit
+
+on:
+  push:
+    branches:
+      - migration/landing-replit-cutover
+    paths:
+      - ".github/workflows/import-pentagon-landing-assets.yml"
+
+permissions:
+  contents: write
+
+jobs:
+  import:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: migration/landing-replit-cutover
+          fetch-depth: 0
+
+      - name: Import live landing assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          base="https://pentagon.quest"
+          mkdir -p public
+
+          for file in \
+            sidebar.css \
+            app-patches.css \
+            logo-rotation.css \
+            rank-defense-v2.css \
+            serp-alerts-polish.css \
+            ui-polish.js \
+            seo-project-ui.js \
+            settings-all-ui.js \
+            logo-icon.png \
+            logo-text.png \
+            og-image.png
+          do
+            echo "Importing $file"
+            curl --fail --location --retry 3 --retry-delay 2 "$base/$file" -o "public/$file"
+          done
+
+          file public/og-image.png
+          test -s public/og-image.png
+          test -s public/logo-icon.png
+          test -s public/logo-text.png
+
+      - name: Commit imported assets
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name "pentagon-migration-bot"
+          git config user.email "actions@users.noreply.github.com"
+          git add public/
+          if git diff --cached --quiet; then
+            echo "No asset differences to commit."
+            exit 0
+          fi
+          git commit -m "Import Pentagon landing assets from Replit"
+          git push origin HEAD:migration/landing-replit-cutover
