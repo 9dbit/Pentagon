@@ -115,7 +115,7 @@ export default function TrustPositifPage() {
         method: "POST",
         body: JSON.stringify({ domains })
       });
-      setNotice(`${node.name}: ${result.reason || (result.ok ? "SOURCE_AVAILABLE" : "SOURCE_UNAVAILABLE")}`);
+      setNotice(`${node.name}: ${result.reason || (result.ok ? "SOURCE_AVAILABLE" : "SOURCE_UNAVAILABLE")}${result.probe_only ? " (probe only, domain membership not verified)" : ""}`);
       await refresh();
     } catch (err) {
       setNotice(`${node.name}: ${err.message || "Node test failed"}`);
@@ -133,7 +133,7 @@ export default function TrustPositifPage() {
         <div>
           <div className="tpEyebrow"><ShieldCheck size={16}/> KOMDIGI SOURCE DIAGNOSTIC</div>
           <h1>Trust Positif</h1>
-          <p>Verify availability of the official TrustPositif registry and prove which Indonesian provider nodes can fetch it.</p>
+          <p>Verify official TrustPositif source reachability. Node availability probes do not verify whether a domain appears in the registry.</p>
         </div>
         <button className="tpRefreshBtn" onClick={refresh}><RefreshCw size={16}/> Refresh</button>
       </section>
@@ -144,13 +144,13 @@ export default function TrustPositifPage() {
         <article className="tpSourceCard">
           <div className="tpCardHead">
             <div><Database size={20}/><span>Official Source</span></div>
-            <ResultBadge ok={Boolean(direct?.ok)} neutral={!direct} label={direct ? (direct.ok ? "AVAILABLE" : "UNAVAILABLE") : "NOT TESTED"}/>
+            <ResultBadge ok={Boolean(direct?.ok)} neutral={!direct} label={direct ? (direct.ok ? (direct.details?.probe_only ? "PROBE OK" : "AVAILABLE") : "UNAVAILABLE") : "NOT TESTED"}/>
           </div>
           <code>{status.source_url || "https://trustpositif.komdigi.go.id/assets/db/domains_isp"}</code>
           <div className="tpMetricGrid">
             <div><span>HTTP</span><b>{direct?.http_status ?? "—"}</b></div>
             <div><span>Latency</span><b>{direct?.latency_ms ? `${direct.latency_ms} ms` : "—"}</b></div>
-            <div><span>Payload</span><b>{formatBytes(direct?.payload_bytes)}</b></div>
+            <div><span>{direct?.details?.probe_only ? "Reported size" : "Payload"}</span><b>{formatBytes(direct?.payload_bytes)}</b></div>
             <div><span>Cache</span><b>{status.cache?.fresh ? "READY" : "EMPTY"}</b></div>
           </div>
           <div className="tpMetaLine"><Clock size={14}/> Last test: {formatTime(direct?.created_at)}</div>
@@ -210,7 +210,7 @@ export default function TrustPositifPage() {
                     <b>{node.name}</b>
                     <small>{node.provider_name} · {node.network_type}</small>
                   </div>
-                  <ResultBadge ok={ok} neutral={!checked} label={checked ? (ok ? "SOURCE OK" : "SOURCE FAIL") : "NOT TESTED"}/>
+                  <ResultBadge ok={ok} neutral={!checked} label={checked ? (ok ? (node.trust_details?.probe_only ? "PROBE OK" : "SOURCE OK") : "SOURCE FAIL") : "NOT TESTED"}/>
                 </div>
                 <div className="tpNodeNetwork">
                   <Wifi size={14}/>
@@ -227,9 +227,9 @@ export default function TrustPositifPage() {
                   <div><span>Node Health</span><b>{node.last_health_status || "unknown"}</b></div>
                   <div><span>HTTP</span><b>{node.trust_http_status ?? "—"}</b></div>
                   <div><span>Latency</span><b>{node.trust_latency_ms ? `${node.trust_latency_ms} ms` : "—"}</b></div>
-                  <div><span>Payload</span><b>{formatBytes(node.trust_payload_bytes)}</b></div>
+                  <div><span>{node.trust_details?.probe_only ? "Reported size" : "Payload"}</span><b>{formatBytes(node.trust_payload_bytes)}</b></div>
                 </div>
-                <div className="tpNodeReason">{node.trust_reason || node.last_health_reason || "No TrustPositif test yet."}</div>
+                <div className="tpNodeReason">{node.trust_reason || node.last_health_reason || "No TrustPositif test yet."}{node.trust_details?.probe_only ? " Endpoint probe only; registry content and domain membership were not checked." : ""}</div>
                 <div className="tpMetaLine"><Clock size={13}/> {formatTime(node.trust_checked_at || node.last_seen_at)}</div>
                 <button onClick={() => testNode(node)} disabled={nodeLoading[node.id] || node.is_active === false}>
                   <Server size={15}/>{nodeLoading[node.id] ? " Waiting for node..." : " Test Endpoint via Node"}
@@ -246,7 +246,7 @@ export default function TrustPositifPage() {
         <div className="tpHistory">
           {history.slice(0, 20).map(row => (
             <div className="tpHistoryRow" key={row.id}>
-              <ResultBadge ok={Boolean(row.ok)} label={row.mode === "node" ? (row.provider_name || "NODE") : "DIRECT"}/>
+              <ResultBadge ok={Boolean(row.ok)} label={row.mode === "node" ? ((row.provider_name || "NODE") + (row.details?.probe_only ? " PROBE" : "")) : "DIRECT"}/>
               <div><b>{row.reason || "—"}</b><small>{formatTime(row.created_at)}</small></div>
               <span>{row.http_status ?? "—"} · {row.latency_ms ? `${row.latency_ms} ms` : "—"}</span>
             </div>
@@ -257,7 +257,7 @@ export default function TrustPositifPage() {
 
       <div className="tpFootnote">
         <AlertTriangle size={14}/>
-        A failed source fetch is reported as unavailable or unsupported. Pentagon does not interpret source failure as a clean domain result.
+        Availability probes read source headers or a limited range, not the full registry. Only a completed exact domain lookup can establish whether a domain is listed. A failed source fetch is never treated as a clean domain result.
       </div>
     </div>
   );
