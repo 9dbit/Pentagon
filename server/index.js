@@ -5,6 +5,7 @@ const cors = require("cors");
 const path = require("path");
 const fs = require("fs");
 const session = require("express-session");
+const PgSessionStore = require("./pgSessionStore");
 const { pool } = require("./db");
 const { runChecks, runManualCheck, startScheduler, maybeAddProviderRegistryResult, clearRecurringAlert, getScanCycleHealth } = require("./scheduler");
 const { normalizeDomain, checkDomain, calculateGlobalStatus } = require("./checker");
@@ -43,7 +44,7 @@ async function getCountry(ip) {
 app.set("trust proxy", 1);
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "2mb" }));
-app.use(session({ name: "domain_radar_sid", secret: sessionSecret, resave: false, saveUninitialized: false, proxy: true, cookie: { httpOnly: true, sameSite: "lax", secure: "auto", maxAge: 1000 * 60 * 60 * 24 * 7 } }));
+app.use(session({ store: new PgSessionStore(pool), name: "domain_radar_sid", secret: sessionSecret, resave: false, saveUninitialized: false, proxy: true, cookie: { httpOnly: true, sameSite: "lax", secure: "auto", maxAge: 1000 * 60 * 60 * 24 * 7 } }));
 
 function requireAdmin(req, res, next) { if (!adminPassword) return next(); if (req.session && req.session.isAdmin) return next(); return res.status(401).json({ error: "Unauthorized" }); }
 function getTenant(req) { return (req.session && req.session.tenant) || 'admin'; }
