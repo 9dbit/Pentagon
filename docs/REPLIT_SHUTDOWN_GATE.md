@@ -4,7 +4,8 @@
 and scheduler handover have passed. Production runs on the Railway project
 `Pentagon`, service `pentagon-web`, branch `migration/railway-independence`.
 The old PostgreSQL `heliumdb` archive has been created in Replit Shell, but offsite
-retention, full extraction and test restoration are **not yet verified**.
+retention **remains unverified**. Full archive extraction and isolated PostgreSQL test restore **PASSED** on 2026-10-09. Original SHA256:
+`5ebfa1c6a7bd508292bde482f734d17c2d3c262f6d749dfed2dba6dcad809a8a`.
 
 ## 1. Inventory and backup the OLD source
 
@@ -34,6 +35,25 @@ Open the **original Pentagon Replit workspace shell**, not the live
 If `scripts/migration-audit.js` is absent in the original workspace, first
 synchronize the file from the `9dbit/Pentagon` repository. Do not replace
 the whole app, alter its secrets, or republish it just to run this audit.
+
+## 1a. Verified source restore and still-missing offsite backup
+
+Replit Shell performed an isolated restore into a temporary PostgreSQL cluster
+reachable only through a private UNIX socket. `ISOLATED_RESTORE_PASS` was
+observed, with source/restored tenant counts:
+- `check_results`: admin 25,569 / demo 51,287
+- `provider_node_tasks`: admin 54,109 / demo 1,347
+- `domains`: admin 2 / demo 16
+- `provider_nodes`: admin 6 / demo 3
+
+The original Replit database and Supabase were not touched by the test restore.
+This is **not** an offsite backup, nor does it establish parity with Supabase.
+Privately save an encrypted copy outside Replit and verify its SHA256.
+
+For source/target catalog review, use `scripts/migration-db-inventory.sql`.
+This pure SELECT script works with either Replit `psql` or the Supabase SQL
+Editor and prints only schema/constraints/aggregated row counts. Do not paste
+sensitive connection strings or table row contents into tickets.
 
 ## 2. Audit Supabase TARGET
 
