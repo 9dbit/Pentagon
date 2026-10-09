@@ -3,3 +3,11 @@ dist
 .env
 .DS_Store
 npm-debug.log*
+
+# Migration verification: never commit private source/target inventories or DB backups
+source-audit.json
+target-audit.json
+*.dump
+*.backup
+*.sql.gz
+*.pgdump
