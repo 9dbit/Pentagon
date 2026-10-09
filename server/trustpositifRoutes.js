@@ -14,6 +14,12 @@ const SOURCE_URL = "https://trustpositif.komdigi.go.id/assets/db/domains_isp";
 const CACHE_PATH = process.env.TRUSTPOSITIF_CACHE_PATH || path.join(os.tmpdir(), "pentagon-domains_isp.txt");
 const CACHE_TTL_MS = Number(process.env.TRUSTPOSITIF_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
 let cacheDownloadPromise = null;
+const INDEX_DIR = process.env.TRUSTPOSITIF_INDEX_DIR || path.join(path.dirname(CACHE_PATH), "trustpositif-index");
+const INDEX_META_PATH = path.join(INDEX_DIR, "meta.json");
+const INDEX_BUCKETS = 256;
+const INDEX_BUCKET_CACHE_LIMIT = 16;
+let indexBuildPromise = null;
+const bucketCache = new Map();
 
 function normalizeDomain(value) {
   return String(value || "")
