@@ -3,7 +3,8 @@
 **Status:** HOLD. Do not turn off Replit until source database proof, authorized login
 and scheduler handover have passed. Production runs on the Railway project
 `Pentagon`, service `pentagon-web`, branch `migration/railway-independence`.
-This file documents a safety gate, **not** proof that the old database was backed up.
+The old PostgreSQL `heliumdb` archive has been created in Replit Shell, but offsite
+retention, full extraction and test restoration are **not yet verified**.
 
 ## 1. Inventory and backup the OLD source
 
@@ -14,7 +15,8 @@ Open the **original Pentagon Replit workspace shell**, not the live
    printing its value. If the old Replit database is exposed only through
    `DATABASE_URL_DEVELOPMENT`, audit that URL with `--development` and back
    up the same database. Avoid assuming the Replit `DATABASE_URL` points to
-   `heliumdb`: identify the source before comparing.
+   `heliumdb`: identify the source before comparing. On 2026-10-09,
+   Replit Shell confirmed `DATABASE_URL` host `helium` and database `heliumdb`.
 2. Run `node scripts/migration-audit.js --out=source-audit.json` (or with
    `--development` for the legacy URL). This is a **read-only transaction** and
    outputs counts/schema fingerprints/content fingerprints for every public table.
@@ -22,7 +24,9 @@ Open the **original Pentagon Replit workspace shell**, not the live
 3. Take an independent complete PostgreSQL archive using `pg_dump -Fc`,
    including all schemas, constraints, sequence state and historical rows.
    Keep the resulting backup **private and off Replit**; do not commit it to
-   GitHub or attach it to a public issue. Verify it using `pg_restore --list`.
+   GitHub or attach it to a public issue. Verify its table-of-contents using
+   `pg_restore --list`, test full archive extraction via `pg_restore --file=/dev/null`,
+   and perform a separate isolated test restoration before approving shutdown.
    An audit JSON file is **not a substitute for a backup**.
 4. Check Replit deployment logs and scheduled jobs for writes that would
    still reach the old PostgreSQL database. Keep Replit online until ready.
@@ -39,16 +43,22 @@ where `DATABASE_URL` points to **Pentagon** Supabase project
 `odjsifsxhdesvkyzsnbw`. Copy only the source audit JSON between environments.
 Never transfer database passwords through issues, logs or chat.
 
-Important: the script categorizes live `user_sessions`, node telemetry,
-node tasks and temporary caches as volatile. These may legitimately diverge,
-but review them and ensure they are not needed for financial/operational audit.
+Important: **provider-node tasks, provider-node task events, and node telemetry
+are durable operational history and must match**. Only authentication sessions
+and regenerable caches are excluded from the strict row-level parity gate.
+Even these exceptions need a manual sign-off.
 **Any business-table difference is a cutover blocker.**
 
 Require exact counts and fingerprints for all business tables, particularly
 `projects`, `domains`, `check_results`, `alerts`, `provider_nodes`,
 `rank_keyword_groups`, `rank_scan_results`, `trustpositif_checks`,
 `app_settings`, `proxies` and Telegram mappings. Verify foreign keys and
-sequences, not just row counts.
+sequences, not just row counts. Legacy Replit data includes >76,000 historical
+`check_results` and >55,000 `provider_node_tasks`. Source tables contain `tenant`
+columns on historical rows that are absent from the previously checked target
+schema. **Never directly restore the source custom archive into the active
+Supabase database**: restore to an isolated staging database first, inspect
+column/FK/sequence differences and plan idempotent, transactional merges.
 
 ## 3. Authenticate and test the dashboard
 
