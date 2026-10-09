@@ -245,4 +245,9 @@ async function run() {
     await client.end().catch(() => {});
   }
 }
-run();
+if (require.main === module) {
+  run();
+} else {
+  // Allow deterministic unit tests without connecting to a real database.
+  module.exports = { compareSnapshots, REQUIRED_HISTORICAL_TABLES };
+}
