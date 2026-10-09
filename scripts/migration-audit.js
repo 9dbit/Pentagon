@@ -76,7 +76,10 @@ async function run() {
   }
   const client = new Client({
     connectionString,
-    ssl: ["localhost", "127.0.0.1", "::1"].includes(u.hostname)
+    // Replit's original PostgreSQL endpoint is the private host 'helium'.
+    // It does not necessarily offer TLS; never force an SSL handshake there.
+    // Public Supabase connections still validate the server certificate.
+    ssl: ["localhost", "127.0.0.1", "::1", "helium"].includes(u.hostname)
       ? false : { rejectUnauthorized: process.env.PENTAGON_AUDIT_ALLOW_SELF_SIGNED !== "true" },
     application_name: "pentagon-readonly-migration-audit"
   });
@@ -121,6 +124,11 @@ async function run() {
           name, count: result.rows[0].count,
           schema_digest: hash(JSON.stringify(schema.rows)),
           row_digest: result.rows[0].row_digest,
+          ...(schema.rows.some((col) => col.column_name === "tenant") ? {
+            tenant_counts: Object.fromEntries((await client.query(
+              `SELECT tenant, count(*)::text AS n FROM public.${qname} GROUP BY tenant ORDER BY tenant`
+            )).rows.map((row) => [String(row.tenant ?? "(null)"), row.n]))
+          } : {}),
           category: VOLATILE.has(name) ? "volatile" : "business"
         });
         await client.query("RELEASE SAVEPOINT audit_one");
