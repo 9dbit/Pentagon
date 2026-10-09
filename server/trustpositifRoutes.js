@@ -100,6 +100,7 @@ async function buildIndexFromCache() {
   indexBuildPromise = (async () => {
     const stat = fs.statSync(CACHE_PATH);
     const tmpDir = `${INDEX_DIR}.tmp-${process.pid}-${Date.now()}`;
+    fs.mkdirSync(path.dirname(INDEX_DIR), { recursive: true });
     fs.rmSync(tmpDir, { recursive: true, force: true });
     fs.mkdirSync(tmpDir, { recursive: true });
 
