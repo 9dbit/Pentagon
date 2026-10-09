@@ -27,9 +27,11 @@ const connectionString = development
   ? process.env.DATABASE_URL_DEVELOPMENT
   : process.env.DATABASE_URL;
 
+// Only expendable authentication sessions and computed caches may differ.
+// Task history and node telemetry are audit-relevant historical records.
 const VOLATILE = new Set([
-  "pentagon_http_sessions", "user_sessions", "node_telemetry",
-  "provider_node_tasks", "analytics_cache", "domain_intel_cache"
+  "pentagon_http_sessions", "user_sessions",
+  "analytics_cache", "domain_intel_cache"
 ]);
 function fail(message) {
   console.error("[Pentagon audit] " + message);
