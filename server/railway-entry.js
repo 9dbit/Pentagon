@@ -44,7 +44,6 @@ function logDbTarget(name) {
 }
 
 logDbTarget("DATABASE_URL");
-logDbTarget("DATABASE_URL_DEVELOPMENT");
 
 if (!schedulerEnabled) {
   scheduler.startScheduler = () => {
