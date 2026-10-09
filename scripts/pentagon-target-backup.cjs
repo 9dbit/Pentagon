@@ -119,13 +119,30 @@ async function main(options = {}) {
       PGAPPNAME: 'pentagon-public-backup',
       PGOPTIONS: '-c default_transaction_read_only=on -c timezone=UTC'
     };
-    const identity = JSON.parse(command(tools.psql,
-      ['-X', '-A', '-t', '-w', '-v', 'ON_ERROR_STOP=1', '-c',
-        "SELECT json_build_object('database',current_database(),'server_version_num',current_setting('server_version_num'),'read_only',current_setting('transaction_read_only'),'captured_at',now(),'public_tables',(SELECT count(*) FROM pg_tables WHERE schemaname='public'))"],
-      dbEnv, path.join(dir, 'connection.stderr.log'), 45000));
-    if (identity.database !== 'postgres' || identity.read_only !== 'on' ||
-        Math.floor(Number(identity.server_version_num) / 10000) !== 17 ||
-        Number(identity.public_tables) < 1) throw new Stop('TARGET_VERSION_OR_READ_ONLY_GUARD_FAILED');
+    // A session pooler may not honor default_transaction_read_only from
+    // startup PGOPTIONS. Require an explicit READ ONLY transaction and prove
+    // that transaction is read-only before invoking pg_dump.
+    const identityOutput = command(tools.psql,
+      ['-X', '-A', '-t', '-w', '-v', 'ON_ERROR_STOP=1',
+        '-c', 'BEGIN TRANSACTION ISOLATION LEVEL REPEATABLE READ READ ONLY',
+        '-c', "SELECT json_build_object('database',current_database(),'server_version_num',current_setting('server_version_num'),'read_only',current_setting('transaction_read_only'),'captured_at',now(),'public_tables',(SELECT count(*) FROM pg_tables WHERE schemaname='public'))",
+        '-c', 'ROLLBACK'],
+      dbEnv, path.join(dir, 'connection.stderr.log'), 45000);
+    // psql prints BEGIN and ROLLBACK command tags around the JSON SELECT.
+    const identityLine = identityOutput.split(/\r?\n/).find(line => line.startsWith('{'));
+    if (!identityLine) throw new Stop('TARGET_READ_ONLY_PROBE_NO_JSON');
+    const identity = JSON.parse(identityLine);
+    const checks = {
+      database: identity.database === 'postgres',
+      read_only: identity.read_only === 'on',
+      version: Math.floor(Number(identity.server_version_num) / 10000) === 17,
+      public_tables: Number(identity.public_tables) >= 1
+    };
+    if (Object.values(checks).some(value => !value)) {
+      // Boolean-only details are safe to share and never include credentials.
+      console.error('TARGET_GUARD_CHECKS=' + JSON.stringify(checks));
+      throw new Stop('TARGET_VERSION_OR_READ_ONLY_GUARD_FAILED');
+    }
     console.log('TARGET_VERIFIED=' + PROJECT + '; READ_ONLY=on; SCOPE=public');
     const started = new Date().toISOString();
     command(tools.pg_dump, dumpArgs(partial), dbEnv, path.join(dir, 'pg_dump.stderr.log'));
