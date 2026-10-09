@@ -77,7 +77,7 @@ async function run() {
   const client = new Client({
     connectionString,
     ssl: ["localhost", "127.0.0.1", "::1"].includes(u.hostname)
-      ? false : { rejectUnauthorized: false },
+      ? false : { rejectUnauthorized: process.env.PENTAGON_AUDIT_ALLOW_SELF_SIGNED === "true" },
     application_name: "pentagon-readonly-migration-audit"
   });
   let inTransaction = false;
