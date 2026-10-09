@@ -44,9 +44,61 @@ function identifier(s) {
   if (!/^[a-zA-Z_][a-zA-Z_0-9]*$/.test(s)) throw Error("Invalid table name");
   return '"' + s + '"';
 }
+const REQUIRED_HISTORICAL_TABLES = [
+  "projects", "domains", "check_results", "alerts", "provider_nodes",
+  "provider_node_tasks", "provider_node_task_events", "rank_keyword_groups"
+];
 function compareSnapshots(source, target) {
-  const expected = new Map(source.tables.map((t) => [t.name, t]));
-  const actual = new Map(target.tables.map((t) => [t.name, t]));
+  const validation_errors = [];
+  const check = (snapshot, name) => {
+    if (snapshot?.audit_version !== 2) {
+      validation_errors.push(name + ": unsupported or stale audit version");
+    }
+    if (!Array.isArray(snapshot?.tables) || snapshot.tables.length === 0) {
+      validation_errors.push(name + ": empty or missing table inventory");
+      return [];
+    }
+    const names = snapshot.tables.map((t) => t.name);
+    if (new Set(names).size !== names.length) {
+      validation_errors.push(name + ": duplicate table entries");
+    }
+    if (!Array.isArray(snapshot.errors) || snapshot.errors.length > 0) {
+      validation_errors.push(name + ": audit query failures");
+    }
+    if (!snapshot.all_fk_valid) {
+      validation_errors.push(name + ": foreign keys not fully validated");
+    }
+    if (!snapshot.db_identity?.host || !snapshot.db_identity?.database) {
+      validation_errors.push(name + ": missing database identity");
+    }
+    if (!Number.isFinite(Date.parse(snapshot.captured_at_utc))) {
+      validation_errors.push(name + ": missing or invalid capture time");
+    }
+    const inventory = new Set(names);
+    for (const table of REQUIRED_HISTORICAL_TABLES) {
+      if (!inventory.has(table)) {
+        validation_errors.push(name + ": required historical table missing: " + table);
+      }
+    }
+    for (const t of snapshot.tables) {
+      if (t.error || !/^[0-9]+$/.test(String(t.count ?? "")) ||
+          !/^[a-f0-9]{32}$/.test(String(t.row_digest ?? "")) ||
+          !/^[a-f0-9]{64}$/.test(String(t.schema_digest ?? ""))) {
+        validation_errors.push(name + ": incomplete table fingerprint: " + t.name);
+      }
+    }
+    return snapshot.tables;
+  };
+  const sourceTables = check(source, "source");
+  const targetTables = check(target, "target");
+  if (source?.db_identity?.host && target?.db_identity?.host &&
+      source.db_identity.host === target.db_identity.host &&
+      source.db_identity.database === target.db_identity.database &&
+      String(source.db_identity.port) === String(target.db_identity.port)) {
+    validation_errors.push("source and target identify the SAME PostgreSQL database");
+  }
+  const expected = new Map(sourceTables.map((t) => [t.name, t]));
+  const actual = new Map(targetTables.map((t) => [t.name, t]));
   const names = [...new Set([...expected.keys(), ...actual.keys()])].sort();
   const differences = names.map((name) => {
     const a = expected.get(name), b = actual.get(name);
@@ -57,14 +109,29 @@ function compareSnapshots(source, target) {
       : a.row_digest !== b.row_digest ? "DATA_MISMATCH"
       : a.schema_digest !== b.schema_digest ? "SCHEMA_MISMATCH"
       : "MATCH";
-    return { table: name, category: VOLATILE.has(name) ? "volatile" : "business",
-      source_count: a?.count ?? null, target_count: b?.count ?? null, status };
+    return {
+      table: name,
+      category: VOLATILE.has(name) ? "volatile" : "business",
+      source_count: a?.count ?? null,
+      target_count: b?.count ?? null,
+      source_tenants: a?.tenant_counts ?? null,
+      target_tenants: b?.tenant_counts ?? null,
+      status
+    };
   });
   const blocking = differences.filter((t) => t.category === "business" && t.status !== "MATCH");
   const warnings = differences.filter((t) => t.category === "volatile" && t.status !== "MATCH");
-  return { ready_to_cutover: blocking.length === 0 && source.errors.length === 0
-    && target.errors.length === 0 && source.all_fk_valid && target.all_fk_valid,
-    blocking, volatile_differences: warnings, per_table: differences };
+  const database_parity_pass = blocking.length === 0 && validation_errors.length === 0;
+  return {
+    database_parity_pass,
+    // Data equality is necessary, but never sufficient for a live shutdown.
+    ready_to_cutover: false,
+    cutover_note: "Requires offsite backup, final source freeze, auth/API/scheduler checks, and rollback proof.",
+    validation_errors,
+    blocking,
+    volatile_differences: warnings,
+    per_table: differences
+  };
 }
 async function run() {
   if (!connectionString) {
@@ -97,9 +164,14 @@ async function run() {
       "SELECT table_name FROM information_schema.tables WHERE table_schema='public' AND table_type='BASE TABLE' ORDER BY table_name"
     );
     const report = {
-      audit_version: 1,
+      audit_version: 2,
       captured_at_utc: new Date(started).toISOString(),
       source_label: development ? "development_environment" : "database_url_environment",
+      db_identity: {
+        host: u.hostname.toLowerCase(),
+        database: decodeURIComponent(u.pathname.replace(/^\//, "")),
+        port: u.port || "5432"
+      },
       credentials_included: false,
       raw_data_included: false,
       tables: [],
@@ -158,7 +230,7 @@ async function run() {
       if (!Array.isArray(baseline.tables) || !Array.isArray(baseline.errors))
         throw Error("Baseline file is not a Pentagon migration audit.");
       report.comparison = compareSnapshots(baseline, report);
-      if (!report.comparison.ready_to_cutover) process.exitCode = 1;
+      if (!report.comparison.database_parity_pass) process.exitCode = 1;
     }
     if (outputPath) {
       fs.mkdirSync(path.dirname(path.resolve(outputPath)), { recursive: true });
