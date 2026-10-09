@@ -75,3 +75,64 @@ FROM public.provider_nodes GROUP BY tenant
 UNION ALL SELECT 'rank_keyword_groups', tenant, count(*)
 FROM public.rank_keyword_groups GROUP BY tenant
 ORDER BY table_name, tenant;
+
+-- Preservation gate: all source history tables must exist or be explicitly
+-- mapped into an alternative *durable* destination. A missing table is NOT
+-- permission to discard its historical rows.
+WITH expected(table_name, classification) AS (
+  VALUES
+    ('alerts', 'history'),
+    ('check_results', 'history'),
+    ('domains', 'business'),
+    ('projects', 'business'),
+    ('provider_node_tasks', 'history'),
+    ('provider_node_task_events', 'history'),
+    ('provider_nodes', 'business'),
+    ('node_telemetry', 'history'),
+    ('rank_keyword_groups', 'business'),
+    ('rank_keyword_domains', 'business'),
+    ('rank_scan_results', 'history'),
+    ('shield_links', 'business'),
+    ('pentagon_usage_logs', 'usage'),
+    ('usage_logs', 'usage')
+), present AS (
+  SELECT c.oid, c.relname AS table_name
+  FROM pg_class c
+  JOIN pg_namespace ns ON ns.oid = c.relnamespace
+  WHERE ns.nspname = 'public' AND c.relkind IN ('r','p')
+), column_flags AS (
+  SELECT table_name,
+         bool_or(column_name='tenant') AS has_tenant,
+         bool_or(column_name='fleet') AS has_fleet,
+         max(udt_name) FILTER (WHERE column_name='id') AS id_type,
+         bool_or(column_name='node_id') AS has_node_id,
+         bool_or(column_name='domain_id') AS has_domain_id
+  FROM information_schema.columns
+  WHERE table_schema='public'
+  GROUP BY table_name
+)
+SELECT e.table_name, e.classification,
+       CASE WHEN p.oid IS NULL THEN 'MISSING_REQUIRES_MAPPING'
+            ELSE 'PRESENT' END AS table_status,
+       coalesce(c.has_tenant,false) AS has_tenant,
+       coalesce(c.has_fleet,false) AS has_fleet,
+       c.id_type,
+       coalesce(c.has_node_id,false) AS has_node_id,
+       coalesce(c.has_domain_id,false) AS has_domain_id
+FROM expected e
+LEFT JOIN present p USING (table_name)
+LEFT JOIN column_flags c USING (table_name)
+ORDER BY e.classification, e.table_name;
+
+-- IDs in historical rows must be mapped consistently if old IDs collide
+-- with rows already in Supabase. Inspect sequence ownership before any merge.
+SELECT tbl.relname AS table_name,
+       att.attname AS column_name,
+       seq.relname AS owned_sequence
+FROM pg_class seq
+JOIN pg_depend dep ON dep.objid=seq.oid AND dep.deptype IN ('a','i')
+JOIN pg_class tbl ON tbl.oid=dep.refobjid
+JOIN pg_attribute att ON att.attrelid=tbl.oid AND att.attnum=dep.refobjsubid
+JOIN pg_namespace ns ON ns.oid=tbl.relnamespace
+WHERE seq.relkind='S' AND ns.nspname='public'
+ORDER BY tbl.relname, att.attname;
