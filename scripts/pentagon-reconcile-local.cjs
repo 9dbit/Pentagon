@@ -73,7 +73,7 @@ async function collect(client) {
     await client.query("SET LOCAL TIME ZONE 'UTC'");
     await client.query('SET LOCAL row_security = off');
     const identity = (await client.query(`SELECT current_database() AS database,
-      current_user AS role, inet_server_addr()::text AS address, inet_server_port() AS port,
+      current_user AS role, host(inet_server_addr()) AS address, inet_server_port() AS port,
       current_setting('transaction_read_only') AS read_only,
       current_setting('transaction_isolation') AS isolation,
       transaction_timestamp() AS captured_at`)).rows[0];
