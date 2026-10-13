@@ -4,6 +4,44 @@
 checklist, not permission to mutate production. Keep Replit available and
 `SCHEDULER_ENABLED=false` in Railway until final cutover conditions pass.
 
+## Current recovery and local rehearsal evidence (12-13 October 2026)
+
+- Source snapshot: `pentagon-heliumdb-20261012.dump`, SHA-256
+  `47f0c597e7dbd1836379c8244ef06ece46b81eeaeb42b5584888cffc36db0937`.
+  Local custom archive verified, decoded, and completely restored on isolated
+  PostgreSQL 18.6 on TRADEVICEPC. The test server is not a production database.
+- Restored: **50 public tables**, 84,872 `check_results` (33,585 admin /
+  51,287 demo), 61,483 `provider_node_tasks` (60,136 admin / 1,347 demo),
+  37,989 task events, 18 domains, and 9 provider nodes.
+- Restore FK validation and index validation: zero invalid. Seven application
+  relationship checks had zero missing parents.
+- Encrypted offsite `.age` archive is in the private Google Drive backup folder.
+  The uploaded object name and size matched the locally encrypted file;
+  **the complete cloud object checksum has NOT been independently verified**.
+  Protect the SSH private key and its passphrase separately from encrypted backup.
+- Domain scope: **nine normalized domain-name duplicates are within the SAME
+  tenant across different fleets**, not across different tenants. The
+  proposed key must include **tenant + fleet + normalized domain**. The
+  source has zero collisions on that scoped key. Existing target uniqueness
+  on `domain` alone (from older, not-current inventory) is a schema blocker.
+- Source task hazard: **35,392 admin tasks reference 3 nodes currently labelled
+  demo** (34,618 `error`, 774 `queued`). There are 1,164 `queued` or
+  `claimed` historical tasks overall. This could be legacy reclassification;
+  **do not silently rewrite source task tenant, node references, or history**.
+  Preserve original provenance and explicitly review mapping.
+- Local task audit `scripts/pentagon-task-quarantine-audit.cjs`: 11 unit
+  tests PASS and real read-only audit passed; blocks import by design.
+- `scripts/pentagon-offline-mapping-rehearsal.sql`: executed against the
+  local restored database in a transaction using TEMP tables, then ROLLBACK.
+  Source domain mapping pass inserted 18 then 0 records; historical task
+  quarantine pass inserted 61,483 then 0; all 1,164 pending tasks were
+  non-executable and all 35,392 cross-tenant task-node references flagged.
+  **This is source-only idempotency rehearsal, NOT a Supabase target import.**
+- The connected Supabase MCP lists only two unrelated projects, not Pentagon
+  target `odjsifsxhdesvkyzsnbw`; access to the correct target remains blocked.
+  Therefore target schema parity, target backup, real legacy-to-target ID mapping,
+  UAT and Replit shutdown are NOT authorized.
+
 ## Verified Replit source evidence (9 October 2026)
 
 The Replit Shell connected to private Postgres `helium/heliumdb`. A custom
@@ -56,7 +94,8 @@ previous target table inventory.
 
 - [x] Produce Replit `pg_dump -Fc` with its checksum.
 - [x] Decode complete archive and restore to an isolated local PostgreSQL.
-- [ ] Store encrypted archive **off Replit** privately; verify exact SHA-256.
+- [x] Upload encrypted source archive off Replit (private Google Drive; name and size verified).
+- [ ] Independently download the offsite encrypted object and verify its complete SHA-256.
 - [ ] Take a **separate verified snapshot of target Supabase** immediately
       before any write. The source backup cannot restore target-side edits.
 - [ ] Establish source writer/scheduler status and record capture timestamps.
