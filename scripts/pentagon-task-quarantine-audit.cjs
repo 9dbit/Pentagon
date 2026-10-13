@@ -19,6 +19,8 @@ const toCount = (x) => {
 function assess(data) {
   const collisions = toCount(data.scoped_collision_groups);
   const mismatch = toCount(data.task_node_tenant_mismatch);
+  const fleetMismatch = toCount(data.task_node_fleet_mismatch);
+  const deviceDuplicates = toCount(data.duplicate_node_device_id_groups);
   const open = toCount(data.replay_risk_tasks);
   const orphan = toCount(data.orphan_task_node) + toCount(data.orphan_event_task);
   const keyless = toCount(data.event_missing_idempotency_key);
@@ -28,12 +30,15 @@ function assess(data) {
   if (baselineErrors.length) blockers.push('SOURCE_SNAPSHOT_BASELINE_MISMATCH');
   if (collisions) blockers.push('SOURCE_DOMAIN_SCOPE_COLLISION');
   if (mismatch) blockers.push('CROSS_TENANT_TASK_NODE_REFERENCES_REQUIRE_REVIEW');
+  if (fleetMismatch) blockers.push('CROSS_FLEET_TASK_NODE_REFERENCES_REQUIRE_REVIEW');
+  if (deviceDuplicates) blockers.push('DUPLICATE_DEVICE_IDENTITY_REQUIRES_REVIEW');
   if (open) blockers.push('HISTORICAL_PENDING_TASKS_MUST_BE_QUARANTINED');
   if (orphan) blockers.push('HISTORICAL_ORPHAN_RELATIONSHIP');
   if (keyless) blockers.push('TASK_EVENT_IDEMPOTENCY_KEY_MISSING');
   return {blockers,baseline_errors:baselineErrors,
     source_domain_scoped_key_unique:collisions===0,
-    cross_tenant_task_count:mismatch, pending_task_count:open,
+    cross_tenant_task_count:mismatch, cross_fleet_task_count:fleetMismatch,
+    duplicated_device_id_groups:deviceDuplicates, pending_task_count:open,
     task_replay_permitted:false, source_target_mapping_verified:false,
     target_data_import_permitted:false, uat_ready:false};
 }
@@ -81,6 +86,9 @@ async function audit(client) {
       (SELECT count(DISTINCT t.node_id)::text FROM public.provider_node_tasks t
         JOIN public.provider_nodes n ON n.id=t.node_id
         WHERE t.tenant IS DISTINCT FROM n.tenant) AS affected_node_count,
+      (SELECT count(*)::text FROM public.provider_node_tasks t
+        JOIN public.provider_nodes n ON n.id=t.node_id
+        WHERE t.fleet IS DISTINCT FROM n.fleet) AS task_node_fleet_mismatch,
       (SELECT count(*)::text FROM public.provider_node_tasks
         WHERE status IN ('queued','claimed')) AS replay_risk_tasks,
       (SELECT count(*)::text FROM public.provider_node_tasks t
