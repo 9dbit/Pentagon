@@ -4,6 +4,84 @@
 checklist, not permission to mutate production. Keep Replit available and
 `SCHEDULER_ENABLED=false` in Railway until final cutover conditions pass.
 
+## Verified target access and schema preflight (13 October 2026)
+
+**Pentagon project access now WORKS:** the Supabase connector successfully returned
+project `odjsifsxhdesvkyzsnbw` ("Pentagon", ap-southeast-1, PostgreSQL 17.11)
+using `get_project`, `list_tables`, and READ ONLY SQL. Tradevice's project
+`scqzlcivherovlwqypeu` remains accessible. `list_projects` still omits
+Pentagon, so always pass and independently verify its exact project reference.
+
+A complete READ ONLY REPEATABLE READ SQL snapshot was collected into a private
+file on TRADEVICEPC:
+
+`Pentagon-Migration-Audit/reconciliation-reports/target-preflight-20261013.json`
+
+It includes exact table counts, 205 target columns, 40 constraints, 17
+sequences, and RLS flags, but **no raw customer rows or credentials**. The
+source/target comparison was executed locally using the pinned source dump.
+The resulting private comparison is
+`source-reconciliation-1791910958961-edd421.json`.
+The local PostgreSQL server was shut down after the audit.
+
+| Audit | Verified |
+| --- | ---: |
+| Replit source public tables | 50 |
+| Supabase target public tables | 23 |
+| Shared tables | 21 |
+| Source-only tables | 29 |
+| Target-only tables | 2 (`suggestion_completions`, `trustpositif_checks`) |
+| Source columns missing on target | 267 |
+| Target-only columns | 28 |
+| Shared column type mismatches | 5 |
+| Nullability differences needing review | 6 |
+| Target public tables missing RLS | 0 |
+| Target `check_results` | 0 (source 84,872) |
+| Target `provider_node_tasks` | 3 `done` (source 61,483) |
+| Target `domains` | 8 (source 18) |
+| Target `provider_nodes` | 6 (source 9) |
+
+Immediate incompatibilities (not instructions to mutate production):
+
+1. Target `domains` has `UNIQUE(domain)` and no `fleet`; source contains
+   nine domain-name collisions across fleets in the same tenant. Do not
+   merge these records or replace the unique constraint without reviewing
+   every application query; use scoped legacy-to-target mapping.
+2. Target `provider_nodes` has global `UNIQUE(name)` and lacks source
+   `fleet`, `device_id`, `sim_slot`, `pairing_fingerprint`,
+   `display_name`. Never overwrite deployed target node secrets.
+3. Target `provider_node_tasks` lacks `tenant` and `fleet`, and target
+   `provider_node_task_events` does not exist. Source task quarantine
+   audit already identified 35,392 cross-tenant node references and 1,164
+   queued/claimed historical tasks. All imported task history must remain
+   **non-executable** until explicitly mapped and approved.
+4. Target `check_results` lacks `tenant`, `fleet`, `reason_type`,
+   and uses timestamp without timezone for `checked_at`, unlike the source
+   `timestamp with time zone`. Target `alerts.created_at` differs similarly.
+   No target field should silently discard historical timezone or reason data.
+5. Target lacks `shield_links`, `pentagon_usage_logs`, `usage_logs`,
+   and 26 other source-only tables. Historical rows, billing, credential,
+   sessions, usage, redirects, and provider events require table-by-table
+   policy review; do not import sensitive tables into an exposed schema by default.
+6. Target `projects` uses global `UNIQUE(name)`, and several rank tables
+   lack source `fleet`. A tenant-aware, fleet-aware policy is required for
+   domain/project/rank matching.
+7. Supabase security advisor currently reports RLS enabled but **no policies**
+   on 23 public tables. This is default-deny for ordinary client access,
+   not proof of public exposure. Do not add permissive blanket policies.
+   Decide Data API exposure and per-tenant authorization only after reviewing
+   actual application access paths.
+
+Source check for required `check_results` fields: all 84,872 restored
+records have non-NULL `checker_type`, `provider_name`, and `status`.
+All source domain/task rows have non-NULL tenant and fleet.
+
+**Next gates still BLOCKED:** independent verified backup of *existing target*,
+approved SQL migration design, rehearsal in disposable non-production
+database with target-compatible constraints, legacy-to-target ID maps,
+historical task quarantine, authenticated app UAT, scheduler cutover and
+rollback proof. **Do not merge PR #26 or shut down Replit.**
+
 ## Current recovery and local rehearsal evidence (12-13 October 2026)
 
 - Source snapshot: `pentagon-heliumdb-20261012.dump`, SHA-256
