@@ -49,6 +49,30 @@ checklist, not permission to mutate production. Keep Replit available and
   rehearse real target data and service UAT. No live import, cutover,
   Replit shutdown or merged migration PR is authorized.
 
+## Production code compatibility blockers (read-only review, 16 October 2026)
+
+These source locations were inspected on base branch
+`migration/railway-independence`, NOT patched or deployed. They are
+behavioral hazards that must be resolved with regression tests *before*
+changing target constraints or importing any historical rows.
+
+| Component | Observed behavior | Required test / remediation |
+| --- | --- | --- |
+| `server/index.js` domain create/bulk around lines 200-201 | `ON CONFLICT (domain)` assumes globally unique domain | Use an authorized server-selected tenant and fleet scope; retest nine same-tenant cross-fleet domain pairs; changing UNIQUE alone breaks these inserts |
+| `server/index.js` domain patch/delete/check around lines 202-240 | Writes/lookup by `id` without tenant/fleet predicate | Enforce owning tenant/fleet on every direct-ID mutation; reject cross-tenant IDs |
+| `server/agentPollRoutes.js` `syncDomainStatusFromTask` around lines 204-223 | `UPDATE domains ... WHERE domain=$3` can update records in more than one fleet | Persist and validate task-to-domain identity/scope before updating; fail closed on ambiguity |
+| `server/agentPollRoutes.js` poll around lines 356-368 | Claims oldest `queued` task by `node_id` without history/quarantine exclusion | Historical queued/claimed IDs must remain non-executable; only new live-authorized tasks enter the worker queue |
+| `server/nodeRoutes.js` around lines 236 and 261 | Upsert by globally unique node name and updates `secret_key` | Never overwrite active target node secrets during import; use verified device identity mapping and key-rotation tests |
+| `server/projectRoutes.js` around lines 92-160 | Project rename/delete and related tables use unscoped project name | Apply tenant/fleet scoping to all dependent updates and prevent cross-tenant project rename |
+| `server/rankRoutes.js` around line 67 | `ON CONFLICT (keyword_lc, tenant)` omits fleet | Test source rank-group fleet collisions before uniqueness change |
+| `server/analyticsRoutes.js` around lines 59 and 115 | Some domain analytics queries lack tenant/fleet filter | Prevent demo/admin/fleet information crossing session boundaries |
+
+Before a production schema change: add tests for two different fleets sharing
+the same normalized domain, two tenants sharing a project/name, cross-tenant
+node-to-task history, correct login-scoped writes, task replay rejection and
+preservation of current target-only rows and credentials. This review alone is
+not evidence of a live exploit and is not a substitute for authenticated tests.
+
 ## Verified target access and schema preflight (13 October 2026)
 
 **At the time of this capture, Pentagon project access worked:** the Supabase connector successfully returned
