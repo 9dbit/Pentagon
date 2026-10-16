@@ -4,9 +4,54 @@
 checklist, not permission to mutate production. Keep Replit available and
 `SCHEDULER_ENABLED=false` in Railway until final cutover conditions pass.
 
+## 16 October 2026: offline target-shape rehearsal and access status
+
+- Desktop Commander on TRADEVICEPC was online. Local Oct 12 Replit dump checksum
+  `47f0c597e7dbd1836379c8244ef06ece46b81eeaeb42b5584888cffc36db0937`
+  verified again.
+- **Independent offsite source backup verification COMPLETE**: retrieved
+  the original encrypted `.age` file from private Google Drive and
+  recomputed SHA-256 = `d6feb7646cfbc10ae74760a22cc13c6a267905f79c6c4a441a345b994d77c2ff`;
+  length = 5,213,714 bytes, matching the Windows encrypted original.
+  Decryption and restore of the *downloaded encrypted file* have NOT been
+  separately rehearsed; guard the SSH private key/passphrase.
+- **Supabase connector access REGRESSED** after working on 13 October:
+  direct `get_project`, project-scoped SQL and `list_branches` now deny
+  Pentagon `odjsifsxhdesvkyzsnbw`. `list_projects` only shows the
+  Markstudios organization. This is an authorization blocker, not evidence
+  that Pentagon production is down; Railway services remain online.
+  Never select an unrelated Supabase project or silently change connectors.
+- Source-vs-target shape rehearsal performed against isolated localhost
+  PostgreSQL 18.6 using the **13 October dated target schema snapshot**.
+  Run `scripts/pentagon-target-shape-rehearsal.sql` only on the expected
+  `127.0.0.1:55432/pentagon_restore_test` after validating the
+  source archive and target snapshot SHA-256.
+- The current target's global `UNIQUE(domain)` rule rejected a naive
+  source insert (expected). Rehearsing a fleet/tenant-scoped UNIQUE index
+  **only on a temporary local clone** allowed all 18 domains, then
+  0 duplicate records on a second pass.
+- An empty cloned `check_results` target shape, with local compatibility
+  fields `tenant`, `fleet`, `reason_type` and timestamptz, accepted
+  **84,872 source records** and 0 on the second pass. Full source-to-local
+  clone field parity across all relevant columns PASSED.
+- **61,483 historical task IDs** staged in a local quarantine-only table
+  (second pass = 0), including 1,164 queued/claimed tasks, with
+  `execution_allowed=false` for every row.
+- The rehearsal transaction was **ROLLED BACK**, trial schema does not
+  persist, and local test PostgreSQL was shut down.
+- This is **NOT a full Supabase target restoration**: it lacks existing
+  target rows, defaults, functions, triggers, extensions, auth and service
+  integrations. It tests an explicit target-*like* subset from the
+  prior catalog, not the present production database.
+- **Unresolved prerequisites:** restore Pentagon organization authorization,
+  independently back up the actual Supabase Pentagon target, take a fresh
+  current target inventory, reconcile existing target IDs/secrets, and
+  rehearse real target data and service UAT. No live import, cutover,
+  Replit shutdown or merged migration PR is authorized.
+
 ## Verified target access and schema preflight (13 October 2026)
 
-**Pentagon project access now WORKS:** the Supabase connector successfully returned
+**At the time of this capture, Pentagon project access worked:** the Supabase connector successfully returned
 project `odjsifsxhdesvkyzsnbw` ("Pentagon", ap-southeast-1, PostgreSQL 17.11)
 using `get_project`, `list_tables`, and READ ONLY SQL. Tradevice's project
 `scqzlcivherovlwqypeu` remains accessible. `list_projects` still omits
@@ -94,9 +139,11 @@ rollback proof. **Do not merge PR #26 or shut down Replit.**
 - Restore FK validation and index validation: zero invalid. Seven application
   relationship checks had zero missing parents.
 - Encrypted offsite `.age` archive is in the private Google Drive backup folder.
-  The uploaded object name and size matched the locally encrypted file;
-  **the complete cloud object checksum has NOT been independently verified**.
-  Protect the SSH private key and its passphrase separately from encrypted backup.
+  An independent re-download on 16 October 2026 verified **the complete cloud
+  encrypted-file SHA-256**, matching the local encrypted file:
+  `d6feb7646cfbc10ae74760a22cc13c6a267905f79c6c4a441a345b994d77c2ff`
+  (5,213,714 bytes). Preserve the SSH private key and passphrase separately;
+  successful decryption from the cloud copy is a separate recovery exercise.
 - Domain scope: **nine normalized domain-name duplicates are within the SAME
   tenant across different fleets**, not across different tenants. The
   proposed key must include **tenant + fleet + normalized domain**. The
@@ -172,8 +219,8 @@ previous target table inventory.
 
 - [x] Produce Replit `pg_dump -Fc` with its checksum.
 - [x] Decode complete archive and restore to an isolated local PostgreSQL.
-- [x] Upload encrypted source archive off Replit (private Google Drive; name and size verified).
-- [ ] Independently download the offsite encrypted object and verify its complete SHA-256.
+- [x] Upload encrypted source archive off Replit (private Google Drive).
+- [x] Independently re-download encrypted file and verify full SHA-256/length (16 Oct 2026).
 - [ ] Take a **separate verified snapshot of target Supabase** immediately
       before any write. The source backup cannot restore target-side edits.
 - [ ] Establish source writer/scheduler status and record capture timestamps.
