@@ -28,3 +28,25 @@ Earlier clipped CLI screenshot was misleading; true Puppeteer mobile emulation h
 ## Deployment guard
 Only separate Railway marketing RC1 preview project and staging service may receive marketing-only commits.
 Do NOT merge PR #27, deploy Pentagon production, change DNS, connect databases or activate billing/ad campaigns without separate release approval.
+
+## Final RC1 staging QA evidence (19 October 2026)
+
+- Marketing-only GitHub workflow run 39148028793: completed SUCCESS, including Docker build, real HTTP routing, static preview checks and 22 new design contract assertions.
+- Railway project Pentagon Marketing RC1 Preview, environment staging: deployment SUCCESS on marketing commit 506724087c33106fe3bf86a4e2b44696a238257c.
+- Real Chrome/Puppeteer tests on staging: **6/6 viewports PASS** (320, 375, 390, 430, 768 and 1440 CSS pixels). No document/body horizontal overflow; all text and controls inside viewport.
+- Primary CTA is Explore capabilities (#capabilities) and was clicked successfully on all viewport tests; secondary and header login direct to existing https://pentagon.quest/.
+- Brand SVGs loaded, Open Graph preview metadata present; browser returned no page errors.
+- On phones <=600px: primary CTA full-width and 52px high (286px at 320 viewport, 356px at 390); secondary CTA >=44px high; lead >=16px and feature copy >=15px.
+- Staging responses remain X-Robots-Tag: noindex. No database, scheduler or authenticated production API are wired to this isolated static service.
+
+### Real Chrome screenshots
+
+- [Phone 320px](marketing-rc1-visual/rc1-review-phone320.png)
+- [Phone 390px](marketing-rc1-visual/rc1-review-phone390.png)
+- [Desktop 1440px](marketing-rc1-visual/rc1-review-desktop1440.png)
+
+These screenshots are directly captured from live isolated staging after RC1 design commit, not generated mockups. Review visual presentation and copy before any publication.
+
+### Release decision
+
+Engineering preview quality gate: PASS. User/owner visual and copy approval: PENDING. Marketing production merge/deploy: BLOCKED pending explicit approval. Paid subscriptions / customer onboarding: blocked until backend migration and product UAT.
