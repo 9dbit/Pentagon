@@ -1,0 +1,59 @@
+name: Pentagon marketing preview verification
+
+on:
+  pull_request:
+    branches:
+      - migration/railway-independence
+    paths:
+      - "public/learn/**"
+      - "public/robots.txt"
+      - "public/sitemap.xml"
+      - "server/marketingStaticRoutes.js"
+      - "server/index.js"
+      - "scripts/*pentagon-marketing*"
+      - "docs/PENTAGON_MARKETING_PRELAUNCH_IMPLEMENTATION_20261018.md"
+      - ".github/workflows/marketing-prelaunch-checks.yml"
+  push:
+    branches:
+      - feature/pentagon-marketing-prelaunch-20261018
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pentagon-marketing-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  marketing-preview:
+    name: Marketing static routes and Docker build
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Check out the marketing-only branch
+        uses: actions/checkout@v4
+      - name: Use the production Node.js runtime
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+      - name: Verify isolated source and routes
+        run: |
+          node --check server/marketingStaticRoutes.js
+          node --check server/index.js
+          node --check scripts/audit-pentagon-marketing-readiness.cjs
+          node --check scripts/test-pentagon-marketing-readiness.cjs
+          node --check scripts/test-pentagon-marketing-static-local.cjs
+          node --check scripts/test-pentagon-marketing-build.cjs
+          node scripts/test-pentagon-marketing-readiness.cjs
+          node scripts/test-pentagon-marketing-static-local.cjs
+      - name: Build exactly the deployed Dockerfile, no runtime database
+        run: docker build --progress plain --tag pentagon-marketing-smoke:ci .
+      - name: Extract bundled frontend files without starting the server
+        run: |
+          set -eu
+          cid="$(docker create pentagon-marketing-smoke:ci)"
+          trap 'docker rm -f "$cid" >/dev/null 2>&1 || true' EXIT
+          docker cp "$cid:/app/dist" ./dist
+      - name: Check build assets and preserved cockpit
+        run: node scripts/test-pentagon-marketing-build.cjs ./dist
