@@ -7,6 +7,7 @@ const fs = require("fs");
 const session = require("express-session");
 const PgSessionStore = require("./pgSessionStore");
 const { pool } = require("./db");
+const { requireAuthenticatedScope, SQL: migrationSQL } = require("./migrationSafety");
 const { runChecks, runManualCheck, startScheduler, maybeAddProviderRegistryResult, clearRecurringAlert, getScanCycleHealth } = require("./scheduler");
 const { normalizeDomain, checkDomain, calculateGlobalStatus } = require("./checker");
 const settingsRoutes = require("./settingsRoutes");
@@ -194,25 +195,26 @@ app.post("/api/telegram/webhook", async (req, res) => {
 });
 
 app.post("/api/telegram/test", requireAdmin, requireNotDemo, async (req, res) => { const message = `DOMAIN RADAR TEST\n\nTelegram alert is working.\nTime: ${new Date().toLocaleString("id-ID", { timeZone: "Asia/Jakarta" })} WIB`; const sent = await sendTelegram(message); res.json({ ok: sent }); });
-app.get("/api/overview", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE global_status='working')::int AS working, COUNT(*) FILTER (WHERE global_status='warning')::int AS warning, COUNT(*) FILTER (WHERE global_status='blocked')::int AS blocked, MAX(last_checked_at) AS last_checked FROM domains WHERE tenant=$1`, [tenant]); res.json(rows[0]); });
-app.get("/api/alerts", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT a.*, d.domain, d.project_name FROM alerts a JOIN domains d ON d.id = a.domain_id WHERE d.tenant=$1 ORDER BY a.created_at DESC LIMIT 100`, [tenant]); res.json(rows); });
-app.get("/api/domains", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query("SELECT * FROM domains WHERE tenant=$1 ORDER BY id DESC", [tenant]); res.json(rows); });
-app.post("/api/domains", requireAdmin, requireNotDemo, async (req, res) => { const domain = normalizeDomain(req.body.domain || ""); const project = req.body.project_name || ""; if (!domain) return res.status(400).json({ error: "Domain required" }); const { rows } = await pool.query(`INSERT INTO domains (domain, project_name) VALUES ($1,$2) ON CONFLICT (domain) DO UPDATE SET project_name=EXCLUDED.project_name RETURNING *`, [domain, project]); res.json(rows[0]); });
-app.post("/api/domains/bulk", requireAdmin, requireNotDemo, async (req, res) => { const items = String(req.body.text || "").split(/\r?\n/).map(parseBulkLine).filter((x) => x && x.domain); const inserted = []; for (const item of items) { const { rows } = await pool.query(`INSERT INTO domains (domain, project_name) VALUES ($1,$2) ON CONFLICT (domain) DO UPDATE SET project_name=COALESCE(NULLIF(EXCLUDED.project_name,''), domains.project_name) RETURNING *`, [item.domain, item.project_name]); if (rows[0]) inserted.push(rows[0]); } res.json({ inserted_count: inserted.length, inserted }); });
-app.patch("/api/domains/:id", requireAdmin, requireNotDemo, async (req, res) => {
+app.get("/api/overview", requireAdmin, requireAuthenticatedScope, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT COUNT(*)::int AS total, COUNT(*) FILTER (WHERE global_status='working')::int AS working, COUNT(*) FILTER (WHERE global_status='warning')::int AS warning, COUNT(*) FILTER (WHERE global_status='blocked')::int AS blocked, MAX(last_checked_at) AS last_checked FROM domains WHERE tenant=$1 AND fleet=$2`, [tenant, req.migrationScope.fleet]); res.json(rows[0]); });
+app.get("/api/alerts", requireAdmin, requireAuthenticatedScope, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT a.*, d.domain, d.project_name FROM alerts a JOIN domains d ON d.id = a.domain_id AND a.tenant=d.tenant AND a.fleet=d.fleet WHERE d.tenant=$1 AND d.fleet=$2 ORDER BY a.created_at DESC LIMIT 100`, [tenant, req.migrationScope.fleet]); res.json(rows); });
+app.get("/api/domains", requireAdmin, requireAuthenticatedScope, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(migrationSQL.domainsList, [tenant, req.migrationScope.fleet]); res.json(rows); });
+app.post("/api/domains", requireAdmin, requireAuthenticatedScope, requireNotDemo, async (req, res) => { const domain = normalizeDomain(req.body.domain || ""); const project = req.body.project_name || ""; if (!domain) return res.status(400).json({ error: "Domain required" }); const { rows } = await pool.query(migrationSQL.domainCreate, [domain, project, req.migrationScope.tenant, req.migrationScope.fleet]); res.json(rows[0]); });
+app.post("/api/domains/bulk", requireAdmin, requireAuthenticatedScope, requireNotDemo, async (req, res) => { const items = String(req.body.text || "").split(/\r?\n/).map(parseBulkLine).filter((x) => x && x.domain); const inserted = []; for (const item of items) { const { rows } = await pool.query(migrationSQL.domainBulk, [item.domain, item.project_name, req.migrationScope.tenant, req.migrationScope.fleet]); if (rows[0]) inserted.push(rows[0]); } res.json({ inserted_count: inserted.length, inserted }); });
+app.patch("/api/domains/:id", requireAdmin, requireAuthenticatedScope, requireNotDemo, async (req, res) => {
   const { domain, is_active, project_name, label } = req.body;
   const cleanDomain = domain !== undefined ? normalizeDomain(domain) : undefined;
   const labelVal = label !== undefined ? String(label) : null;
   const { rows } = await pool.query(
-    `UPDATE domains SET domain=COALESCE($1,domain), is_active=COALESCE($2,is_active), project_name=COALESCE($3,project_name), label=CASE WHEN $5::text IS NOT NULL THEN $5 ELSE label END WHERE id=$4 RETURNING *`,
-    [cleanDomain || null, is_active, project_name, req.params.id, labelVal]
+    migrationSQL.domainPatch,
+    [cleanDomain || null, is_active, project_name, req.params.id, labelVal, req.migrationScope.tenant, req.migrationScope.fleet]
   );
   const updated = rows[0];
+  if (!updated) return res.status(404).json({ error: "Domain not found in authorized fleet" });
   if (updated && (updated.label === "landing_page" || updated.label === "ms") && updated.project_name) {
     try {
       const { rows: groups } = await pool.query(
-        "SELECT id FROM rank_keyword_groups WHERE project_name=$1",
-        [updated.project_name]
+        migrationSQL.rankGroupsForDomain,
+        [updated.project_name, req.migrationScope.tenant, req.migrationScope.fleet]
       );
       for (const g of groups) {
         await pool.query(
@@ -226,18 +228,19 @@ app.patch("/api/domains/:id", requireAdmin, requireNotDemo, async (req, res) => 
   }
   res.json(updated);
 });
-app.delete("/api/domains/:id", requireAdmin, requireNotDemo, async (req, res) => { await pool.query("DELETE FROM domains WHERE id=$1", [req.params.id]); res.json({ ok: true }); });
+app.delete("/api/domains/:id", requireAdmin, requireAuthenticatedScope, requireNotDemo, async (req, res) => { const deleted = await pool.query(migrationSQL.domainDelete, [req.params.id, req.migrationScope.tenant, req.migrationScope.fleet]); if (!deleted.rowCount) return res.status(404).json({ error: "Domain not found in authorized fleet" }); res.json({ ok: true }); });
 app.get("/api/proxies", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query("SELECT * FROM proxies WHERE tenant=$1 ORDER BY id DESC", [tenant]); res.json(rows); });
 app.post("/api/proxies", requireAdmin, requireNotDemo, async (req, res) => { const { name, provider_name, proxy_url, proxy_type } = req.body; const { rows } = await pool.query(`INSERT INTO proxies (name, provider_name, proxy_url, proxy_type) VALUES ($1,$2,$3,$4) RETURNING *`, [name, provider_name, proxy_url, proxy_type || "http"]); res.json(rows[0]); });
 app.delete("/api/proxies/:id", requireAdmin, requireNotDemo, async (req, res) => { await pool.query("DELETE FROM proxies WHERE id=$1", [req.params.id]); res.json({ ok: true }); });
-app.get("/api/results", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT r.*, d.domain FROM check_results r JOIN domains d ON d.id = r.domain_id WHERE d.tenant=$1 ORDER BY r.checked_at DESC LIMIT 300`, [tenant]); res.json(rows); });
-app.get("/api/export/domains.csv", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query("SELECT id, domain, project_name, is_active, global_status, last_status, last_checked_at, created_at FROM domains WHERE tenant=$1 ORDER BY id DESC", [tenant]); sendCsv(res, "domains.csv", rows); });
-app.get("/api/export/results.csv", requireAdmin, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT r.checked_at, d.domain, r.provider_name, r.checker_type, r.status, r.http_status, r.latency_ms, r.final_url, r.reason FROM check_results r JOIN domains d ON d.id = r.domain_id WHERE d.tenant=$1 ORDER BY r.checked_at DESC LIMIT 5000`, [tenant]); sendCsv(res, "check-results.csv", rows); });
+app.get("/api/results", requireAdmin, requireAuthenticatedScope, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT r.*, d.domain FROM check_results r JOIN domains d ON d.id = r.domain_id AND r.tenant=d.tenant AND r.fleet=d.fleet WHERE d.tenant=$1 AND d.fleet=$2 ORDER BY r.checked_at DESC LIMIT 300`, [tenant, req.migrationScope.fleet]); res.json(rows); });
+app.get("/api/export/domains.csv", requireAdmin, requireAuthenticatedScope, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query("SELECT id, domain, project_name, is_active, global_status, last_status, last_checked_at, created_at FROM domains WHERE tenant=$1 AND fleet=$2 ORDER BY id DESC", [tenant, req.migrationScope.fleet]); sendCsv(res, "domains.csv", rows); });
+app.get("/api/export/results.csv", requireAdmin, requireAuthenticatedScope, async (req, res) => { const tenant = getTenant(req); const { rows } = await pool.query(`SELECT r.checked_at, d.domain, r.provider_name, r.checker_type, r.status, r.http_status, r.latency_ms, r.final_url, r.reason FROM check_results r JOIN domains d ON d.id = r.domain_id AND r.tenant=d.tenant AND r.fleet=d.fleet WHERE d.tenant=$1 AND d.fleet=$2 ORDER BY r.checked_at DESC LIMIT 5000`, [tenant, req.migrationScope.fleet]); sendCsv(res, "check-results.csv", rows); });
 app.post("/api/check/manual", requireAdmin, requireNotDemo, (req, res) => {
-  runManualCheck().catch((err) => console.error("[manual check]", err.message));
-  res.json({ ok: true });
+  return res.status(503).json({ error: "Manual all-domain scan disabled pending fleet-safe scheduler validation" });
 });
-app.post("/api/check/domain/:id", requireAdmin, requireNotDemo, async (req, res) => { const { rows } = await pool.query("SELECT * FROM domains WHERE id=$1", [req.params.id]); if (!rows[0]) return res.status(404).json({ error: "Domain not found" }); const result = await runSingleDomainCheck(rows[0]); res.json({ ok: true, ...result }); });
+app.post("/api/check/domain/:id", requireAdmin, requireNotDemo, requireAuthenticatedScope, async (req, res) => {
+  return res.status(503).json({ error: "Single-domain scan disabled until checker and provider scheduling are fleet-safe" });
+});
 
 app.post("/api/activity/heartbeat", requireAdmin, requireNotDemo, async (req, res) => { const { session_id, page } = req.body; if (!session_id) return res.status(400).json({ error: "session_id required" }); const ip = (req.headers['x-forwarded-for'] || req.ip || '').split(',')[0].trim(); const ua = req.headers['user-agent'] || ''; const email = req.session.adminEmail || ''; let nickname = ''; if (email) { try { const nr = await pool.query('SELECT value FROM app_settings WHERE key=$1', [`user_nick_${email}`]); nickname = nr.rows[0]?.value || ''; } catch(_) {} } const country = await getCountry(ip); try { await pool.query(`INSERT INTO user_sessions (session_id, user_agent, ip, page, email, nickname, country, first_seen_at, last_seen_at, heartbeat_count) VALUES ($1,$2,$3,$4,$5,$6,$7,NOW(),NOW(),1) ON CONFLICT (session_id) DO UPDATE SET last_seen_at=NOW(), page=EXCLUDED.page, email=EXCLUDED.email, nickname=EXCLUDED.nickname, country=CASE WHEN user_sessions.country='' THEN EXCLUDED.country ELSE user_sessions.country END, heartbeat_count=user_sessions.heartbeat_count+1`, [session_id, ua, ip, page || 'dashboard', email, nickname, country]); res.json({ ok: true }); } catch(e) { console.error("heartbeat error:", e.message); res.status(500).json({ error: "heartbeat failed" }); } });
 app.get("/api/activity/sessions", requireAdmin, requireNotDemo, async (req, res) => { try { const { rows } = await pool.query(`SELECT *, last_seen_at > NOW() - interval '3 minutes' AS is_active, EXTRACT(EPOCH FROM (last_seen_at - first_seen_at)) AS duration_seconds FROM user_sessions WHERE last_seen_at > NOW() - interval '7 days' ORDER BY last_seen_at DESC LIMIT 300`); res.json(rows); } catch(e) { console.error("sessions error:", e.message); res.json([]); } });
