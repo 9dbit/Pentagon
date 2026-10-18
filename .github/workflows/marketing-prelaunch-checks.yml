@@ -60,3 +60,24 @@ jobs:
           docker cp "$cid:/app/dist" ./dist
       - name: Check build assets and preserved cockpit
         run: node scripts/test-pentagon-marketing-build.cjs ./dist
+      - name: Validate isolated marketing preview without database
+        run: node scripts/test-pentagon-marketing-preview.cjs
+      - name: Build marketing-only Docker image without app services
+        run: docker build --file Dockerfile.marketing --tag pentagon-rc1-static:ci .
+      - name: Run marketing-only container HTTP and security checks
+        run: |
+          set -eu
+          docker run -d --rm --name pentagon-marketing-rc1-ci -p 127.0.0.1:17345:3000 pentagon-rc1-static:ci
+          trap 'docker rm -f pentagon-marketing-rc1-ci >/dev/null 2>&1 || true' EXIT
+          ready=0
+          for i in $(seq 1 15); do
+            if curl --fail --silent http://127.0.0.1:17345/health >/dev/null; then ready=1; break; fi
+            sleep 1
+          done
+          test "$ready" -eq 1
+          curl -fsS http://127.0.0.1:17345/learn/ | grep -q 'One cockpit'
+          curl -fsS http://127.0.0.1:17345/robots.txt | grep -q 'Disallow: /'
+          curl -fsSI http://127.0.0.1:17345/learn/ | grep -qi 'x-robots-tag: noindex'
+          curl -fsSI http://127.0.0.1:17345/sitemap.xml | grep -qi 'content-type: application/xml'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/health)" = "404"
+

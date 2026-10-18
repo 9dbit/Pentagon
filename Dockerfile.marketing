@@ -1,0 +1,12 @@
+FROM node:20.18.1-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --chown=node:node server/marketingPreviewServer.js server/marketingPreviewServer.js
+COPY --chown=node:node public/learn/index.html public/learn/index.html
+COPY --chown=node:node public/robots.txt public/robots.txt
+COPY --chown=node:node public/sitemap.xml public/sitemap.xml
+COPY --chown=node:node public/pentagon-icon.svg public/pentagon-icon.svg
+COPY --chown=node:node public/og-image.png public/og-image.png
+USER node
+EXPOSE 3000
+CMD ["node", "server/marketingPreviewServer.js"]
