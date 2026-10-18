@@ -46,8 +46,10 @@ jobs:
           node --check scripts/test-pentagon-marketing-static-local.cjs
           node --check scripts/test-pentagon-marketing-build.cjs
           node --check scripts/test-pentagon-marketing-http.cjs
+          node --check scripts/test-pentagon-marketing-design-rc1.cjs
           node scripts/test-pentagon-marketing-readiness.cjs
           node scripts/test-pentagon-marketing-static-local.cjs
+          node scripts/test-pentagon-marketing-design-rc1.cjs
       - name: Build exactly the deployed Dockerfile, no runtime database
         run: docker build --progress plain --tag pentagon-marketing-smoke:ci .
       - name: Validate real Express routes in a credential-free test container
