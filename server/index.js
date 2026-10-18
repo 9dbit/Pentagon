@@ -7,6 +7,7 @@ const fs = require("fs");
 const session = require("express-session");
 const PgSessionStore = require("./pgSessionStore");
 const { pool } = require("./db");
+const { registerMarketingStaticRoutes } = require("./marketingStaticRoutes");
 const { runChecks, runManualCheck, startScheduler, maybeAddProviderRegistryResult, clearRecurringAlert, getScanCycleHealth } = require("./scheduler");
 const { normalizeDomain, checkDomain, calculateGlobalStatus } = require("./checker");
 const settingsRoutes = require("./settingsRoutes");
@@ -260,6 +261,8 @@ app.get("/api/ai-endpoint-status", requireAdmin, async (req, res) => {
 
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: err.message || "Internal server error" }); });
 const distPath = path.join(__dirname, "../dist");
+// Public preview routes must run before the SPA wildcard. Leave dashboard root unchanged.
+registerMarketingStaticRoutes(app, distPath);
 const importedFrontendIndex = path.join(distPath, "replit-index.html");
 app.get("/", (req, res, next) => {
   if (fs.existsSync(importedFrontendIndex)) return res.sendFile(importedFrontendIndex);
