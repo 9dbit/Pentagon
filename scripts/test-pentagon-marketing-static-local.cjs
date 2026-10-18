@@ -25,6 +25,11 @@ function simulate(route){
   registerMarketingStaticRoutes(app,tmp);
   check("only four explicit routes",()=>assert.deepEqual([...routes.keys()],["/learn","/learn/","/robots.txt","/sitemap.xml"]));
   check("app root not hijacked",()=>assert.equal(routes.has("/"),false));
+  check("canonical trailing slash does not self-redirect",()=>{
+    let forwarded=0;
+    routes.get("/learn")({path:"/learn/"},{},()=>{forwarded++});
+    assert.equal(forwarded,1);
+  });
   check("API routes untouched",()=>assert.equal(routes.has("/api/health"),false));
   check("clean canonical redirects",()=>{const r=simulate("/learn");assert.equal(r.statusCode,308);assert.equal(r.headers.location,"/learn/")});
   const home=simulate("/learn/");

@@ -22,7 +22,10 @@ function registerMarketingStaticRoutes(app, distPath) {
     };
   }
 
-  app.get("/learn", (_req, res) => {
+  app.get("/learn", (req, res, next) => {
+    // Express is non-strict about trailing slashes: "/learn" also matches "/learn/".
+    // Never redirect the canonical "/learn/" back to itself.
+    if (req.path === "/learn/") return next();
     res.setHeader("Cache-Control", "public, max-age=300");
     return res.redirect(308, "/learn/");
   });
