@@ -50,12 +50,8 @@ jobs:
           node scripts/test-pentagon-marketing-static-local.cjs
       - name: Build exactly the deployed Dockerfile, no runtime database
         run: docker build --progress plain --tag pentagon-marketing-smoke:ci .
-      - name: Validate real Express routes inside a Docker internal-only network
-        run: |
-          set -eu
-          docker network create --internal pentagon-marketing-http
-          trap 'docker network rm pentagon-marketing-http >/dev/null 2>&1 || true' EXIT
-          docker run --rm --network pentagon-marketing-http --entrypoint node pentagon-marketing-smoke:ci scripts/test-pentagon-marketing-http.cjs
+      - name: Validate real Express routes in a credential-free test container
+        run: docker run --rm --network bridge --entrypoint node pentagon-marketing-smoke:ci scripts/test-pentagon-marketing-http.cjs
       - name: Extract bundled frontend files without starting the server
         run: |
           set -eu

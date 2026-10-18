@@ -16,7 +16,7 @@ function check(name,fn){try{fn();passed++;}catch(e){throw Error("HTTP_"+name+": 
  const server=await new Promise(resolve=>{const s=app.listen(0,"127.0.0.1",()=>resolve(s));});
  try{
   const base="http://127.0.0.1:"+server.address().port;
-  const get=async(uri,options={})=>{const r=await fetch(base+uri,options);return{status:r.status,headers:r.headers,body:await r.text()}};
+  const get=async(uri,options={})=>{let r;try{r=await fetch(base+uri,options)}catch(e){throw Error("LOCAL_FETCH_"+uri+"_"+(e.cause?.code||e.code||"UNKNOWN"))}return{status:r.status,headers:r.headers,body:await r.text()}};
   const home=await get("/");
   check("dashboard_root_preserved",()=>{assert.equal(home.status,200);assert.match(home.body,/id='root'/)});
   const health=await get("/api/health");
