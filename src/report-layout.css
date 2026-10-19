@@ -332,3 +332,16 @@
   }
   .app main .defensePage>header .toolbar.reportHeaderActions{flex:0 0 auto}
 }
+
+/* Every report action uses a visible pill silhouette, including destructive actions. */
+.app main .reportSurface button.reportBtnDanger{
+  border:1px solid rgba(248,113,113,.19)!important;border-radius:999px!important;
+  background:rgba(248,113,113,.025)!important;color:#f1a6a6!important;
+}
+.app main .reportSurface button.reportBtnDanger:hover:not(:disabled){
+  background:rgba(248,113,113,.11)!important;border-color:rgba(248,113,113,.32)!important;
+}
+@media(max-width:380px){
+  .rankReport .rankReportGroupActions{display:grid;grid-template-columns:repeat(3,max-content);gap:7px;justify-content:flex-start}
+  .rankReport .rankReportGroupActions .rankReportFlag{grid-column:1/-1;justify-self:start}
+}
