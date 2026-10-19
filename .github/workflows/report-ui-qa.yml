@@ -1,0 +1,40 @@
+name: Pentagon Defence and Rank report UI QA
+on:
+  push:
+    branches:
+      - feature/pentagon-defence-rank-report-ui-20261019
+  pull_request:
+    paths:
+      - "src/App.jsx"
+      - "src/GoogleRankReport.jsx"
+      - "src/DefenseCenterPage.jsx"
+      - "src/report-layout.css"
+      - "scripts/test-pentagon-report-layout.cjs"
+      - ".github/workflows/report-ui-qa.yml"
+permissions:
+  contents: read
+jobs:
+  report-ui-build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout UI branch
+        uses: actions/checkout@v4
+      - name: Configure Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+          cache: npm
+      - name: Install QA dependencies without rewriting legacy lockfile
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+      - name: Check report structure and behavior contracts
+        run: node scripts/test-pentagon-report-layout.cjs
+      - name: Compile original production React frontend
+        run: npm run build
+      - name: Verify output exists
+        run: |
+          test -s dist/index.html
+          test -d dist/assets
+      - name: Confirm no production deployment
+        run: |
+          echo "UI branch check only. No deployment and no database access."

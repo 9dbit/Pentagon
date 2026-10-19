@@ -1,0 +1,31 @@
+#!/usr/bin/env node
+"use strict";
+const assert=require("node:assert/strict");
+const fs=require("node:fs"),path=require("node:path");
+const read=f=>fs.readFileSync(path.join(__dirname,"..",f),"utf8");
+const app=read("src/App.jsx");
+const rank=read("src/GoogleRankReport.jsx");
+const defense=read("src/DefenseCenterPage.jsx");
+const css=read("src/report-layout.css");
+let pass=0;
+function check(label,fn){try{fn();pass++;}catch(error){throw Error("REPORT_UI_"+label+": "+error.message);}}
+check("new report is rendered at existing route",()=>{assert.match(app,/import GoogleRankReport from/);assert.match(app,/function renderRankPage\(\) \{ return <GoogleRankReport/);assert.match(app,/onCheckAll=\{checkAllRank\}/);assert.match(app,/onDelete=\{delRank\}/);});
+check("backend rank endpoints remain untouched",()=>{for(const part of ["/api/rank/keywords","/api/rank/check/","/api/rank/check-all"])assert.ok(app.includes(part));});
+check("no merged-cell rank table",()=>{assert.doesNotMatch(rank,/rowSpan|<table|<tr|<td/);assert.match(rank,/className="rankReportDomainRow"/);});
+check("rank has hierarchy and readable metrics",()=>{for(const t of ["SEARCH VISIBILITY / REPORT","Keyword groups","Tracked domains","Domains ranked","Flagged results","Keyword reports"])assert.ok(rank.includes(t));});
+check("rank filter is accessible",()=>{assert.match(rank,/type="search"/);assert.match(rank,/aria-pressed=\{attentionOnly\}/);assert.match(rank,/visible\.map\(group/);});
+check("create and edit preserved",()=>{for(const t of ["onAdd","onSaveEdit","onStartEdit","onCancelEdit","onRankFormChange","onEditChange"])assert.ok(rank.includes(t));});
+check("rank disclosure prevents fake live claims",()=>assert.match(rank,/stored scans, not live Google results/));
+check("defence still preserves core APIs",()=>{for(const x of ["/api/rank/keywords","/api/rank/results","/api/rank/node-positions","/api/rank/intel/","/api/rank/sync-lp-ms","/api/rank/check-all"])assert.ok(defense.includes(x));});
+check("defence composer collapses by default",()=>{assert.match(defense,/<details className="defenseCompose">/);assert.match(defense,/<summary>/);assert.doesNotMatch(defense,/<details className="defenseCompose" open/);});
+check("defence notices remain visible",()=>{assert.match(defense,/<\/details>\s*\{notice && <div className="notice" role="status"/);});
+check("safe per-result keys",()=>assert.doesNotMatch(defense,/\$\{Math\.random\(\)\}/));
+check("defence info labels",()=>{for(const s of ["Keyword investigations","Trusted domains","Results to review","Flagged results"])assert.ok(defense.includes(s));});
+check("pill buttons and simple sections",()=>{assert.match(css,/border-radius:999px!important/);assert.match(css,/border-top:1px solid var\(--report-line\)/);assert.match(css,/reportBtnDanger/);});
+check("responsive tablet and phone",()=>{for(const t of ["@media(max-width:980px)","@media(max-width:700px)","@media(max-width:480px)"])assert.ok(css.includes(t));});
+check("mobile prevents global table expansion",()=>{assert.match(css,/nodeRankGrid \.tableWrap\{overflow-x:auto/);assert.match(css,/min-width:max-content/);assert.match(css,/rankReportDomainName\{grid-column:1\/-1/);});
+check("mobile actions wrap",()=>{assert.match(css,/rankReportGroupActions\{justify-content:flex-start;width:100%\}/);assert.match(css,/flex-wrap:wrap/);});
+check("defence metric labels survive dashboard CSS",()=>{assert.match(css,/defenseMetrics \.card:nth-child\(2\)>span/);assert.match(css,/content:none!important/);});
+check("mobile defence header flex basis reset",()=>{assert.match(css,/flex:0 0 auto!important/);assert.match(css,/height:auto/);});
+check("page transitions reset scrolling",()=>assert.match(app,/function goTo\(p\) \{ setPage\(p\); window.scrollTo\(0, 0\); \}/));
+console.log("PENTAGON_REPORT_UI_STATIC_TESTS_PASS="+pass);
