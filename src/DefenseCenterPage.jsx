@@ -334,19 +334,34 @@ export default function DefenseCenterPage({ isDemo = false }) {
   const suspiciousTotal = results.filter((r) => r.classification === "suspicious").length;
 
   return (
-    <div className="defensePage">
+    <div className="defensePage reportSurface">
       <header>
         <div className="brand">
-          <h1>Rank Defense Center</h1>
-          <p>Google Top 100 rank scanner, whitelist control, and suspicious domain intelligence.</p>
+          <span className="reportEyebrow">TRUST / SEARCH INTELLIGENCE</span>
+          <h1>Defence Center</h1>
+          <p>Review monitored keywords, verify trusted domains, and investigate unfamiliar search results.</p>
         </div>
-        <div className="toolbar">
-          <button onClick={loadAll}>Refresh</button>
-          <button onClick={syncLpMs}>Sync LP/MS</button>
-          <button className="primaryBtn" onClick={checkAll}>Check All</button>
+        <div className="toolbar reportHeaderActions">
+          <button className="reportBtn reportBtnQuiet" onClick={loadAll}>Refresh</button>
+          <button className="reportBtn reportBtnQuiet" onClick={syncLpMs} disabled={isDemo}>Sync LP/MS</button>
+          <button className="reportBtn reportBtnPrimary" onClick={checkAll} disabled={isDemo || !groups.length}>Scan all</button>
         </div>
       </header>
 
+      <section className="cards defenseMetrics" aria-label="Defence Center summary">
+        <div className="card"><span>Keyword groups</span><b>{totalKw}</b></div>
+        <div className="card"><span>Trusted domains</span><b>{totalDomains}</b></div>
+        <div className="card"><span>Domains ranked</span><b>{foundDomains}</b></div>
+        <div className={"card" + (suspiciousTotal ? " attention" : "")}><span>Flagged results</span><b>{suspiciousTotal}</b></div>
+      </section>
+      <div className={"reportInsight" + (suspiciousTotal ? " hasAttention" : "")} role="status">
+        <span>{suspiciousTotal
+          ? suspiciousTotal + " suspicious result(s) need manual review. Compare domains and inspect intelligence before taking action."
+          : totalKw ? "No suspicious results recorded in the saved scans. Run a new scan to refresh the report."
+          : "No keyword groups configured. Add a keyword and trusted domains to begin a review."}</span>
+      </div>
+      <details className="defenseCompose">
+        <summary><span>+ Add keyword or trusted domains</span><small>New or existing project</small></summary>
       <section className="panel formPanel">
         <form className="inputGrid" onSubmit={addKeyword} noValidate>
           <div className="modeInput">
@@ -392,20 +407,17 @@ export default function DefenseCenterPage({ isDemo = false }) {
             />
           </div>
           <div className="submitArea">
-            <button className="submitBtn" type="submit">Add / Merge</button>
+            <button className="submitBtn reportBtn reportBtnPrimary" type="submit" disabled={isDemo}>Add / merge</button>
           </div>
         </form>
         {notice && <div className="notice">{notice}</div>}
       </section>
+      </details>
 
-      <section className="cards">
-        <div className="card"><b>{totalKw}</b><span>Keyword Groups</span></div>
-        <div className="card"><b>{totalDomains}</b><span>Whitelisted Domains</span></div>
-        <div className="card"><b>{foundDomains}</b><span>Domains Found</span></div>
-        <div className="card"><b>{suspiciousTotal}</b><span>Suspicious Results</span></div>
-      </section>
-
-      <section className="panel">
+      <section className="panel defenseReportList">
+        <div className="reportListHeader">
+          <div><h2>Keyword investigations</h2><p>Compare trusted domains against other search results. Open each report to investigate individual findings.</p></div>
+        </div>
         <div className="kwGrid">
           {groups.length === 0 && (
             <p className="muted" style={{ padding: "16px" }}>No keyword groups yet. Add one above.</p>
@@ -422,7 +434,7 @@ export default function DefenseCenterPage({ isDemo = false }) {
                 <div className="kwHead">
                   <div className="kwInfo">
                     <h2>{g.keyword}</h2>
-                    <div className="muted">{g.project_name || "-"} · {g.domain_count || 0} domain</div>
+                    <div className="muted">{g.project_name || "Unassigned project"} · {g.domain_count || g.domains?.length || 0} tracked domains</div>
                   </div>
                   <div className="kwLast">
                     <span className="kwLastLbl">LAST</span> {timeAgo(g.last_checked_at)}
@@ -430,8 +442,8 @@ export default function DefenseCenterPage({ isDemo = false }) {
                   <div className="kwRight">
                     <Pill type="warn" text={`Suspicious ${susp.length}`} />
                     <div className="toolbar">
-                      <button onClick={() => checkGroup(g.id)}>Check</button>
-                      <button onClick={() => delGroup(g.id)}>Delete</button>
+                      <button className="reportBtn reportBtnQuiet" onClick={() => checkGroup(g.id)} disabled={isDemo}>Scan</button>
+                      <button className="reportBtn reportBtnDanger" onClick={() => delGroup(g.id)} disabled={isDemo}>Delete</button>
                     </div>
                   </div>
                 </div>
@@ -439,7 +451,8 @@ export default function DefenseCenterPage({ isDemo = false }) {
                 <div className="cols">
                   {/* LEFT — TRUSTED */}
                   <div className="sub trustedPane">
-                    <h3 className="paneTitle">✅ Trusted Domains</h3>
+                    <h3 className="paneTitle">Trusted domains</h3>
+                     <p className="defensePaneIntro">Whitelisted sources associated with this keyword.</p>
 
                     <div className="subGroup">
                       <div className="subGroupLabel">Whitelisted ({(g.domains || []).filter(d => d.is_whitelisted).length})</div>
@@ -551,7 +564,8 @@ export default function DefenseCenterPage({ isDemo = false }) {
 
                   {/* RIGHT — NON-WHITELISTED */}
                   <div className="sub suspiciousPane">
-                    <h3 className="paneTitle">⚠️ Non-Whitelisted / Suspicious</h3>
+                    <h3 className="paneTitle">Results to review</h3>
+                    <p className="defensePaneIntro">Unfamiliar or unclassified search results. Each one needs manual assessment.</p>
                     <div className="resultList">
                       {nonWhite.map((r) => (
                         <div key={r.id || `${r.group_id}-${r.domain}-${r.position}-${Math.random()}`} className="resultRow">
@@ -573,7 +587,7 @@ export default function DefenseCenterPage({ isDemo = false }) {
                                 disabled={movingId === `result-${r.id}`}
                                 onMove={(target) => moveScanResult(r, g.id, target)}
                               />
-                              <button className="intelBtn" onClick={() => openIntel(r.domain)}>Intel</button>
+                              <button className="intelBtn reportBtn" onClick={() => openIntel(r.domain)}>Investigate</button>
                             </div>
                           </div>
                         </div>
