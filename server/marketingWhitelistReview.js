@@ -3,6 +3,7 @@
 const fs=require("node:fs");
 const path=require("node:path");
 const crypto=require("node:crypto");
+const {snapshotFromDirectory,sealSnapshot}=require("./marketingWhitelistBackup");
 const COOKIE="__Host-pentagon_review";
 const STATUSES=new Set(["pending","approved","rejected"]);
 const LIMIT_BYTES=2*1024*1024;
@@ -180,6 +181,29 @@ function reviewRouter(config={}){
     res.setHeader("Content-Disposition",'attachment; filename="pentagon-staging-whitelist.csv"');
     send(res,200,csv,"text/csv; charset=utf-8");
    }catch{send(res,503,{error:"Export unavailable."});}
+   return true;
+  }
+  if(pathname==="/api/whitelist-review/backup"&&req.method==="POST"){
+   // Backup is never a public endpoint. Only an authenticated staging reviewer
+   // with a same-origin CSRF token can export a snapshot sealed to a client key.
+   if(!requireSession(req,res,true))return true;
+   let data;
+   try{data=await parseJson(req,5500);}
+   catch{send(res,400,{error:"Invalid encrypted backup request."});return true;}
+   if(data.purpose!=="encrypted-backup"||typeof data.recipientPublicKey!=="string"||
+      data.recipientPublicKey.length>4600){
+    send(res,422,{error:"A valid backup recipient key is required."});return true;
+   }
+   try{
+    const snap=snapshotFromDirectory(dir);
+    const envelope=sealSnapshot(snap,data.recipientPublicKey);
+    res.setHeader("Content-Disposition",'attachment; filename="pentagon-staging-whitelist.encrypted.json"');
+    res.setHeader("Pragma","no-cache");
+    send(res,200,envelope);
+   }catch{
+    // Never log names, email addresses, the snapshot or the recipient key.
+    send(res,503,{error:"Encrypted backup currently unavailable."});
+   }
    return true;
   }
   if(pathname==="/api/whitelist-review/decision"&&req.method==="POST"){

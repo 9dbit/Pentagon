@@ -14,6 +14,10 @@ on:
       - "Dockerfile.marketing"
       - "server/marketingPreviewServer.js"
       - "server/marketingWhitelistReview.js"
+      - "server/marketingWhitelistBackup.js"
+      - "scripts/test-pentagon-encrypted-backup.cjs"
+      - "scripts/backup-pentagon-whitelist-staging.cjs"
+      - "scripts/verify-pentagon-whitelist-backup-offline.cjs"
       - "scripts/marketing-start.sh"
       - "scripts/test-pentagon-review-security.cjs"
       - "scripts/test-pentagon-demo-safe.cjs"
@@ -62,6 +66,10 @@ jobs:
           node --check scripts/test-pentagon-whitelist-smoke.cjs
           node --check server/marketingPreviewServer.js
           node --check server/marketingWhitelistReview.js
+          node --check server/marketingWhitelistBackup.js
+          node --check scripts/test-pentagon-encrypted-backup.cjs
+          node --check scripts/backup-pentagon-whitelist-staging.cjs
+          node --check scripts/verify-pentagon-whitelist-backup-offline.cjs
           node --check public/review/review.js
           node --check scripts/test-pentagon-review-security.cjs
           node --check public/demo/demo.js
@@ -74,6 +82,7 @@ jobs:
           node scripts/test-pentagon-marketing-design-rc1.cjs
           node scripts/test-pentagon-whitelist-smoke.cjs
           node scripts/test-pentagon-review-security.cjs
+          node scripts/test-pentagon-encrypted-backup.cjs
           node scripts/test-pentagon-demo-safe.cjs
       - name: Audit marketing claims and keep release blocked
         run: node scripts/audit-pentagon-marketing-release-gates.cjs --ci > rc1-release-gate.json
@@ -116,6 +125,7 @@ jobs:
           curl -fsS http://127.0.0.1:17345/demo/ | grep -q 'SANDBOX'
           curl -fsSI http://127.0.0.1:17345/demo/demo.js | grep -qi 'application/javascript'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/whitelist-review/requests)" = "503"
+          test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:17345/api/whitelist-review/backup)" = "503"
           curl -fsSI http://127.0.0.1:17345/learn/ | grep -qi 'x-robots-tag: noindex'
           curl -fsSI http://127.0.0.1:17345/sitemap.xml | grep -qi 'content-type: application/xml'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/health)" = "404"

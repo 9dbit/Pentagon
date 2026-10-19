@@ -3,6 +3,7 @@ WORKDIR /app
 ENV NODE_ENV=production
 COPY --chown=node:node server/marketingPreviewServer.js server/marketingPreviewServer.js
 COPY --chown=node:node server/marketingWhitelistReview.js server/marketingWhitelistReview.js
+COPY --chown=node:node server/marketingWhitelistBackup.js server/marketingWhitelistBackup.js
 COPY --chown=node:node scripts/marketing-start.sh scripts/marketing-start.sh
 COPY --chown=node:node public/learn/index.html public/learn/index.html
 COPY --chown=node:node public/demo/index.html public/demo/index.html
