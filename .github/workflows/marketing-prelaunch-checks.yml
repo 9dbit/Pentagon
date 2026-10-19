@@ -7,11 +7,14 @@ on:
     paths:
       - "public/learn/**"
       - "public/privacy/**"
+      - "public/review/**"
       - "public/whitelist.css"
       - "public/whitelist.js"
       - "Dockerfile.marketing"
       - "server/marketingPreviewServer.js"
+      - "server/marketingWhitelistReview.js"
       - "scripts/marketing-start.sh"
+      - "scripts/test-pentagon-review-security.cjs"
       - "public/robots.txt"
       - "public/sitemap.xml"
       - "server/marketingStaticRoutes.js"
@@ -55,12 +58,16 @@ jobs:
           node --check scripts/test-pentagon-marketing-design-rc1.cjs
           node --check scripts/test-pentagon-whitelist-smoke.cjs
           node --check server/marketingPreviewServer.js
+          node --check server/marketingWhitelistReview.js
+          node --check public/review/review.js
+          node --check scripts/test-pentagon-review-security.cjs
           node --check public/whitelist.js
           sh -n scripts/marketing-start.sh
           node scripts/test-pentagon-marketing-readiness.cjs
           node scripts/test-pentagon-marketing-static-local.cjs
           node scripts/test-pentagon-marketing-design-rc1.cjs
           node scripts/test-pentagon-whitelist-smoke.cjs
+          node scripts/test-pentagon-review-security.cjs
       - name: Build exactly the deployed Dockerfile, no runtime database
         run: docker build --progress plain --tag pentagon-marketing-smoke:ci .
       - name: Validate real Express routes in a credential-free test container
@@ -90,6 +97,8 @@ jobs:
           test "$ready" -eq 1
           curl -fsS http://127.0.0.1:17345/learn/ | grep -q 'Your domain defense'
           curl -fsS http://127.0.0.1:17345/robots.txt | grep -q 'Disallow: /'
+          curl -fsS http://127.0.0.1:17345/review/ | grep -q 'Authorized reviewers only'
+          test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/whitelist-review/requests)" = "503"
           curl -fsSI http://127.0.0.1:17345/learn/ | grep -qi 'x-robots-tag: noindex'
           curl -fsSI http://127.0.0.1:17345/sitemap.xml | grep -qi 'content-type: application/xml'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/health)" = "404"

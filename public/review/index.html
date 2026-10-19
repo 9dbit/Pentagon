@@ -1,0 +1,57 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Pentagon | Whitelist Review (Staging)</title>
+<link rel="icon" type="image/svg+xml" href="/pentagon-icon.svg">
+<link rel="stylesheet" href="/review/review.css">
+<script src="/review/review.js" defer></script>
+</head>
+<body>
+<div class="shell">
+  <header class="header">
+    <div class="brand"><img src="/logo-icon.png" alt=""><img class="brand-wordmark" src="/logo-text.png" alt="Pentagon"><span class="env">STAGING REVIEW</span></div>
+    <div class="tools"><a href="/learn/">Back to preview</a><button id="logout" type="button" hidden>Sign out</button></div>
+  </header>
+  <main>
+    <section class="intro">
+      <div class="tag">EARLY ACCESS / CONTROL CENTER</div>
+      <h1>Whitelist Review</h1>
+      <p>Review early-access requests, export or delete records. An approved request means eligible for outreach review only. <strong>No account, billing, dashboard or admin access is activated here.</strong></p>
+    </section>
+    <section id="signin" class="signin">
+      <h2>Authorized reviewers only</h2>
+      <p>Enter the staging-only review passphrase. It is not your Pentagon dashboard password.</p>
+      <form id="login-form">
+        <label for="review-password">Review passphrase</label>
+        <input id="review-password" type="password" autocomplete="current-password" required placeholder="Enter review passphrase">
+        <button class="primary" type="submit">Open review dashboard</button>
+      </form>
+      <p class="message" id="login-status" role="status" aria-live="polite"></p>
+    </section>
+    <section id="dashboard" hidden>
+      <div class="stats" aria-live="polite">
+        <div><b id="count-all">0</b><span>All requests</span></div>
+        <div><b id="count-pending">0</b><span>Pending</span></div>
+        <div><b id="count-approved">0</b><span>Approved for contact</span></div>
+        <div><b id="count-rejected">0</b><span>Rejected</span></div>
+      </div>
+      <div class="bar">
+        <div class="filters"><label for="filter-status">Status</label><select id="filter-status"><option value="all">All requests</option><option value="pending">Pending</option><option value="approved">Approved</option><option value="rejected">Rejected</option></select>
+          <label for="search">Search</label><input id="search" type="search" placeholder="Search email" autocomplete="off"></div>
+        <div class="bar-actions"><button id="refresh" type="button">Refresh</button><a href="/api/whitelist-review/export" id="export">Export CSV</a><button id="prune" type="button" title="Delete requests older than 365 days">Retention cleanup</button></div>
+      </div>
+      <div class="table-wrap">
+        <table><thead><tr><th>Email</th><th>Submitted</th><th>Status</th><th>Reviewed</th><th>Actions</th></tr></thead><tbody id="request-rows"></tbody></table>
+      </div>
+      <div class="pagebar"><span id="pagination-label">No requests loaded</span><button id="previous" type="button">Previous</button><button id="next" type="button">Next</button></div>
+      <p id="review-status" class="message" role="status" aria-live="polite"></p>
+      <p class="footnote">Data is stored in Pentagon Marketing RC1 staging only. Do not export to uncontrolled devices. Approval here does not modify <code>ADMIN_EMAIL_WHITELIST</code>.</p>
+    </section>
+  </main>
+  <footer>© 2026 Pentagon · Private marketing operator view · No production customer data</footer>
+</div>
+</body>
+</html>

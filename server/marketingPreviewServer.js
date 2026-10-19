@@ -5,10 +5,14 @@ const http=require("node:http");
 const fs=require("node:fs");
 const path=require("node:path");
 const crypto=require("node:crypto");
+const {reviewRouter}=require("./marketingWhitelistReview");
 const ROOT=path.resolve(__dirname,"../public");
 const MIME=Object.freeze({
  "/learn/":["learn/index.html","text/html; charset=utf-8"],
  "/privacy/":["privacy/index.html","text/html; charset=utf-8"],
+ "/review/":["review/index.html","text/html; charset=utf-8"],
+ "/review/review.css":["review/review.css","text/css; charset=utf-8"],
+ "/review/review.js":["review/review.js","application/javascript; charset=utf-8"],
  "/whitelist.css":["whitelist.css","text/css; charset=utf-8"],
  "/whitelist.js":["whitelist.js","application/javascript; charset=utf-8"],
  "/assets/index-HN8rRKwo.css":["assets/index-HN8rRKwo.css","text/css; charset=utf-8"],
@@ -88,12 +92,14 @@ function createServer(opts={}){
  const enabled=opts.whitelistEnabled===undefined?process.env.WHITELIST_ENABLED==="true":opts.whitelistEnabled;
  const dataDir=opts.whitelistDataDir||process.env.WHITELIST_DATA_DIR||"/data/whitelist";
  const recent=new Map();
+ const review=reviewRouter({dataDir,enabled:opts.reviewEnabled===undefined?process.env.WHITELIST_REVIEW_ENABLED==="true":opts.reviewEnabled,passwordHash:opts.reviewPasswordHash||process.env.WHITELIST_REVIEW_SCRYPT||""});
  return http.createServer(async(req,res)=>{
   for(const [key,value]of Object.entries(HEADERS))res.setHeader(key,value);
   res.setHeader("Content-Type","text/plain; charset=utf-8");
   let pathname;
   try{pathname=new URL(req.url,"http://local.invalid").pathname;}
   catch{return respond(res,400,JSON.stringify({error:"Bad request"}));}
+  if(await review.route(req,res,new URL(req.url,"http://local.invalid")))return;
   if(pathname==="/api/whitelist"&&req.method==="POST"){
    if(!enabled)return respond(res,503,JSON.stringify({error:"Whitelist requests are not enabled yet."}));
    if(!/^application\/json(?:\s*;|$)/i.test(req.headers["content-type"]||""))
@@ -126,8 +132,8 @@ function createServer(opts={}){
    res.setHeader("Allow","GET, HEAD");
    return respond(res,405,JSON.stringify({error:"Method not allowed"}));
   }
-  if(pathname==="/"||pathname==="/learn"||pathname==="/privacy"){
-   res.writeHead(302,{"Location":pathname==="/privacy"?"/privacy/":"/learn/"});
+  if(pathname==="/"||pathname==="/learn"||pathname==="/privacy"||pathname==="/review"){
+   res.writeHead(302,{"Location":pathname==="/privacy"?"/privacy/":pathname==="/review"?"/review/":"/learn/"});
    return res.end();
   }
   if(pathname==="/health"){
