@@ -65,3 +65,12 @@ Scope: Replit-parity landing page in GitHub draft PR #27 (`feature/pentagon-mark
 - Screenshot evidence: [Demo desktop](marketing-rc1-visual/demo-lab-desktop1440.png), [Demo mobile 390](marketing-rc1-visual/demo-lab-phone390.png), [Demo mobile 320](marketing-rc1-visual/demo-lab-phone320.png).
 - Every green CI and QA check is **engineering readiness only**, not proof of the live marketing claims, pricing, legal approval, consent policy, backend cutover or final public-domain GO. All original public release blockers remain OPEN.
 - PR #27 and #26 remain Draft; Railway Pentagon production services online, no merge or DNS changes.
+
+## Whitelist backup release milestone, 19 October 2026
+
+- New staging-only reviewer-authenticated encrypted backup endpoint passed CI and live HTTP security checks. Client-held recipient RSA private key is never sent to Railway.
+- CI [run 39236532995](https://github.com/9dbit/Pentagon/actions/runs/39236532995) **PASS** for synthetic archive tamper detection, origin+CSRF, offline restore parity and Docker.
+- One actual staging encrypted snapshot stored and verified on TRADEVICEPC: **0 requests, 8 audit events**, ciphertext SHA-256 `12c9094fa414b75cb449c5b4309abfa723749cd55ce4c0160ef0a528476b162b`. No email data was logged or added to PR.
+- Independent Windows-local ciphertext copy: **PASS**. Offsite geographic copy, portable decryption if the Windows PC is lost, backup retention and deletion-request handling: **OPEN**.
+- Refer to [encrypted backup and recovery SOP](PENTAGON_MARKETING_RC1_WHITELIST_BACKUP_20261019.md). The original Replit design blob `6a037a88ef3a8deab3113513dc234495c7ccad00` and reviewer passphrase are unchanged.
+- Public release remains **NO-GO** due to demo DNS, unverified numerical claims, pricing, legal/privacy, public API ownership and offsite recovery.

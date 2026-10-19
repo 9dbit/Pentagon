@@ -60,3 +60,14 @@ That optional restore creates plaintext leads exclusively on the authorized Wind
 - Replit landing and reviewer passphrase remain unchanged.
 - PR #27 must remain Draft. Pentagon production and DNS must remain untouched.
 - **PUBLIC MARKETING RELEASE: NO-GO** until demo domain, claims, pricing, privacy, production whitelist routing, offsite recovery, and explicit owner final GO.
+
+## Verified live staging backup checkpoint, 19 October 2026
+
+- CI [marketing run 39236532995](https://github.com/9dbit/Pentagon/actions/runs/39236532995): **SUCCESS**, including synthetic RSA/AES tamper checks, authenticated CSRF/origin checks, byte-exact offline recovery drill and isolated Docker build.
+- Railway staging deployment for code commit `a100e232b1c555b37869cd91ac071f59efccfdea`: **SUCCESS**. Existing landing, Demo Lab and reviewer HTTP 200; anonymous backup request 401; production API absent from marketing service.
+- A first real staging snapshot was encrypted and copied onto the authorized TRADEVICEPC. Filename: `pentagon-rc1-2026-10-19T10-23-24-261Z-9690af56.encrypted.json`.
+- Encrypted archive size: **2,902 bytes**. SHA-256: `12c9094fa414b75cb449c5b4309abfa723749cd55ce4c0160ef0a528476b162b`.
+- In-memory decryption and local offline re-verification: **PASS**, with **0 pending/stored whitelist requests and 8 reviewer audit events** at the moment of capture. Count metadata only; no lead emails or passphrases were shared.
+- Recipient private key was generated separately on TRADEVICEPC, remains encrypted; its passphrase is DPAPI protected under that Windows user. The existing reviewer passphrase was **not rotated or printed**.
+- **Not yet offsite.** Copying only ciphertext to independent storage is useful but the DPAPI-dependent recipient-key recovery must be designed before disaster recovery can be declared portable. Data deletion in historical archives also requires a signed policy.
+- Pentagon production deployment, DNS, account allowlists and Replit remain unchanged. **PUBLIC RELEASE: NO-GO**.
