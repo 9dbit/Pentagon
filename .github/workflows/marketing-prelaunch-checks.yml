@@ -6,6 +6,12 @@ on:
       - migration/railway-independence
     paths:
       - "public/learn/**"
+      - "public/privacy/**"
+      - "public/whitelist.css"
+      - "public/whitelist.js"
+      - "Dockerfile.marketing"
+      - "server/marketingPreviewServer.js"
+      - "scripts/marketing-start.sh"
       - "public/robots.txt"
       - "public/sitemap.xml"
       - "server/marketingStaticRoutes.js"
@@ -47,9 +53,14 @@ jobs:
           node --check scripts/test-pentagon-marketing-build.cjs
           node --check scripts/test-pentagon-marketing-http.cjs
           node --check scripts/test-pentagon-marketing-design-rc1.cjs
+          node --check scripts/test-pentagon-whitelist-smoke.cjs
+          node --check server/marketingPreviewServer.js
+          node --check public/whitelist.js
+          sh -n scripts/marketing-start.sh
           node scripts/test-pentagon-marketing-readiness.cjs
           node scripts/test-pentagon-marketing-static-local.cjs
           node scripts/test-pentagon-marketing-design-rc1.cjs
+          node scripts/test-pentagon-whitelist-smoke.cjs
       - name: Build exactly the deployed Dockerfile, no runtime database
         run: docker build --progress plain --tag pentagon-marketing-smoke:ci .
       - name: Validate real Express routes in a credential-free test container
@@ -77,7 +88,7 @@ jobs:
             sleep 1
           done
           test "$ready" -eq 1
-          curl -fsS http://127.0.0.1:17345/learn/ | grep -q 'One cockpit'
+          curl -fsS http://127.0.0.1:17345/learn/ | grep -q 'Your domain defense'
           curl -fsS http://127.0.0.1:17345/robots.txt | grep -q 'Disallow: /'
           curl -fsSI http://127.0.0.1:17345/learn/ | grep -qi 'x-robots-tag: noindex'
           curl -fsSI http://127.0.0.1:17345/sitemap.xml | grep -qi 'content-type: application/xml'

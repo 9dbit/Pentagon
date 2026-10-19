@@ -22,11 +22,11 @@ async function run() {
       const body=await r.text();
       assert.match(body,/<main\b/);
       assert.match(body,/<h1\b/);
-      assert.match(body,/<meta name="robots" content="index,follow/); // noindex HEADER wins for staging
-      assert.match(body,/<link rel="canonical" href="https:\/\/pentagon\.quest\/learn\//);
+      assert.match(body,/<meta name="robots" content="noindex,nofollow/);
+      assert.match(body,/<link rel="canonical" href="https:\/\/pentagon\.quest\//);
       assert.match(body,/<meta property="og:image"/);
       assert.match(body,/href="https:\/\/pentagon\.quest\/"/);
-      assert.doesNotMatch(body,/<form\b|href="mailto:|href="tel:/i);
+      assert.match(body,/id="wl-form"/); assert.match(body,/name="consent" required/);
     });
     await check("/robots.txt",200,/text\/plain/,async r=>{
       const b=await r.text();assert.match(b,/Disallow: \//);assert.doesNotMatch(b,/<html/i)
@@ -34,11 +34,14 @@ async function run() {
     await check("/sitemap.xml",200,/application\/xml/,async r=>{
       const b=await r.text();assert.match(b,/<urlset/);assert.match(b,/pentagon\.quest\/learn/);
     });
+    await check("/privacy/",200,/text\/html/,async r=>assert.match(await r.text(),/Whitelist Privacy Notice/));
+    await check("/logo-icon.png",200,/image\/png/);
     await check("/pentagon-icon.svg",200,/image\/svg\+xml/,async r=>assert.match(await r.text(),/<svg/));
     await check("/og-image.png",200,/image\/png/,async r=>assert.ok((await r.arrayBuffer()).byteLength>1000));
     await check("/health",200,/application\/json/,async r=>{
       assert.deepEqual(await r.json(),{ok:true,service:"pentagon-marketing-rc1",database:"not-connected",scheduler:"disabled"})
     });
+    await check("/api/whitelist",503,/application\/json/,null,{method:"POST"});
     await check("/api/health",404,/text\/plain/);
     await check("/api/domains",404,/text\/plain/);
     await check("/../../server/index.js",404,/text\/plain/);

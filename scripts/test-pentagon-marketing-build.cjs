@@ -10,7 +10,7 @@ check("dist_is_directory",()=>assert.ok(fs.statSync(dist).isDirectory()));
 let landing,robots,sitemap;
 check("marketing_html",()=>{landing=asset("learn/index.html");assert.match(landing,/<main\b/i);assert.match(landing,/<h1\b/i)});
 check("marketing_canonical",()=>assert.match(landing,/<link rel="canonical" href="https:\/\/pentagon\.quest\/learn\/"/i));
-check("marketing_no_signup_form",()=>assert.doesNotMatch(landing,/<form\b|payment gateway|guaranteed uptime/i));
+check("whitelist_form_consent",()=>{assert.match(landing,/id="wl-form"/);assert.match(landing,/name="consent" required/);assert.doesNotMatch(landing,/<input[^>]*type="password"/i)});
 check("marketing_no_external_tracker",()=>assert.doesNotMatch(landing,/<script\s+src="https?:\/\//i));
 check("robots_txt",()=>{robots=asset("robots.txt");assert.match(robots,/^User-agent:\s*\*/m);assert.doesNotMatch(robots,/<html/i)});
 check("sitemap_xml",()=>{sitemap=asset("sitemap.xml");assert.match(sitemap,/<urlset/);assert.match(sitemap,/<loc>https:\/\/pentagon\.quest\/learn\/<\/loc>/);assert.doesNotMatch(sitemap,/<html/i)});

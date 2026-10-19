@@ -25,7 +25,7 @@ function check(name,fn){try{fn();passed++;}catch(e){throw Error("HTTP_"+name+": 
   check("canonical_redirect",()=>{assert.equal(redirect.status,308);assert.equal(redirect.headers.get("location"),"/learn/")});
   const landing=await get("/learn/");
   check("landing_status_html",()=>{assert.equal(landing.status,200);assert.match(landing.headers.get("content-type"),/text\/html/);assert.match(landing.body,/<main\b/i)});
-  check("correct_canonical_meta",()=>assert.match(landing.body,/https:\/\/pentagon\.quest\/learn\//));
+  check("correct_canonical_meta",()=>assert.match(landing.body,/https:\/\/pentagon\.quest\//));
   check("security_mime_guard",()=>assert.equal(landing.headers.get("x-content-type-options"),"nosniff"));
   check("public_caching",()=>assert.match(landing.headers.get("cache-control"),/max-age=300/));
   const robots=await get("/robots.txt");

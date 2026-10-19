@@ -36,7 +36,7 @@ function simulate(route){
   check("HTML correct content type",()=>assert.match(home.headers["content-type"],/text\/html/i));
   check("marketing page is semantic HTML",()=>{const c=inspectLanding(home.body);assert.ok(Object.values(c).every(Boolean),JSON.stringify(c));});
   check("landing canonical is separate",()=>assert.match(home.body,/<link rel="canonical" href="https:\/\/pentagon\.quest\/learn\/"/));
-  check("landing does not fabricate sign-up",()=>{assert.doesNotMatch(home.body,/<form\b/i);assert.doesNotMatch(home.body,/href="mailto:|href="tel:/i)});
+  check("landing whitelist requires consent",()=>{assert.match(home.body,/id="wl-form"/);assert.match(home.body,/name="consent" required/);assert.doesNotMatch(home.body,/<input[^>]*type="password"/i)});
   check("correct robots type",()=>{const r=simulate("/robots.txt");assert.equal(inspectRobots(r.body,r.headers["content-type"]),true);assert.match(r.body,/Disallow:\s*\/api\//)});
   check("correct sitemap type",()=>{const r=simulate("/sitemap.xml");assert.equal(inspectSitemap(r.body,r.headers["content-type"]),true);assert.match(r.body,/<loc>https:\/\/pentagon\.quest\/learn\/<\/loc>/)});
   check("short public cache and MIME guard",()=>{const r=simulate("/learn/");assert.match(r.headers["cache-control"],/max-age=300/);assert.equal(r.headers["x-content-type-options"],"nosniff")});
