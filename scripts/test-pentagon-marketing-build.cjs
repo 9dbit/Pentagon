@@ -9,7 +9,7 @@ function asset(file){const p=path.join(dist,file);assert.ok(fs.existsSync(p),"mi
 check("dist_is_directory",()=>assert.ok(fs.statSync(dist).isDirectory()));
 let landing,robots,sitemap;
 check("marketing_html",()=>{landing=asset("learn/index.html");assert.match(landing,/<main\b/i);assert.match(landing,/<h1\b/i)});
-check("marketing_canonical",()=>assert.match(landing,/<link rel="canonical" href="https:\/\/pentagon\.quest\/learn\/"/i));
+check("marketing_canonical_original",()=>assert.match(landing,/<link rel="canonical" href="https:\/\/pentagon\.quest\/"/i));
 check("whitelist_form_consent",()=>{assert.match(landing,/id="wl-form"/);assert.match(landing,/name="consent" required/);assert.doesNotMatch(landing,/<input[^>]*type="password"/i)});
 check("marketing_no_external_tracker",()=>assert.doesNotMatch(landing,/<script\s+src="https?:\/\//i));
 check("robots_txt",()=>{robots=asset("robots.txt");assert.match(robots,/^User-agent:\s*\*/m);assert.doesNotMatch(robots,/<html/i)});

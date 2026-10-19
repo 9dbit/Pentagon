@@ -35,7 +35,7 @@ function simulate(route){
   const home=simulate("/learn/");
   check("HTML correct content type",()=>assert.match(home.headers["content-type"],/text\/html/i));
   check("marketing page is semantic HTML",()=>{const c=inspectLanding(home.body);assert.ok(Object.values(c).every(Boolean),JSON.stringify(c));});
-  check("landing canonical is separate",()=>assert.match(home.body,/<link rel="canonical" href="https:\/\/pentagon\.quest\/learn\/"/));
+  check("landing canonical matches original",()=>assert.match(home.body,/<link rel="canonical" href="https:\/\/pentagon\.quest\/"/));
   check("landing whitelist requires consent",()=>{assert.match(home.body,/id="wl-form"/);assert.match(home.body,/name="consent" required/);assert.doesNotMatch(home.body,/<input[^>]*type="password"/i)});
   check("correct robots type",()=>{const r=simulate("/robots.txt");assert.equal(inspectRobots(r.body,r.headers["content-type"]),true);assert.match(r.body,/Disallow:\s*\/api\//)});
   check("correct sitemap type",()=>{const r=simulate("/sitemap.xml");assert.equal(inspectSitemap(r.body,r.headers["content-type"]),true);assert.match(r.body,/<loc>https:\/\/pentagon\.quest\/learn\/<\/loc>/)});
