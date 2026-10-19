@@ -1,0 +1,44 @@
+/* Pentagon RC1: original Replit landing kept unchanged outside whitelist overlays. */
+.lp-whitelist-hero{background:rgba(249,115,22,.08);border:1px solid rgba(249,115,22,.35);color:#fdba74}
+.lp-whitelist-hero:hover{background:rgba(249,115,22,.17)}
+.lp-nav-cta-btn.lp-whitelist-open{white-space:nowrap}
+.wl-backdrop[hidden]{display:none!important}
+.wl-backdrop{position:fixed;inset:0;z-index:3500;display:grid;place-items:center;padding:20px;overflow-y:auto;overscroll-behavior:contain}
+.wl-shade{position:fixed;inset:0;background:rgba(0,0,0,.76);-webkit-backdrop-filter:blur(12px);backdrop-filter:blur(12px)}
+.wl-card{position:relative;z-index:1;width:min(470px,100%);max-height:min(94dvh,840px);overflow:auto;background:linear-gradient(160deg,#121923,#0b1017);border:1px solid rgba(249,115,22,.3);border-radius:22px;padding:36px;color:#edf6ff;box-shadow:0 26px 100px rgba(0,0,0,.72),0 0 60px rgba(249,115,22,.06);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+.wl-card h2{font-size:clamp(29px,4.5vw,36px);letter-spacing:-1.5px;line-height:1.05;margin:18px 0 14px;font-weight:900}
+.wl-card p{font-size:14px;line-height:1.7;color:#aebccc;margin:0 0 22px}
+.wl-close{position:absolute;right:18px;top:16px;width:36px;height:36px;border:1px solid #ffffff24;border-radius:12px;color:#dde7f2;background:#ffffff0e;font-size:25px;display:grid;place-items:center;cursor:pointer}
+.wl-close:hover{border-color:#f97316}
+.wl-label{display:block;font-size:12px;letter-spacing:.035em;font-weight:800;color:#edf6ff;margin:0 0 8px}
+.wl-card input[type=email]{width:100%;height:52px;border-radius:12px;padding:0 14px;background:#080d14;border:1px solid #334155;color:white;font-size:15px;outline:0;box-sizing:border-box}
+.wl-card input[type=email]:focus{border-color:#fb923c;box-shadow:0 0 0 3px rgba(249,115,22,.13)}
+.wl-consent{display:flex;align-items:flex-start;gap:12px;margin:20px 0 20px;cursor:pointer;font-size:12px;line-height:1.6;color:#bcc7d4}
+.wl-consent input{margin:3px 0 0;flex:0 0 auto;width:17px;height:17px;accent-color:#f97316}
+.wl-consent a{color:#fdba74;text-decoration:underline;text-underline-offset:3px}
+.wl-submit{width:100%;min-height:52px}
+.wl-submit:disabled{cursor:wait;opacity:.65}
+.wl-message{font-size:13px!important;margin:14px 0 0!important;min-height:0;line-height:1.6!important}
+.wl-message.is-success{color:#86efac!important}
+.wl-message.is-error{color:#fca5a5!important}
+.wl-note{color:#8393a6;font-size:11.5px;line-height:1.5;margin-top:18px}
+.wl-honeypot{position:absolute!important;left:-20000px!important;top:-20000px!important;width:1px!important;height:1px!important;overflow:hidden!important}
+body.wl-open{overflow:hidden}
+.lp-root a:focus-visible,.lp-root button:focus-visible,.wl-backdrop button:focus-visible,.wl-backdrop input:focus-visible{outline:2px solid #fb923c;outline-offset:3px}
+@media(max-width:1100px){.lp-hero-ctas .lp-whitelist-hero{flex:0 0 auto}}
+@media(max-width:768px){
+ .lp-hero-ctas .lp-whitelist-hero{width:100%;min-height:44px}
+ .lp-nav-cta-btn.lp-whitelist-open{margin-top:10px}
+ .wl-card{padding:30px 24px}
+}
+@media(max-width:420px){
+ .wl-backdrop{padding:12px}
+ .wl-card{padding:27px 21px;border-radius:17px}
+ .wl-card h2{font-size:29px}
+ .lp-hero-ctas .lp-whitelist-hero{font-size:14px}
+}
+@media(prefers-reduced-motion:reduce){.wl-shade{-webkit-backdrop-filter:none;backdrop-filter:none}}
+
+/* Snapshot of Replit's original decorative hero canvas, no runtime dependencies. */
+.lp-hero-canvas{background-image:url("/replit-hero-canvas-desktop.png");background-repeat:no-repeat;background-position:center;background-size:cover}
+@media(max-width:768px){.lp-hero-canvas{background-image:url("/replit-hero-canvas-mobile.png")}}

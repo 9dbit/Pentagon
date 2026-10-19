@@ -1,0 +1,34 @@
+FROM node:20.18.1-bookworm-slim
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --chown=node:node server/marketingPreviewServer.js server/marketingPreviewServer.js
+COPY --chown=node:node server/marketingWhitelistReview.js server/marketingWhitelistReview.js
+COPY --chown=node:node server/marketingWhitelistBackup.js server/marketingWhitelistBackup.js
+COPY --chown=node:node scripts/marketing-start.sh scripts/marketing-start.sh
+COPY --chown=node:node public/learn/index.html public/learn/index.html
+COPY --chown=node:node public/campaign/index.html public/campaign/index.html
+COPY --chown=node:node public/demo/index.html public/demo/index.html
+COPY --chown=node:node public/demo/demo.css public/demo/demo.css
+COPY --chown=node:node public/demo/demo.js public/demo/demo.js
+COPY --chown=node:node public/privacy/index.html public/privacy/index.html
+COPY --chown=node:node public/review/index.html public/review/index.html
+COPY --chown=node:node public/review/review.css public/review/review.css
+COPY --chown=node:node public/review/review.js public/review/review.js
+COPY --chown=node:node public/whitelist.css public/whitelist.css
+COPY --chown=node:node public/whitelist.js public/whitelist.js
+COPY --chown=node:node public/robots.txt public/robots.txt
+COPY --chown=node:node public/sitemap.xml public/sitemap.xml
+COPY --chown=node:node public/pentagon-icon.svg public/pentagon-icon.svg
+COPY --chown=node:node public/logo-icon.png public/logo-icon.png
+COPY --chown=node:node public/logo-text.png public/logo-text.png
+COPY --chown=node:node public/replit-hero-canvas-desktop.png public/replit-hero-canvas-desktop.png
+COPY --chown=node:node public/replit-hero-canvas-mobile.png public/replit-hero-canvas-mobile.png
+COPY --chown=node:node public/og-image.png public/og-image.png
+COPY --chown=node:node public/assets/index-HN8rRKwo.css public/assets/index-HN8rRKwo.css
+COPY --chown=node:node public/sidebar.css public/sidebar.css
+COPY --chown=node:node public/app-patches.css public/app-patches.css
+COPY --chown=node:node public/logo-rotation.css public/logo-rotation.css
+COPY --chown=node:node public/rank-defense-v2.css public/rank-defense-v2.css
+COPY --chown=node:node public/serp-alerts-polish.css public/serp-alerts-polish.css
+EXPOSE 3000
+CMD ["sh","scripts/marketing-start.sh"]

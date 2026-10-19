@@ -1,0 +1,63 @@
+<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow,noarchive">
+<title>Pentagon Demo Lab | Simulated Data Preview</title>
+<meta name="description" content="Private sandbox preview of Pentagon's search defense cockpit using strictly synthetic demonstration data.">
+<link rel="icon" href="/pentagon-icon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="/demo/demo.css">
+<script src="/demo/demo.js" defer></script>
+</head><body>
+<div class="sandbox">
+  <header class="header">
+    <a class="brand" href="/learn/" aria-label="Return to Pentagon marketing"><img src="/logo-icon.png" alt="" class="icon"><img src="/logo-text.png" alt="Pentagon" class="word"></a>
+    <div class="header-right">
+      <span class="sandbox-pill"><span class="dot"></span>SANDBOX · MOCK DATA</span>
+      <a href="/learn/" class="back">Back to Pentagon <span aria-hidden="true">↗</span></a>
+    </div>
+  </header>
+  <div class="notice" role="note"><strong>Interactive demo only.</strong> All domains, providers, rank data, alerts and events are fictional. This page is offline, does not scan networks, and does not grant access to Pentagon production.</div>
+  <section class="hero" aria-labelledby="page-title">
+    <div><div class="eyebrow"><span class="eyebrow-line"></span>SECURE VISIBILITY / CONCEPT PREVIEW</div><h1 id="page-title">Search defense<br><span>command center.</span></h1>
+      <p>Explore a simulated Pentagon cockpit before release. Inspect example domains, provider signals, ranking snapshots and alert workflows without using a customer account.</p>
+    </div>
+    <div class="hero-controls">
+      <label for="snapshot">Simulation scenario</label>
+      <select id="snapshot" aria-label="Select synthetic demo scenario"><option value="0">01 / Healthy baseline</option><option value="1">02 / Domain degradation</option><option value="2">03 / Search visibility shift</option></select>
+      <button type="button" id="replay" class="primary-btn"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 11a8 8 0 1 1 2 6M4 4v7h7"/></svg> Replay sample</button>
+    </div>
+  </section>
+  <div class="metrics" aria-label="Simulated high-level monitoring metrics">
+    <div class="metric"><div class="metric-top"><span>Monitored Domains</span><span class="metric-icon">◈</span></div><strong id="metric-domains">04</strong><small>Four fictitious test records</small></div>
+    <div class="metric"><div class="metric-top"><span>Sample Checks</span><span class="metric-icon">◎</span></div><strong id="metric-checks">128</strong><small>Simulated history, not real uptime</small></div>
+    <div class="metric"><div class="metric-top"><span>Provider Signals</span><span class="metric-icon">▥</span></div><strong id="metric-providers">03</strong><small>Fictional provider nodes</small></div>
+    <div class="metric"><div class="metric-top"><span>Needs Attention</span><span class="metric-icon">↗</span></div><strong id="metric-alerts">00</strong><small>Scenario-driven sample events</small></div>
+  </div>
+  <main class="console">
+    <div class="console-top"><div><div class="eyebrow small"><span class="eyebrow-line"></span>OPERATOR PREVIEW</div><h2>Mission overview</h2></div><span id="scenario-status" class="scenario-state">All sample signals normal</span></div>
+    <div class="tabs" role="tablist" aria-label="Demo sections">
+      <button type="button" role="tab" aria-selected="true" tabindex="0" id="tab-overview" aria-controls="panel-overview" data-tab="overview">Overview</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" id="tab-domains" aria-controls="panel-domains" data-tab="domains">Domains</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" id="tab-providers" aria-controls="panel-providers" data-tab="providers">Provider nodes</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" id="tab-search" aria-controls="panel-search" data-tab="search">Search ranks</button>
+      <button type="button" role="tab" aria-selected="false" tabindex="-1" id="tab-alerts" aria-controls="panel-alerts" data-tab="alerts">Alerts <span class="count" id="tab-alert-count">0</span></button>
+    </div>
+    <div role="tabpanel" aria-labelledby="tab-overview" id="panel-overview" data-panel="overview">
+      <div class="two-col">
+        <section class="panel"><div class="panel-heading"><h3>Example domain signals</h3><span class="panel-tag">SYNTHETIC</span></div><div id="domain-preview" class="signal-list"></div></section>
+        <section class="panel"><div class="panel-heading"><h3>Signal activity</h3><span class="panel-tag">REPLAYABLE</span></div><div class="chart" aria-hidden="true" id="trend-bars"></div><div class="chart-legend">Fictional check history · demonstration only</div><p id="activity-copy" class="panel-copy">A sample view of recent domain availability checks.</p></section>
+      </div>
+      <div class="two-col lower">
+        <section class="panel"><div class="panel-heading"><h3>Provider-node monitoring</h3><span class="panel-tag">SIMULATED</span></div><div id="node-preview" class="signal-list"></div></section>
+        <section class="panel"><div class="panel-heading"><h3>Sample alert feed</h3><span class="panel-tag">NOT DELIVERED</span></div><div id="alert-preview" class="signal-list"></div></section>
+      </div>
+    </div>
+    <div role="tabpanel" aria-labelledby="tab-domains" id="panel-domains" data-panel="domains" hidden><section class="panel"><div class="panel-heading"><h3>Domain inventory</h3><label class="search-label">Filter domains<input id="domain-search" type="search" autocomplete="off" placeholder="Search sample domains"></label></div><div class="table-scroll"><table><caption>Simulated domain monitoring results</caption><thead><tr><th>Domain</th><th>Status</th><th>Example last check</th><th>Operator note</th></tr></thead><tbody id="domain-table"></tbody></table></div></section></div>
+    <div role="tabpanel" aria-labelledby="tab-providers" id="panel-providers" data-panel="providers" hidden><section class="panel"><div class="panel-heading"><h3>Provider-node telemetry</h3><span class="panel-tag">NO REAL CARRIER NETWORKS</span></div><div class="table-scroll"><table><caption>Fictitious node statuses</caption><thead><tr><th>Test node</th><th>State</th><th>Sample latency</th><th>Role</th></tr></thead><tbody id="provider-table"></tbody></table></div><p class="panel-copy">Example providers A, B and C are placeholders. They are not evidence of live ISP coverage.</p></section></div>
+    <div role="tabpanel" aria-labelledby="tab-search" id="panel-search" data-panel="search" hidden><section class="panel"><div class="panel-heading"><h3>Search visibility snapshots</h3><span class="panel-tag">NOT GOOGLE DATA</span></div><div class="table-scroll"><table><caption>Simulated search rankings</caption><thead><tr><th>Sample keyword</th><th>Illustrative rank</th><th>Change</th><th>Status</th></tr></thead><tbody id="search-table"></tbody></table></div><p class="panel-copy">Rankings are fictional and never fetched from Google. Top-100 capability is not measured here.</p></section></div>
+    <div role="tabpanel" aria-labelledby="tab-alerts" id="panel-alerts" data-panel="alerts" hidden><section class="panel"><div class="panel-heading"><h3>Sample notification queue</h3><span class="panel-tag">LOCAL DEMO ONLY</span></div><div id="alerts-table" class="signal-list"></div><p class="panel-copy">Acknowledge actions affect only this browser's temporary simulated state. No emails, SMS or Telegram messages are sent.</p></section></div>
+  </main>
+  <section class="foot-cta"><div><span class="eyebrow"><span class="eyebrow-line"></span>EARLY ACCESS</span><h2>Interested in the real Pentagon?</h2><p>Return to the original landing page and use Join Whitelist to request an invitation.</p></div><a class="primary-btn" href="/learn/">Back to landing <span aria-hidden="true">↗</span></a></section>
+  <footer><span>© Pentagon · Concept preview</span><span>Isolated RC1 staging · no production data · no tracking</span></footer>
+</div>
+</body></html>
