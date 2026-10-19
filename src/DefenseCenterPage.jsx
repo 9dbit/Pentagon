@@ -410,9 +410,9 @@ export default function DefenseCenterPage({ isDemo = false }) {
             <button className="submitBtn reportBtn reportBtnPrimary" type="submit" disabled={isDemo}>Add / merge</button>
           </div>
         </form>
-        {notice && <div className="notice">{notice}</div>}
       </section>
       </details>
+      {notice && <div className="notice" role="status" aria-live="polite">{notice}</div>}
 
       <section className="panel defenseReportList">
         <div className="reportListHeader">
@@ -568,7 +568,7 @@ export default function DefenseCenterPage({ isDemo = false }) {
                     <p className="defensePaneIntro">Unfamiliar or unclassified search results. Each one needs manual assessment.</p>
                     <div className="resultList">
                       {nonWhite.map((r) => (
-                        <div key={r.id || `${r.group_id}-${r.domain}-${r.position}-${Math.random()}`} className="resultRow">
+                        <div key={r.id || `${r.group_id}-${r.domain}-${r.position}-${r.page || 0}`} className="resultRow">
                           <div className="hostLine">
                             <div className="resultTopRow">
                               <a target="_blank" href={r.matched_url || "#"} rel="noopener noreferrer">{r.domain || "-"}</a>
