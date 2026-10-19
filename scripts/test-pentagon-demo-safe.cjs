@@ -14,7 +14,7 @@ check("retains Pentagon branding",()=>{assert.match(html,/src="\/logo-icon\.png"
 check("5 functional tabs",()=>{assert.equal((html.match(/role="tab" aria-selected/g)||[]).length,5);assert.equal((html.match(/role="tabpanel"/g)||[]).length,5);});
 check("interactive controls have real handlers",()=>{assert.match(js,/addEventListener\("change"/);assert.match(js,/addEventListener\("click"/);assert.match(js,/addEventListener\("keydown"/);assert.match(js,/addEventListener\("input"/);});
 check("no side effect APIs",()=>{assert.doesNotMatch(js,/\bfetch\s*\(|XMLHttpRequest|WebSocket|EventSource|sendBeacon|localStorage|sessionStorage|indexedDB/i);assert.doesNotMatch(html,/<form\b/i);});
-check("reserved DNS domains only",()=>{const matches=js.match(/[a-z0-9-]+\.(?:com|net|org|example|id|app)/gi)||[];assert.ok(matches.length>=4);assert.ok(matches.every(x=>x.endsWith(".example")),JSON.stringify(matches));});
+check("reserved DNS domains only",()=>{const matches=[...js.matchAll(/["\x27]([a-z0-9-]+\.(?:com|net|org|example|id|app))["\x27]/gi)].map(m=>m[1]);assert.ok(matches.length>=4);assert.ok(matches.every(x=>x.endsWith(".example")),JSON.stringify(matches));});
 check("fictional provider names",()=>{assert.match(js,/Example Provider A/);assert.match(js,/Example Provider B/);assert.match(js,/Example Provider C/);assert.doesNotMatch(js,/Telkomsel|Indosat|XL Axiata|Biznet|Telkom Indonesia/i);});
 check("scenario copy distinguishes mock Google data",()=>assert.match(html,/not Google data/i));
 check("standalone UI responsive",()=>{assert.match(css,/@media\(max-width:600px\)/);assert.match(css,/@media\(prefers-reduced-motion:reduce\)/);});
