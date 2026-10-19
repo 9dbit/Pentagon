@@ -46,7 +46,7 @@ async function run() {
     await check("/api/domains",404,/text\/plain/);
     await check("/../../server/index.js",404,/text\/plain/);
     await check("/learn/",200,/text\/html/,async r=>assert.equal((await r.text()).length,0),{method:"HEAD"});
-    await check("/learn/",405,/text\/plain/,null,{method:"POST"});
+    await check("/learn/",405,/application\/json/,null,{method:"POST"});
     console.log("PENTAGON_PREVIEW_HTTP_TESTS_PASS="+count);
   } finally {
     await new Promise(resolve=>server.close(resolve));
