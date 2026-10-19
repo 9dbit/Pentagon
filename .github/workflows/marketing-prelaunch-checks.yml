@@ -8,6 +8,7 @@ on:
       - "public/learn/**"
       - "public/privacy/**"
       - "public/review/**"
+      - "public/demo/**"
       - "public/whitelist.css"
       - "public/whitelist.js"
       - "Dockerfile.marketing"
@@ -15,6 +16,8 @@ on:
       - "server/marketingWhitelistReview.js"
       - "scripts/marketing-start.sh"
       - "scripts/test-pentagon-review-security.cjs"
+      - "scripts/test-pentagon-demo-safe.cjs"
+      - "scripts/audit-pentagon-marketing-release-gates.cjs"
       - "public/robots.txt"
       - "public/sitemap.xml"
       - "server/marketingStaticRoutes.js"
@@ -61,6 +64,9 @@ jobs:
           node --check server/marketingWhitelistReview.js
           node --check public/review/review.js
           node --check scripts/test-pentagon-review-security.cjs
+          node --check public/demo/demo.js
+          node --check scripts/test-pentagon-demo-safe.cjs
+          node --check scripts/audit-pentagon-marketing-release-gates.cjs
           node --check public/whitelist.js
           sh -n scripts/marketing-start.sh
           node scripts/test-pentagon-marketing-readiness.cjs
@@ -68,6 +74,15 @@ jobs:
           node scripts/test-pentagon-marketing-design-rc1.cjs
           node scripts/test-pentagon-whitelist-smoke.cjs
           node scripts/test-pentagon-review-security.cjs
+          node scripts/test-pentagon-demo-safe.cjs
+      - name: Audit marketing claims and keep release blocked
+        run: node scripts/audit-pentagon-marketing-release-gates.cjs --ci > rc1-release-gate.json
+      - name: Upload non-sensitive NO-GO release evidence
+        uses: actions/upload-artifact@v4
+        with:
+          name: pentagon-marketing-rc1-release-gate
+          path: rc1-release-gate.json
+          retention-days: 14
       - name: Build exactly the deployed Dockerfile, no runtime database
         run: docker build --progress plain --tag pentagon-marketing-smoke:ci .
       - name: Validate real Express routes in a credential-free test container
@@ -98,6 +113,8 @@ jobs:
           curl -fsS http://127.0.0.1:17345/learn/ | grep -q 'Your domain defense'
           curl -fsS http://127.0.0.1:17345/robots.txt | grep -q 'Disallow: /'
           curl -fsS http://127.0.0.1:17345/review/ | grep -q 'Authorized reviewers only'
+          curl -fsS http://127.0.0.1:17345/demo/ | grep -q 'SANDBOX'
+          curl -fsSI http://127.0.0.1:17345/demo/demo.js | grep -qi 'application/javascript'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/whitelist-review/requests)" = "503"
           curl -fsSI http://127.0.0.1:17345/learn/ | grep -qi 'x-robots-tag: noindex'
           curl -fsSI http://127.0.0.1:17345/sitemap.xml | grep -qi 'content-type: application/xml'
