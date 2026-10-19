@@ -6,6 +6,7 @@ on:
       - migration/railway-independence
     paths:
       - "public/learn/**"
+      - "public/campaign/**"
       - "public/privacy/**"
       - "public/review/**"
       - "public/demo/**"
@@ -20,6 +21,7 @@ on:
       - "scripts/verify-pentagon-whitelist-backup-offline.cjs"
       - "scripts/marketing-start.sh"
       - "scripts/test-pentagon-review-security.cjs"
+      - "scripts/test-pentagon-marketing-campaign.cjs"
       - "scripts/test-pentagon-demo-safe.cjs"
       - "scripts/audit-pentagon-marketing-release-gates.cjs"
       - "public/robots.txt"
@@ -72,6 +74,7 @@ jobs:
           node --check scripts/verify-pentagon-whitelist-backup-offline.cjs
           node --check public/review/review.js
           node --check scripts/test-pentagon-review-security.cjs
+          node --check scripts/test-pentagon-marketing-campaign.cjs
           node --check public/demo/demo.js
           node --check scripts/test-pentagon-demo-safe.cjs
           node --check scripts/audit-pentagon-marketing-release-gates.cjs
@@ -82,6 +85,7 @@ jobs:
           node scripts/test-pentagon-marketing-design-rc1.cjs
           node scripts/test-pentagon-whitelist-smoke.cjs
           node scripts/test-pentagon-review-security.cjs
+          node scripts/test-pentagon-marketing-campaign.cjs
           node scripts/test-pentagon-encrypted-backup.cjs
           node scripts/test-pentagon-demo-safe.cjs
       - name: Audit marketing claims and keep release blocked
@@ -123,6 +127,8 @@ jobs:
           curl -fsS http://127.0.0.1:17345/robots.txt | grep -q 'Disallow: /'
           curl -fsS http://127.0.0.1:17345/review/ | grep -q 'Authorized reviewers only'
           curl -fsS http://127.0.0.1:17345/demo/ | grep -q 'SANDBOX'
+          curl -fsS http://127.0.0.1:17345/campaign/ | grep -q 'EARLY ACCESS PREVIEW'
+          test "$(curl -s -o /dev/null -w '%{http_code}' -L http://127.0.0.1:17345/campaign)" = "200"
           curl -fsSI http://127.0.0.1:17345/demo/demo.js | grep -qi 'application/javascript'
           test "$(curl -s -o /dev/null -w '%{http_code}' http://127.0.0.1:17345/api/whitelist-review/requests)" = "503"
           test "$(curl -s -o /dev/null -w '%{http_code}' -X POST http://127.0.0.1:17345/api/whitelist-review/backup)" = "503"

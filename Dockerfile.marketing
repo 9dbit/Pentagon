@@ -6,6 +6,7 @@ COPY --chown=node:node server/marketingWhitelistReview.js server/marketingWhitel
 COPY --chown=node:node server/marketingWhitelistBackup.js server/marketingWhitelistBackup.js
 COPY --chown=node:node scripts/marketing-start.sh scripts/marketing-start.sh
 COPY --chown=node:node public/learn/index.html public/learn/index.html
+COPY --chown=node:node public/campaign/index.html public/campaign/index.html
 COPY --chown=node:node public/demo/index.html public/demo/index.html
 COPY --chown=node:node public/demo/demo.css public/demo/demo.css
 COPY --chown=node:node public/demo/demo.js public/demo/demo.js

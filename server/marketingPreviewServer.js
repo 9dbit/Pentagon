@@ -9,6 +9,7 @@ const {reviewRouter}=require("./marketingWhitelistReview");
 const ROOT=path.resolve(__dirname,"../public");
 const MIME=Object.freeze({
  "/learn/":["learn/index.html","text/html; charset=utf-8"],
+ "/campaign/":["campaign/index.html","text/html; charset=utf-8"],
  "/demo/":["demo/index.html","text/html; charset=utf-8"],
  "/demo/demo.css":["demo/demo.css","text/css; charset=utf-8"],
  "/demo/demo.js":["demo/demo.js","application/javascript; charset=utf-8"],
@@ -135,8 +136,8 @@ function createServer(opts={}){
    res.setHeader("Allow","GET, HEAD");
    return respond(res,405,JSON.stringify({error:"Method not allowed"}));
   }
-  if(pathname==="/"||pathname==="/learn"||pathname==="/privacy"||pathname==="/review"||pathname==="/demo"){
-   res.writeHead(302,{"Location":pathname==="/privacy"?"/privacy/":pathname==="/review"?"/review/":pathname==="/demo"?"/demo/":"/learn/"});
+  if(pathname==="/"||pathname==="/learn"||pathname==="/privacy"||pathname==="/review"||pathname==="/demo"||pathname==="/campaign"){
+   res.writeHead(302,{"Location":pathname==="/privacy"?"/privacy/":pathname==="/review"?"/review/":pathname==="/demo"?"/demo/":pathname==="/campaign"?"/campaign/":"/learn/"});
    return res.end();
   }
   if(pathname==="/health"){
