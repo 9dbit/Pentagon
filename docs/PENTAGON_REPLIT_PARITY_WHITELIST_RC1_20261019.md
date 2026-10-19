@@ -37,3 +37,26 @@
 - `node scripts/test-pentagon-marketing-preview.cjs`
 - `docker build -f Dockerfile.marketing -t pentagon-rc1-static .` (marketing-only image)
 - CI must show all isolated Docker/web checks successful before staging pin update.
+
+## Live staging verification completed
+- Marketing-only CI GitHub run https://github.com/9dbit/Pentagon/actions/runs/39188343683: **SUCCESS**, including original source parity assertions, local whitelist persistence / consent / dedup tests, Docker images and HTTP smoke.
+- Preview image pinned to `a10322ad5388092510cd7bebc9fca0438b5aa578`, Railway isolated project `Pentagon Marketing RC1 Preview`, environment staging, service `pentagon-marketing-static-rc1`.
+- Staging has **dedicated 512 MB volume** `/data` (`pentagon-rc1-whitelist-private`) and explicitly enabled only `WHITELIST_ENABLED=true` and `WHITELIST_DATA_DIR=/data/whitelist`; no production database or scheduler is connected.
+- Staging checks: `/learn/` 200 HTML, `/privacy/` 200 HTML, original CSS 200, PNG logo 200, `/robots.txt` 200 text/plain, `/health` 200, `/api/auth/me` 404; every served page has `X-Robots-Tag: noindex`.
+- Live `POST /api/whitelist` using synthetic `@example.test` only: first request `202 pending`, repeat `202 pending`, and actual mobile Chrome modal submission `202 pending`, consent mandatory. All request data remains in isolated staging volume; no actual user leads tested.
+- Browser image QA: 4/4 desktop 1440, phone 390, phone 320 and tablet 768 PASS. No horizontal overflow; exact original seven feature headings retained, logo/images loaded; modal opens and closes; privacy link present.
+- Real source-of-truth screenshots can be compared below with the staging implementation. Animated Replit background was represented by unchanged source canvas PNG frames; no original React application or private API is executed in staging.
+
+### Replit original versus RC1 staging screenshots
+| View | Original published Replit | Marketing RC1 staging |
+|---|---|---|
+| Desktop | [Original 1440](marketing-rc1-visual/replit-original-desktop.png) | [RC1 1440](marketing-rc1-visual/replit-parity-desktop.png) |
+| Mobile | [Original 390](marketing-rc1-visual/replit-original-mobile.png) | [RC1 390](marketing-rc1-visual/replit-parity-phone390.png) |
+| Small mobile | Original live source | [RC1 320](marketing-rc1-visual/replit-parity-phone320.png) |
+| Whitelist modal | New feature | [Mobile modal](marketing-rc1-visual/replit-whitelist-modal-phone390.png) |
+
+### Remaining sign-off requirements
+1. The original marketing copy is cloned faithfully, including strong numeric and capability claims. Validate them with provider/test evidence before public advertising. This preview is **not** evidence of true 99.9% uptime or nationwide 6+ ISP coverage.
+2. Decide moderation/operations for pending whitelist requests, including approved staff review/export/deletion and eventual membership/access activation. **No whitelist approval dashboard exists yet**; no automatic admin access.
+3. Validate contact and demo destinations, legal/privacy sign-off, owner visual sign-off, exact production serving architecture for `/api/whitelist`, rollback and single-source scheduling. This staging-only service does not implement the production API.
+4. PR #27 stays Draft/unmerged. PR #26 migration stays Draft. Pentagon production and Replit are unchanged.
