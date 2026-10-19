@@ -8,7 +8,7 @@ const campaign=fs.readFileSync(path.join(pub,"campaign/index.html"),"utf8");
 const original=fs.readFileSync(path.join(pub,"learn/index.html"),"utf8");
 let passes=0;
 const check=(n,fn)=>{try{fn();passes++;}catch(e){throw Error("MARKETING_CAMPAIGN_"+n+": "+e.message)}};
-check("original Replit design immutable",()=>assert.equal(crypto.createHash("sha1").update(original).digest("hex"),"6a037a88ef3a8deab3113513dc234495c7ccad00"));
+check("original Replit design immutable",()=>assert.equal(crypto.createHash("sha1").update(Buffer.concat([Buffer.from("blob "+Buffer.byteLength(original)+"\0"),Buffer.from(original)])).digest("hex"),"6a037a88ef3a8deab3113513dc234495c7ccad00"));
 check("original card layout retained",()=>{assert.equal((campaign.match(/class="lp-feature-card"/g)||[]).length,7);assert.match(campaign,/class="lp-mockup-wrap"/);assert.match(campaign,/class="lp-hero-h1"/);});
 check("same branding",()=>{assert.match(campaign,/src="\/logo-icon\.png"/);assert.match(campaign,/src="\/logo-text\.png"/);});
 check("all demo CTAs functional",()=>{assert.doesNotMatch(campaign,/demo\.pentagon\.quest/);assert.ok((campaign.match(/href="\/demo\/"/g)||[]).length>=4);});
