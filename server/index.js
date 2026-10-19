@@ -260,16 +260,15 @@ app.get("/api/ai-endpoint-status", requireAdmin, async (req, res) => {
 
 app.use((err, req, res, next) => { console.error(err); res.status(500).json({ error: err.message || "Internal server error" }); });
 const distPath = path.join(__dirname, "../dist");
-const importedFrontendIndex = path.join(distPath, "replit-index.html");
-app.get("/", (req, res, next) => {
-  if (fs.existsSync(importedFrontendIndex)) return res.sendFile(importedFrontendIndex);
-  next();
-});
+const builtFrontendIndex = path.join(distPath, "index.html");
+const legacyFrontendIndex = path.join(distPath, "replit-index.html");
 app.use(express.static(distPath, { index: false }));
 app.get("*", (req, res) => {
-  if (fs.existsSync(importedFrontendIndex)) return res.sendFile(importedFrontendIndex);
-  const indexPath = path.join(distPath, "index.html");
-  if (fs.existsSync(indexPath)) return res.sendFile(indexPath);
+  // The build already produced the current React UI, including its latest
+  // Defence Center and Google Rank reports. The legacy Replit HTML contains
+  // hardcoded stale asset hashes and must not supersede the compiled index.
+  if (fs.existsSync(builtFrontendIndex)) return res.sendFile(builtFrontendIndex);
+  if (fs.existsSync(legacyFrontendIndex)) return res.sendFile(legacyFrontendIndex);
   res.json({ ok: true, message: "API server is running. Run npm run client for the dashboard during development." });
 });
 const port = process.env.PORT || 3000;

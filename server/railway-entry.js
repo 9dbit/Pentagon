@@ -13,7 +13,9 @@ function expressNoCache(...args) {
   app.use((req, res, next) => {
     const requestPath = String(req.path || req.url || "").split("?")[0];
     const isAuth = requestPath.startsWith("/api/auth/");
-    const isHtmlShell = requestPath === "/" || requestPath === "/index.html" || requestPath.endsWith(".html");
+    const requestsHtml = req.method === "GET" && String(req.headers.accept || "").includes("text/html");
+    const isHtmlShell = requestPath === "/" || requestPath === "/index.html" || requestPath.endsWith(".html") ||
+      (requestsHtml && !requestPath.startsWith("/api/"));
 
     if (isAuth || isHtmlShell) {
       res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate, max-age=0");
