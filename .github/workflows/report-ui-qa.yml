@@ -9,6 +9,9 @@ on:
       - "src/GoogleRankReport.jsx"
       - "src/DefenseCenterPage.jsx"
       - "src/report-layout.css"
+      - "server/index.js"
+      - "server/railway-entry.js"
+      - "scripts/test-pentagon-production-ui-shell.cjs"
       - "scripts/test-pentagon-report-layout.cjs"
       - ".github/workflows/report-ui-qa.yml"
 permissions:
@@ -35,6 +38,8 @@ jobs:
         run: |
           test -s dist/index.html
           test -d dist/assets
+      - name: Verify production HTML serves newly compiled report UI
+        run: node scripts/test-pentagon-production-ui-shell.cjs
       - name: Confirm no production deployment
         run: |
           echo "UI branch check only. No deployment and no database access."
