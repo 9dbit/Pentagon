@@ -53,3 +53,15 @@ Scope: Replit-parity landing page in GitHub draft PR #27 (`feature/pentagon-mark
 3. Marketing/legal signs off privacy, public waitlist data handling and outreach messaging.
 4. Build an approved production-facing independent marketing API (do not reuse admin credentials or the Replit app runtime); test failure rollback and domain behavior.
 5. Re-run CI, visual QA, E2E and release checklist, and obtain an explicit **FINAL GO** before merging or publishing production.
+
+
+## RC1 demo sandbox progress, 19 October 2026
+
+- GitHub CI run [39199373320](https://github.com/9dbit/Pentagon/actions/runs/39199373320): **SUCCESS**, including Docker marketing image and code isolation tests.
+- New isolated interactive demo preview: https://pentagon-marketing-static-rc1-staging.up.railway.app/demo/ . **Synthetic data only**; no production APIs, DB, scheduler, provider nodes, Google rank requests or customer accounts.
+- Chrome visual/functional QA PASS at 1440px desktop, 390px phone and 320px phone: no horizontal overflow, 5 tabs, 3 scenario replays, domain filter, local alert acknowledgement; no external/API requests. Landing and reviewer routes remained operational after deployment.
+- Staging HTTP confirms `/demo/` 200 HTML, `/demo/demo.css` 200 CSS, `/demo/demo.js` 200 JS, `/learn/` and `/review/` 200, reviewer list unauthenticated 401, production API `/api/health` absent (404), and `X-Robots-Tag:noindex` remains.
+- Original Replit landing content/CTA is **unchanged**, `public/learn/index.html` blob SHA `6a037a88ef3a8deab3113513dc234495c7ccad00`. In particular, `demo.pentagon.quest` is **still unresolved**; the new sandbox does not silently intercept or replace the original Try Demo link.
+- Screenshot evidence: [Demo desktop](marketing-rc1-visual/demo-lab-desktop1440.png), [Demo mobile 390](marketing-rc1-visual/demo-lab-phone390.png), [Demo mobile 320](marketing-rc1-visual/demo-lab-phone320.png).
+- Every green CI and QA check is **engineering readiness only**, not proof of the live marketing claims, pricing, legal approval, consent policy, backend cutover or final public-domain GO. All original public release blockers remain OPEN.
+- PR #27 and #26 remain Draft; Railway Pentagon production services online, no merge or DNS changes.

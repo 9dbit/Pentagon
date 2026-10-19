@@ -66,3 +66,12 @@ A green CI run is **not** permission to publish production. Final GO requires:
 
 No PR merge, Pentagon production deploy, DNS change or Admin Whitelist change is
 authorized by this sandbox.
+
+## Post-deploy QA record (19 Oct 2026)
+
+- CI: [Pentagon Marketing Preview run 39199373320](https://github.com/9dbit/Pentagon/actions/runs/39199373320) PASS.
+- Staging URL: https://pentagon-marketing-static-rc1-staging.up.railway.app/demo/
+- Real Chrome tests: 1440, 390 and 320px viewport PASS, no overflow; domain search, scenario replay, alert acknowledgement and navigation all worked. Original landing and reviewer preserved, no non-staging requests.
+- PNG evidence: [Desktop](marketing-rc1-visual/demo-lab-desktop1440.png), [Phone 390](marketing-rc1-visual/demo-lab-phone390.png), [Phone 320](marketing-rc1-visual/demo-lab-phone320.png).
+- Original landing blob SHA unchanged: `6a037a88ef3a8deab3113513dc234495c7ccad00`.
+- Public demo hostname DNS unresolved. Do not change original marketing CTA until approval.
