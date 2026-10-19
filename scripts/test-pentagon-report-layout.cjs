@@ -25,4 +25,7 @@ check("pill buttons and simple sections",()=>{assert.match(css,/border-radius:99
 check("responsive tablet and phone",()=>{for(const t of ["@media(max-width:980px)","@media(max-width:700px)","@media(max-width:480px)"])assert.ok(css.includes(t));});
 check("mobile prevents global table expansion",()=>{assert.match(css,/nodeRankGrid \.tableWrap\{overflow-x:auto/);assert.match(css,/min-width:max-content/);assert.match(css,/rankReportDomainName\{grid-column:1\/-1/);});
 check("mobile actions wrap",()=>{assert.match(css,/rankReportGroupActions\{justify-content:flex-start;width:100%\}/);assert.match(css,/flex-wrap:wrap/);});
+check("defence metric labels survive dashboard CSS",()=>{assert.match(css,/defenseMetrics \.card:nth-child\(2\)>span/);assert.match(css,/content:none!important/);});
+check("mobile defence header flex basis reset",()=>{assert.match(css,/flex:0 0 auto!important/);assert.match(css,/height:auto/);});
+check("page transitions reset scrolling",()=>assert.match(app,/function goTo\(p\) \{ setPage\(p\); window.scrollTo\(0, 0\); \}/));
 console.log("PENTAGON_REPORT_UI_STATIC_TESTS_PASS="+pass);

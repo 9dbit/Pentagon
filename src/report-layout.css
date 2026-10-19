@@ -302,3 +302,33 @@
 @media(prefers-reduced-motion:reduce){
   .app main .reportSurface button.reportBtn{transition:none!important}
 }
+
+/* UI screenshot parity fixes: legacy dashboard cards can rewrite the second
+   metric label to "NORMAL". Restore the real Defence Center report label. */
+.app main .defensePage .cards.defenseMetrics .card:nth-child(2)>span{
+  font-size:11px!important;line-height:1.4!important;
+}
+.app main .defensePage .cards.defenseMetrics .card:nth-child(2)>span::after{
+  content:none!important;display:none!important;
+}
+/* Don't reintroduce the old solid rectangle behind every keyword heading. */
+.app main .defensePage .kwHead{
+  background:transparent!important;border:0!important;box-shadow:none!important;
+  padding:0!important;margin-bottom:18px!important;
+}
+.app main .defensePage .tableWrap thead,
+.app main .defensePage .tableWrap th{
+  background:transparent!important;
+}
+.app main .defensePage .subGroupLabel{border-bottom:0!important}
+/* Original @media defense rules use flex-direction:column on phone. A
+   flex-basis of 370px becomes VERTICAL in that mode and leaves a giant gap.
+   Reset basis explicitly when the report header stacks. */
+@media(max-width:700px){
+  .app main .defensePage>header{flex-direction:column;align-items:stretch;gap:14px}
+  .app main .defensePage>header .brand{
+    flex:0 0 auto!important;width:100%;max-width:100%;
+    min-height:0;height:auto;
+  }
+  .app main .defensePage>header .toolbar.reportHeaderActions{flex:0 0 auto}
+}

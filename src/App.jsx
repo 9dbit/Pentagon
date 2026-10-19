@@ -304,7 +304,7 @@ function Dashboard({ onLogout, isDemo = false }) {
   async function deleteProjectTg(projectName) { await api(`/api/project-telegram/${encodeURIComponent(projectName)}`, { method: "DELETE" }); const updated = await api("/api/project-telegram"); setProjectTgMappings(Array.isArray(updated) ? updated : []); setProjectTgEdits((prev) => { const n = { ...prev }; delete n[projectName]; return n; }); setNotice("Project Telegram removed."); }
   async function logout() { await api("/api/auth/logout", { method: "POST" }); onLogout(); }
   function csv(path) { window.open(path, "_blank"); }
-  function goTo(p) { setPage(p); }
+  function goTo(p) { setPage(p); window.scrollTo(0, 0); }
   function nav(p) { goTo(p); setMenuOpen(false); }
   function renderNav() {
     return (
