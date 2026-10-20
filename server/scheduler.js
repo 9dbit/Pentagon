@@ -938,6 +938,7 @@ async function runScopedTrustPositifChecks() {
   scopedWatch.lastStartedAt = new Date().toISOString();
   scopedWatch.lastError = "";
   scopedWatch.scanned = 0;
+  console.log("[TrustPositif Scoped] cycle started");
   try {
     // Read-only readiness first. Fails closed on missing migration tables.
     const { rows: missing } = await pool.query(
@@ -999,6 +1000,11 @@ async function runScopedTrustPositifChecks() {
   } finally {
     scopedWatch.running = false;
     scopedWatch.lastFinishedAt = new Date().toISOString();
+    // This heartbeat also describes idle and node-waiting runs without
+    // revealing domain names, customer records or configuration secrets.
+    console.log("[TrustPositif Scoped] heartbeat status=" + scopedWatch.lastResult +
+      " scanned=" + scopedWatch.scanned + " active_nodes=" + scopedWatch.activeNodes +
+      " whitelist_imported=" + scopedWatch.imported);
   }
 }
 let scopedTimerStarted = false;
