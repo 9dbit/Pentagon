@@ -8,6 +8,7 @@ const { getActiveNodes, checkViaNode } = require("./nodeChecker");
 const { classifyReasonType, reasonTypeLabel } = require("./reasonClassifier");
 const { checkAfterNodeConsensus, syncAdminWhitelist } = require("./trustpositifWatch");
 const { enqueueTransition, formatEventMessage, drainOutbox } = require("./trustpositifAlertOutbox");
+const { auditWhitelistReadiness } = require("./trustpositifReadiness");
 const { isAcknowledged, clearAcknowledged } = require("./noticeState");
 const { checkGroup: rankCheckGroup } = require("./rankRoutes");
 
@@ -922,7 +923,7 @@ async function runAutoRankChecks() {
 const scopedWatch = {
   enabled: false, running: false, lastStartedAt: null, lastFinishedAt: null,
   lastResult: "not_started", activeNodes: 0, scanned: 0, imported: 0, lastError: "",
-  cursor: 0
+  cursor: 0, readiness: null
 };
 const scopedWatchIntervalMs = Math.max(120000, Number(process.env.TRUSTPOSITIF_SCOPED_INTERVAL_MS || 300000));
 const scopedWatchBatchSize = Math.min(20, Math.max(1, Number(process.env.TRUSTPOSITIF_SCOPED_BATCH_SIZE || 4)));
@@ -968,8 +969,24 @@ async function runScopedTrustPositifChecks() {
     if (!total) {
       scopedWatch.lastResult = "no_active_domains";
       scopedWatch.cursor = 0;
+      try {
+        scopedWatch.readiness = await auditWhitelistReadiness(pool, "admin");
+        // Aggregate counts only, no customer domains or environment secrets.
+        const r = scopedWatch.readiness;
+        console.warn("[TrustPositif Scoped] no active targets; reason=" + r.reason +
+          " admin_inactive=" + r.domains.inactive +
+          " rank_whitelisted=" + r.whitelist.valid_distinct +
+          " unimported=" + r.whitelist.unimported +
+          " cross_tenant_conflicts=" + r.whitelist.cross_tenant_conflicts +
+          " recent_independent_providers=" + r.nodes.online_independent_providers);
+      } catch (error) {
+        scopedWatch.readiness = { reason:"inventory_unavailable",read_only:true };
+        console.warn("[TrustPositif Scoped] readiness inventory unavailable; code=" +
+          String(error.code || "DATABASE_QUERY_ERROR").slice(0,30));
+      }
       return { status: scopedWatch.lastResult };
     }
+    scopedWatch.readiness = null;
     if (scopedWatch.cursor >= total) scopedWatch.cursor = 0;
     const { rows: domains } = await pool.query(
       "SELECT id,domain,project_name,tenant,global_status FROM domains " +

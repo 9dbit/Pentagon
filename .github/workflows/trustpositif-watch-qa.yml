@@ -12,6 +12,7 @@ on:
       - "server/trustpositifRoutes.js"
       - "server/scheduler.js"
       - "server/trustpositifAlertOutbox.js"
+      - "server/trustpositifReadiness.js"
       - "server/nodeChecker.js"
       - "server/index.js"
       - "src/TrustPositif*"
@@ -19,6 +20,7 @@ on:
       - "src/App.jsx"
       - "scripts/test-pentagon-trustpositif-watch-pg.cjs"
       - "scripts/test-pentagon-trustpositif-outbox-pg.cjs"
+      - "scripts/test-pentagon-trustpositif-readiness-pg.cjs"
       - ".github/workflows/trustpositif-watch-qa.yml"
 permissions:
   contents: read
@@ -62,17 +64,21 @@ jobs:
           node --check server/nodeChecker.js
           node --check server/scheduler.js
           node --check server/trustpositifAlertOutbox.js
+          node --check server/trustpositifReadiness.js
           node --check server/index.js
           node --check server/railway-entry.js
           node --check scripts/test-pentagon-trustpositif-source-backoff.cjs
           node --check scripts/test-pentagon-trustpositif-watch-pg.cjs
           node --check scripts/test-pentagon-trustpositif-outbox-pg.cjs
+          node --check scripts/test-pentagon-trustpositif-readiness-pg.cjs
       - name: Source circuit breaker and scoped worker security contract
         run: node scripts/test-pentagon-trustpositif-source-backoff.cjs
       - name: Postgres synthetic whitelist and two-node consensus integration
         run: node scripts/test-pentagon-trustpositif-watch-pg.cjs
       - name: Postgres durable TrustPositif notification outbox
         run: node scripts/test-pentagon-trustpositif-outbox-pg.cjs
+      - name: PostgreSQL whitelist reconciliation readiness (strictly read only)
+        run: node scripts/test-pentagon-trustpositif-readiness-pg.cjs
       - name: Compile current production UI
         run: npm run build
       - name: Verify compiled SPA shell
