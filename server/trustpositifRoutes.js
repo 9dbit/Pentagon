@@ -590,8 +590,9 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
       recovered: domains.filter(d => d.recovered_at && d.listed === false).length,
       pending: domains.filter(d => d.last_anomaly_at && !d.verified_at).length
     };
-    const { deliverySummary } = require("./trustpositifAlertOutbox");
+    const { deliverySummary, recentNotificationLog } = require("./trustpositifAlertOutbox");
     const delivery = await deliverySummary(tenant).catch(() => ({ unavailable:true }));
+    const notificationLog = await recentNotificationLog(tenant).catch(() => []);
     const nodeHealth = await pool.query(
       "SELECT COUNT(*)::int AS total, " +
       "COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active, " +
@@ -604,6 +605,7 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
     res.json({
       ok: true, min_nodes: MIN_NODES, cache_ttl_minutes: Math.round(TTL_MS / 60000),
       summary, domains, node_health:nodeHealth, notification_delivery:delivery,
+      notification_log:notificationLog,
       worker: require("./scheduler").getScopedWatchHealth(), generated_at: new Date().toISOString()
     });
   } catch (err) { next(err); }
