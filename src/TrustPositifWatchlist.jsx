@@ -22,9 +22,22 @@ function classify(row) {
     return {key:"verifying",text:"Verifying / menunggu registry"};
   if (recent && votes > 0 && row.listed !== true) return {key:"suspected",text:"Suspected / sinyal jaringan"};
   if (row.listed === true) return {key:"verifying",text:"Registry listed, status menunggu"};
-  if (row.listed === false) return {key:"healthy",text:"Tidak terdaftar di registry"};
+  if (row.listed === false && row.global_status === "working" &&
+      since(row.last_node_check_at) < 20 * 60 * 1000 && !recent)
+    return {key:"healthy",text:"Network healthy · registry clear"};
+  if (row.listed === false) return {key:"unknown",text:"Registry clear · jaringan belum terkonfirmasi"};
   return {key:"unknown",text:"Unknown / belum diverifikasi"};
 }
+const readinessLabels = {
+  ready_to_scan:"Siap memeriksa domain admin dari dua provider sehat",
+  no_approved_admin_domain:"Belum ada domain admin aktif yang disetujui",
+  eligible_rank_whitelist_pending_sync:"Whitelist Google Rank menunggu sinkronisasi",
+  admin_domains_disabled:"Domain administrator belum diaktifkan",
+  review_cross_tenant_conflicts:"Konflik kepemilikan domain antar-tenant harus ditinjau",
+  review_invalid_whitelist_names:"Nama domain pada whitelist perlu diperbaiki",
+  waiting_two_healthy_independent_providers:"Menunggu dua provider checker yang sehat dan independen",
+  inventory_unavailable:"Inventarisasi database belum tersedia"
+};
 const workerLabel = worker => {
   if (!worker?.enabled) return "Nonaktif";
   if (worker.lastResult === "complete") return "Aktif, siklus selesai";
@@ -93,6 +106,7 @@ export default function TrustPositifWatchlist() {
   const counts = all.reduce((obj,row)=>{const key=classify(row).key;obj[key]=(obj[key]||0)+1;return obj;},{});
   const nodeHealth=data?.node_health || {};
   const delivery=data?.notification_delivery || {};
+  const readiness=data?.readiness || null;
   function resetFilters(setter,value) {setter(value);setVisibleCount(100);}
 
   return <section className="tpWatchReport" aria-label="Whitelisted domain TrustPositif monitoring">
@@ -112,6 +126,22 @@ export default function TrustPositifWatchlist() {
       Node sehat 20 menit: {nodeHealth.recently_healthy ?? "—"} ·
       Siklus terakhir: {displayTime(data?.worker?.lastFinishedAt)}
     </p>
+    {readiness && readiness.reason !== "ready_to_scan" && <section className="tpWatchReadiness"
+      aria-label="Whitelist reconciliation readiness" role="status">
+      <div><b>Whitelist preflight</b>
+        <p>{readinessLabels[readiness.reason] || "Status whitelist belum dapat dipastikan"}. Pemeriksaan ini hanya membaca database, tanpa impor, aktivasi domain, atau alarm Telegram.</p>
+      </div>
+      {readiness.domains && readiness.whitelist && readiness.nodes && <div className="tpWatchReadinessCounts">
+        <span>Admin aktif <b>{readiness.domains.active}</b></span>
+        <span>Admin nonaktif <b>{readiness.domains.inactive}</b></span>
+        <span>Rank whitelist valid <b>{readiness.whitelist.valid_distinct}</b></span>
+        <span>Belum tersinkron <b>{readiness.whitelist.unimported}</b></span>
+        <span>Konflik tenant <b>{readiness.whitelist.cross_tenant_conflicts}</b></span>
+        <span>Nama tidak valid <b>{readiness.whitelist.invalid_names}</b></span>
+        <span>Provider sehat independen <b>{readiness.nodes.online_independent_providers}</b></span>
+      </div>}
+      <small>Status admin perlu validasi kepemilikan. Data tenant demo dan impor migrasi yang belum disetujui tidak diaktifkan otomatis.</small>
+    </section>}
     <div className="tpWatchMetrics">
       <div><span>Domain whitelist</span><strong>{data?.summary?.total ?? "—"}</strong></div>
       <div><span>Aktif dimonitor</span><strong>{data?.summary?.monitored ?? "—"}</strong></div>
