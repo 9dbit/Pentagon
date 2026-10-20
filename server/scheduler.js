@@ -668,7 +668,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     }
 
     const registryCheck = await maybeAddProviderRegistryResult(domain, results, nodes);
-    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked) {
+    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked && !registryCheck.confirmedRecovered) {
       // Inconclusive / not listed / fewer than two credible node findings:
       // preserve existing global status. Never emit a false block alert.
       return;
@@ -687,7 +687,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     const effectiveResults = domainResults.length ? domainResults : results;
 
     const newStatus = registryCheck.confirmedBlocked || registryCheck.holdBlocked
-      ? "blocked" : calculateGlobalStatus(effectiveResults);
+      ? "blocked" : registryCheck.confirmedRecovered
+        ? "working" : calculateGlobalStatus(effectiveResults);
     const oldStatus = domain.global_status || "unknown";
 
     if (normalizeStatus(newStatus) !== "blocked") {
@@ -695,8 +696,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
       await clearRecurringAlert(domain.id);
     }
 
-    const decision = registryCheck.confirmedBlocked
-      ? { apply: true, value: "blocked", count: 1, max: 1 }
+    const decision = registryCheck.confirmedBlocked || registryCheck.confirmedRecovered
+      ? { apply: true, value: newStatus, count: 1, max: 1 }
       : decide(domain.id, oldStatus, newStatus, retryLimit);
 
     if (!decision.apply) {
