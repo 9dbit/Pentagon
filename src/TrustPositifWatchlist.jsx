@@ -177,6 +177,7 @@ export default function TrustPositifWatchlist() {
             <div className="tpWatchDetailBody">
               <div><b>Official source:</b> {row.source || "Not verified"}</div>
               <div><b>Verified at:</b> {displayTime(row.verified_at)}</div>
+              <div><b>First node anomaly:</b> {displayTime(row.first_anomaly_at)}</div>
               <div><b>First blocked:</b> {displayTime(row.detected_at)}</div>
               <div><b>Registry delisted:</b> {displayTime(row.recovered_at)}</div>
               <div><b>Last anomaly:</b> {displayTime(row.last_anomaly_at)}</div>
