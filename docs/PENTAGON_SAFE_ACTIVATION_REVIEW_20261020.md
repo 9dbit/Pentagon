@@ -18,6 +18,20 @@ node "C:\Users\MARKSTUDIOS\Pentagon-Migration-Audit\scripts\pentagon-activation-
 
 The private JSON output contains each target ID, exact candidate source IDs and fleets, the input report's SHA-256 fingerprint, quarantine status and non-executable review options. Do not commit its real contents or credentials. Existing output cannot be overwritten.
 
+## Independent administrator monitor-only preview (additional local check)
+
+The original source-vs-target inventory shows **2 source admin domain rows, 16 demo domain rows, 8 target demo domain rows and 0 target admin domain rows**. Both source admin rows are active and describe **the same normalized hostname from two distinct source fleets**. They can be viewed as a single *hostname-level, monitor-only* candidate without importing or merging either fleet's historical data. This is NOT approval to insert that hostname into production.
+
+The local-only script starts the previously restored local PostgreSQL cluster on 127.0.0.1:55432 under a verified archived source backup checksum, opens separate repeatable-read READ ONLY sessions on source and target, verifies DB identity and directory, computes canonical-host occupancy and fleet provenance, and stops the cluster. The private output includes the actual domain and project labels for the owner's manual review; never copy or upload that report to public repositories.
+
+```powershell
+node "C:\Users\MARKSTUDIOS\Pentagon-Migration-Audit\scripts\pentagon-admin-activation-preview.cjs" --out "C:\Users\MARKSTUDIOS\Pentagon-Migration-Audit\reconciliation-reports\admin-monitor-only-preview-20261020.json"
+```
+
+Observed local result: SOURCE_ADMIN=2, SOURCE_ADMIN_UNIQUE_HOSTS=1, TARGET_ADMIN=0, MONITOR_ONLY_CANDIDATE_HOSTS=1, HISTORICAL_MULTI_FLEET_ADMIN_HOSTS=1, ACTIVATION_ALLOWED=false.
+
+A hostname is excluded if it is invalid, disabled in any source fleet, missing its fleet label, duplicated within the same source fleet, reused across source tenants, or already occupied by any target tenant. Preserving both source fleet IDs as *provenance* is not the same as merging their rows. Actual activation requires a current owner attestation, a fresh correct-target backup/inventory, explicit protection against concurrent name claims and an authorized separate release. Never import old tasks or histories as part of this monitor-only activation.
+
 ## Optional manual attestations
 
 Use a private JSON file with the exact report_sha256 in the generated review, non-empty reviewed_by/review_ticket, and a genuine reviewed_at_utc. The following values are SYNTHETIC EXAMPLES ONLY:
