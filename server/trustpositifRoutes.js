@@ -7,6 +7,7 @@ const readline = require("readline");
 const { once } = require("events");
 const { pool } = require("./db");
 const { listWatchlist, MIN_NODES, TTL_MS } = require("./trustpositifWatch");
+const { auditWhitelistReadiness } = require("./trustpositifReadiness");
 const { ensureNodeTable } = require("./nodeRoutes");
 const { ensureTaskTable, enqueueNodeTask, waitForNodeTask } = require("./agentPollRoutes");
 
@@ -576,10 +577,25 @@ router.post("/trustpositif/nodes/:id/test", async (req, res, next) => {
   }
 });
 
+// Explicit, read-only production preflight. Demo tenants cannot inspect the
+// administrative domain inventory or cross-tenant collision totals.
+router.get("/trustpositif/readiness", async (req, res, next) => {
+  if (req.session?.isDemo || (req.session?.tenant || req.tenant || "admin") !== "admin")
+    return res.status(403).json({ error:"ADMIN_ONLY" });
+  try {
+    res.set("Cache-Control","no-store");
+    res.json({ ok:true, ...(await auditWhitelistReadiness(pool,"admin")) });
+  } catch (err) { next(err); }
+});
+
 router.get("/trustpositif/watchlist", async (req, res, next) => {
   try {
     const tenant = req.session?.tenant || req.tenant || "admin";
     const domains = await listWatchlist(tenant);
+    const readiness = tenant === "admin" && !req.session?.isDemo
+      ? await auditWhitelistReadiness(pool,"admin").catch(error =>
+          ({ reason:"inventory_unavailable",read_only:true,code:String(error.code || "QUERY_ERROR").slice(0,30) }))
+      : null;
     const summary = {
       total: domains.length,
       rank_whitelisted: domains.filter(d => d.rank_whitelisted).length,
@@ -604,7 +620,7 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
       ({total:0,active:0,recently_healthy:0,last_seen_at:null,unavailable:true}));
     res.json({
       ok: true, min_nodes: MIN_NODES, cache_ttl_minutes: Math.round(TTL_MS / 60000),
-      summary, domains, node_health:nodeHealth, notification_delivery:delivery,
+      summary, domains, readiness, node_health:nodeHealth, notification_delivery:delivery,
       notification_log:notificationLog,
       worker: require("./scheduler").getScopedWatchHealth(), generated_at: new Date().toISOString()
     });
