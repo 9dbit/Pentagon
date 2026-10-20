@@ -40,8 +40,12 @@ async function auditWhitelistReadiness(db = pool, tenant = "admin") {
     "), allowed AS (" +
     " SELECT DISTINCT domain FROM listed WHERE group_active=TRUE AND domain ~ $2" +
     "), ownership AS (" +
-    " SELECT a.domain,d.id,d.tenant AS owner_tenant,d.is_active" +
+    " SELECT a.domain,COALESCE(BOOL_OR(d.id IS NOT NULL),FALSE) AS occupied," +
+    " COALESCE(BOOL_OR(d.tenant=$1 AND d.is_active=TRUE),FALSE) AS admin_is_active," +
+    " COALESCE(BOOL_OR(d.tenant=$1 AND d.is_active IS DISTINCT FROM TRUE),FALSE) AS admin_is_inactive," +
+    " COALESCE(BOOL_OR(d.tenant<>$1),FALSE) AS foreign_tenant" +
     " FROM allowed a LEFT JOIN domains d ON LOWER(TRIM(d.domain))=a.domain" +
+    " GROUP BY a.domain" +
     ")" +
     " SELECT (SELECT COUNT(*)::int FROM all_groups) AS groups_total," +
     " (SELECT COUNT(*)::int FROM all_groups WHERE is_active=TRUE) AS groups_active," +
@@ -49,10 +53,10 @@ async function auditWhitelistReadiness(db = pool, tenant = "admin") {
     " (SELECT COUNT(*)::int FROM listed WHERE group_active=TRUE) AS active_group_whitelist_rows," +
     " (SELECT COUNT(*)::int FROM listed WHERE group_active=TRUE AND domain !~ $2) AS invalid_names," +
     " COUNT(*)::int AS valid_distinct," +
-    " COUNT(*) FILTER (WHERE id IS NULL)::int AS unimported," +
-    " COUNT(*) FILTER (WHERE id IS NOT NULL AND owner_tenant<>$1)::int AS cross_tenant_conflicts," +
-    " COUNT(*) FILTER (WHERE owner_tenant=$1 AND is_active=TRUE)::int AS admin_active," +
-    " COUNT(*) FILTER (WHERE owner_tenant=$1 AND is_active IS DISTINCT FROM TRUE)::int AS admin_inactive" +
+    " COUNT(*) FILTER (WHERE occupied=FALSE)::int AS unimported," +
+    " COUNT(*) FILTER (WHERE foreign_tenant=TRUE)::int AS cross_tenant_conflicts," +
+    " COUNT(*) FILTER (WHERE admin_is_active=TRUE)::int AS admin_active," +
+    " COUNT(*) FILTER (WHERE admin_is_inactive=TRUE)::int AS admin_inactive" +
     " FROM ownership", [tenant, VALID_HOST]
   )).rows[0];
 
