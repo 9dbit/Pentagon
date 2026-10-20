@@ -28,7 +28,7 @@ async function run() {
   try {
     await db.query("CREATE SCHEMA IF NOT EXISTS trustpositif_outbox_ci");
     await db.query(
-      "CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE,tenant TEXT NOT NULL DEFAULT 'admin'," +
+      "CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE,project_name TEXT DEFAULT '',tenant TEXT NOT NULL DEFAULT 'admin'," +
       "global_status TEXT DEFAULT 'unknown',last_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMPTZ)"
     );
     await db.query(
