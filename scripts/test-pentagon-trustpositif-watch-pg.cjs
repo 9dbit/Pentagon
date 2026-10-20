@@ -59,7 +59,7 @@ async function run(){
     const answer=await watch.checkAfterNodeConsensus(alpha,firstResults,nodes,{db,lookup:async(d)=>{
       checks++;assert.equal(d,"alpha.example");return{listed:true,source:"mock-official-snapshot",verifiedAt:new Date()};
     }});
-    assert.equal(answer.confirmedBlocked,true);assert.equal(answer.nodes.length,2);
+    assert.equal(answer.confirmedBlocked,true,JSON.stringify({source:answer.source,error:answer.lastError,nodes:answer.nodes}));assert.equal(answer.nodes.length,2);
     assert.equal(firstResults.at(-1).checker_type,"provider_registry");
     const r=(await db.query("SELECT listed,detected_at,verified_at,anomaly_nodes FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
     assert.equal(r.listed,true);assert.ok(r.detected_at);assert.ok(r.verified_at);assert.equal(r.anomaly_nodes.length,2);
