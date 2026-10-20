@@ -9,7 +9,10 @@ if (process.env.CI !== "true" ||
   console.error("ISOLATED_CI_POSTGRES_ONLY");
   process.exit(3);
 }
-const db = new Pool({ connectionString:process.env.DATABASE_URL, ssl:false });
+// Use a separate schema: the consensus test already created fixture tables
+// in public, and we must not overwrite or drop them.
+const db = new Pool({ connectionString:process.env.DATABASE_URL, ssl:false,
+  options:"-c search_path=trustpositif_outbox_ci,public" });
 let passed=0;
 async function check(label,fn) { await fn(); passed++; console.log("PASS "+label); }
 async function domain(name,status) {
@@ -23,6 +26,7 @@ async function rows() {
 }
 async function run() {
   try {
+    await db.query("CREATE SCHEMA IF NOT EXISTS trustpositif_outbox_ci");
     await db.query(
       "CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE,tenant TEXT NOT NULL DEFAULT 'admin'," +
       "global_status TEXT DEFAULT 'unknown',last_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMPTZ)"
