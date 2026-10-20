@@ -147,7 +147,7 @@ async function run(){
     const scheduler=fs.readFileSync(path.resolve(__dirname,"../server/scheduler.js"),"utf8");
     assert.match(scheduler,/syncAdminWhitelist\(\)/);
     assert.match(scheduler,/registryCheck\.confirmedBlocked/);
-    assert.match(scheduler,/registryCheck\\.confirmedRecovered/);
+    assert.ok(scheduler.includes("registryCheck.confirmedRecovered"));
     assert.match(scheduler,/INSERT INTO alerts/);
     assert.match(scheduler,/sendTelegram\(message, telegramExtra\)/);
     assert.match(scheduler,/buildEmergencyBlockedMessage/);
