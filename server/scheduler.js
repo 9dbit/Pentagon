@@ -668,7 +668,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     }
 
     const registryCheck = await maybeAddProviderRegistryResult(domain, results, nodes);
-    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked) {
+    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked && !registryCheck.confirmedRecovered) {
       // Inconclusive / not listed / fewer than two credible node findings:
       // preserve existing global status. Never emit a false block alert.
       return;
@@ -687,7 +687,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     const effectiveResults = domainResults.length ? domainResults : results;
 
     const newStatus = registryCheck.confirmedBlocked || registryCheck.holdBlocked
-      ? "blocked" : calculateGlobalStatus(effectiveResults);
+      ? "blocked" : registryCheck.confirmedRecovered
+        ? "warning" : calculateGlobalStatus(effectiveResults);
     const oldStatus = domain.global_status || "unknown";
 
     if (normalizeStatus(newStatus) !== "blocked") {
@@ -695,8 +696,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
       await clearRecurringAlert(domain.id);
     }
 
-    const decision = registryCheck.confirmedBlocked
-      ? { apply: true, value: "blocked", count: 1, max: 1 }
+    const decision = registryCheck.confirmedBlocked || registryCheck.confirmedRecovered
+      ? { apply: true, value: newStatus, count: 1, max: 1 }
       : decide(domain.id, oldStatus, newStatus, retryLimit);
 
     if (!decision.apply) {
@@ -722,17 +723,19 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
       let sent = false;
       let message = `SILENT STATUS CHANGE\n\nDomain: ${htmlEsc(domain.domain)}\nOld: ${htmlEsc(oldStatus)}\nNew: ${htmlEsc(newStatus)}\nChecker: ${htmlEsc(worst.provider_name)}\nReason Type: ${htmlEsc(reasonTypeLabel(classifyReasonType(worst)))}\nReason: ${htmlEsc(worst.reason)}\nTime: ${htmlEsc(nowWib())} WIB`;
 
-      if (isImportantTransition(oldStatus, newStatus, worst) && !(await sentRecently(domain.id, newStatus)) && !(normalizeStatus(newStatus) === "blocked" && await isAcknowledged(domain.id))) {
+      if ((registryCheck.confirmedRecovered || isImportantTransition(oldStatus, newStatus, worst)) && !(await sentRecently(domain.id, newStatus)) && !(normalizeStatus(newStatus) === "blocked" && await isAcknowledged(domain.id))) {
         const icon = iconFor(newStatus, worst.final_url);
-        const title = normalizeStatus(newStatus) === "blocked"
-          ? `${icon} BLOCKED STATUS CHANGE CONFIRMED`
-          : `${icon} WARNING STATUS CHANGE CONFIRMED`;
+        const title = registryCheck.confirmedRecovered
+          ? "✅ TRUSTPOSITIF REGISTRY RECOVERY CONFIRMED (NETWORK WARNING REMAINS)"
+          : normalizeStatus(newStatus) === "blocked"
+            ? `${icon} BLOCKED STATUS CHANGE CONFIRMED`
+            : `${icon} WARNING STATUS CHANGE CONFIRMED`;
 
         const redirectLine = normalizeStatus(newStatus) === "blocked" && worst.final_url
           ? `\nRedirected: ➡️ ${htmlEsc(worst.final_url)}`
           : "";
 
-        message = `${title}\n\nDomain: ${htmlEsc(domain.domain)}\nOld: ${htmlEsc(oldStatus)}\nNew: ${htmlEsc(newStatus)}\nConfirmation: ${registryCheck.confirmedBlocked ? "2+ nodes + exact Komdigi registry" : retryLimit + " checks"}\nNode votes: ${registryCheck.nodes?.map(n => htmlEsc(n.name)).join(", ") || "-"}\nChecker: ${htmlEsc(worst.provider_name)}\nReason: ${htmlEsc(worst.reason)}\nFinal URL: ${htmlEsc(worst.final_url || "-")}${redirectLine}\nDetected: ${htmlEsc(nowWib())} WIB`;
+        message = `${title}\n\nDomain: ${htmlEsc(domain.domain)}\nOld: ${htmlEsc(oldStatus)}\nNew: ${htmlEsc(newStatus)}\nConfirmation: ${registryCheck.confirmedBlocked ? "2+ nodes + exact Komdigi registry" : registryCheck.confirmedRecovered ? "2+ nodes + exact registry delisting" : retryLimit + " checks"}\nNode votes: ${registryCheck.nodes?.map(n => htmlEsc(n.name)).join(", ") || "-"}\nChecker: ${htmlEsc(worst.provider_name)}\nReason: ${htmlEsc(worst.reason)}\nFinal URL: ${htmlEsc(worst.final_url || "-")}${redirectLine}\nDetected: ${htmlEsc(nowWib())} WIB`;
 
         const telegramExtra = normalizeStatus(newStatus) === "blocked"
           ? {

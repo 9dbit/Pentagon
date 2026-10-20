@@ -12,6 +12,7 @@ let schemaReady = false;
 function reliableNodeAnomalies(results = [], nodes = []) {
   const active = new Map(nodes.filter(n => n && n.is_active !== false).map(n => [String(n.id), n]));
   const distinct = new Map();
+  const providerVotes = new Set();
   for (const r of results) {
     if (!r || !String(r.checker_type || "").startsWith("node:")) continue;
     const node = active.get(String(r.node_id ?? ""));
@@ -23,6 +24,10 @@ function reliableNodeAnomalies(results = [], nodes = []) {
     const evidence = status === "blocked" || Number(r.http_status) === 451 ||
       /trustpositif|internetpositif|nawala|access denied|blocked|block keyword|dns not found|dns error|connection refused|http (403|451|5[0-9][0-9])|http timeout|redirect/i.test(reason);
     if (!evidence) continue;
+    // Different node IDs on the same upstream provider are not independent ISP votes.
+    const providerKey = String(node.provider_name || "").trim().toLowerCase();
+    if (!providerKey || providerVotes.has(providerKey)) continue;
+    providerVotes.add(providerKey);
     distinct.set(String(node.id), {
       id: node.id, name: String(node.name || "Node " + node.id),
       provider: String(node.provider_name || node.name || ""),
@@ -149,7 +154,9 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
         nodes, source: "official_unavailable", lastError: safeError };
     }
   }
-  if (!state?.listed) return { triggered: true, checked: true, confirmedBlocked: false, nodes, cached, source: state?.source };
+  if (!state?.listed) return { triggered: true, checked: true, confirmedBlocked: false,
+    confirmedRecovered: Boolean(previous?.listed) && domainRow.global_status === "blocked",
+    nodes, cached, source: state?.source };
   const evidence = makeOfficialEvidence(state, nodes, cached);
   results.push(evidence);
   return { triggered: true, checked: true, confirmedBlocked: true, nodes, cached, source: state.source, evidence };
