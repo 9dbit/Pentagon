@@ -707,6 +707,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
 
     if (oldStatus !== newStatus) {
       const worst =
+        (registryCheck.confirmedBlocked && effectiveResults.find(r => r.checker_type === "provider_registry" && r.status === "blocked")) ||
         effectiveResults.find((r) => r.status === "blocked") ||
         effectiveResults.find((r) => r.status === "warning") ||
         effectiveResults[0];
@@ -724,7 +725,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
           ? `\nRedirected: ➡️ ${worst.final_url}`
           : "";
 
-        message = `${title}\n\nDomain: ${domain.domain}\nOld: ${oldStatus}\nNew: ${newStatus}\nConfirmed: ${retryLimit} checks\nChecker: ${worst.provider_name}\nReason: ${worst.reason}\nFinal URL: ${worst.final_url || "-"}${redirectLine}\nTime: ${nowWib()} WIB`;
+        message = `${title}\n\nDomain: ${domain.domain}\nOld: ${oldStatus}\nNew: ${newStatus}\nConfirmation: ${registryCheck.confirmedBlocked ? "2+ nodes + exact Komdigi registry" : retryLimit + " checks"}\nNode votes: ${registryCheck.nodes?.map(n => n.name).join(", ") || "-"}\nChecker: ${worst.provider_name}\nReason: ${worst.reason}\nFinal URL: ${worst.final_url || "-"}${redirectLine}\nDetected: ${nowWib()} WIB`;
 
         const telegramExtra = normalizeStatus(newStatus) === "blocked"
           ? {
