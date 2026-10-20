@@ -33,6 +33,7 @@ function isPollingNode(node) {
 
 function normalizeNodeResult(node, data, latencyMs) {
   return {
+    node_id: node.id,
     checker_type: `node:${node.network_type || "provider"}`,
     provider_name: node.provider_name || node.name,
     status: data.status || "warning",
@@ -65,6 +66,7 @@ async function checkViaPollingNode(domain, node) {
   } catch (err) {
     await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [node.id]).catch(() => {});
     return {
+      node_id: node.id,
       checker_type: `node:${node.network_type || "provider"}`,
       provider_name: node.provider_name || node.name,
       status: "warning",
@@ -95,6 +97,7 @@ async function checkViaNode(domain, node) {
   } catch (err) {
     await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [node.id]).catch(() => {});
     return {
+      node_id: node.id,
       checker_type: `node:${node.network_type || "provider"}`,
       provider_name: node.provider_name || node.name,
       status: "warning",

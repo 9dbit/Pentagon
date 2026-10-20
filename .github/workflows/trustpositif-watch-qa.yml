@@ -1,0 +1,70 @@
+name: Pentagon TrustPositif whitelist consensus
+on:
+  push:
+    branches:
+      - feature/pentagon-trustpositif-whitelist-consensus-20261020
+  pull_request:
+    paths:
+      - "server/trustpositifWatch.js"
+      - "server/trustpositifRoutes.js"
+      - "server/scheduler.js"
+      - "server/nodeChecker.js"
+      - "server/index.js"
+      - "src/TrustPositif*"
+      - "src/trust-alert-notification.css"
+      - "src/App.jsx"
+      - "scripts/test-pentagon-trustpositif-watch-pg.cjs"
+      - ".github/workflows/trustpositif-watch-qa.yml"
+permissions:
+  contents: read
+jobs:
+  integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: pentagon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pentagon_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CI: "true"
+      DATABASE_URL: postgres://postgres:fixture-only@127.0.0.1:5432/pentagon_test
+      TRUSTPOSITIF_PREWARM: "false"
+      TRUSTPOSITIF_AUTO_WATCH: "true"
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+      - name: Configure Node 20
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+          cache: npm
+      - name: Install isolated dependencies without rewriting baseline lockfile
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+      - name: Check monitoring modules
+        run: |
+          node --check server/trustpositifWatch.js
+          node --check server/trustpositifRoutes.js
+          node --check server/nodeChecker.js
+          node --check server/scheduler.js
+          node --check server/index.js
+          node --check scripts/test-pentagon-trustpositif-watch-pg.cjs
+      - name: Postgres synthetic whitelist and two-node consensus integration
+        run: node scripts/test-pentagon-trustpositif-watch-pg.cjs
+      - name: Compile current production UI
+        run: npm run build
+      - name: Verify compiled SPA shell
+        run: node scripts/test-pentagon-production-ui-shell.cjs
+      - name: UI layout contract
+        run: node scripts/test-pentagon-report-layout.cjs
+      - name: No live endpoints or credentials
+        run: echo "All tested domains use reserved .example names; official lookup and Telegram sends were mocked or source-inspected."

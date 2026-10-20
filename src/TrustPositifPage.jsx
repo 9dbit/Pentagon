@@ -4,6 +4,7 @@ import {
   RefreshCw, Search, Server, ShieldCheck, Wifi, XCircle
 } from "lucide-react";
 import "./TrustPositifPage.css";
+import TrustPositifWatchlist from "./TrustPositifWatchlist";
 
 async function api(url, opt = {}) {
   const res = await fetch(url, {
@@ -139,6 +140,8 @@ export default function TrustPositifPage() {
       </section>
 
       {notice ? <div className="tpNotice">{notice}</div> : null}
+
+      <TrustPositifWatchlist />
 
       <section className="tpSourceGrid">
         <article className="tpSourceCard">
