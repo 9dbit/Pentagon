@@ -81,16 +81,24 @@ function makeOfficialEvidence(state, nodes, cached) {
 
 async function checkAfterNodeConsensus(domainRow, results, activeNodes, options = {}) {
   const nodes = reliableNodeAnomalies(results, activeNodes);
-  if (nodes.length < MIN_NODES) return { triggered: false, confirmedBlocked: false, nodes };
   const domain = normalizeDomain(domainRow?.domain);
   if (!domain || domain.length > 253 || !/^[a-z0-9][a-z0-9.-]*[.][a-z]{2,}$/.test(domain))
     return { triggered: false, confirmedBlocked: false, nodes };
   const tenant = domainRow.tenant || "admin";
   if (tenant !== "admin") return { triggered: false, confirmedBlocked: false, nodes };
   const db = options.db || pool, lookup = options.lookup || exactOfficialLookup, now = options.now || new Date();
+  if (nodes.length < MIN_NODES && domainRow.global_status !== "blocked") {
+    return { triggered: false, confirmedBlocked: false, nodes };
+  }
   await ensureMonitorTable(db);
   const rows = await db.query("SELECT * FROM trustpositif_domain_monitor WHERE tenant=$1 AND domain=$2 LIMIT 1", [tenant, domain]);
   const previous = rows.rows[0] || null;
+  if (nodes.length < MIN_NODES) {
+    // Do not silently clear a previously VERIFIED block merely because the
+    // network temporarily has fewer valid node votes. No official lookup here.
+    return { triggered: false, confirmedBlocked: false,
+      holdBlocked: Boolean(previous?.listed), nodes, source: "previous_verified_listing" };
+  }
   const verifiedAt = previous?.verified_at ? new Date(previous.verified_at).getTime() : 0;
   const retryAt = previous?.next_check_at ? new Date(previous.next_check_at).getTime() : 0;
   let state = previous;

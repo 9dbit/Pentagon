@@ -69,6 +69,12 @@ async function run(){
     const answer=await watch.checkAfterNodeConsensus(alpha,samples,nodes,{db,lookup:async()=>{throw Error("CACHE_FAILED")}});
     assert.equal(answer.confirmedBlocked,true);assert.equal(answer.cached,true);
   });
+  await test("verified blocked status survives temporary loss of node consensus",async()=>{
+    const r=await watch.checkAfterNodeConsensus({...alpha,global_status:"blocked"},[node(10,"blocked"),negative(20)],nodes,
+      {db,lookup:async()=>{throw Error("NO_REMOTE_LOOKUP_WITH_SINGLE_NODE")}});
+    assert.equal(r.confirmedBlocked,false);assert.equal(r.holdBlocked,true);
+    assert.equal(r.source,"previous_verified_listing");
+  });
   await test("official source failure is pending, not blocked",async()=>{
     const response=await watch.checkAfterNodeConsensus({domain:"unavailable.example",tenant:"admin",global_status:"warning"},[...two],nodes,
       {db,lookup:async()=>{throw Error("SOURCE_OFFLINE")}});
