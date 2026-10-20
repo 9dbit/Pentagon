@@ -141,6 +141,12 @@ async function run() {
         "SELECT relrowsecurity FROM pg_class WHERE relname='trustpositif_notification_outbox'"
       );
       assert.equal(r.rows[0].relrowsecurity,true);
+      const log=await outbox.recentNotificationLog("admin",db);
+      assert.ok(log.length>=4);
+      assert.equal(log[0].event_type,"REGISTRY_DELISTED");
+      assert.equal(log[0].status,"sent");
+      assert.ok(Array.isArray(log[0].history));
+      assert.ok(log[0].history[0].at);
     });
     console.log("PENTAGON_TRUSTPOSITIF_OUTBOX_PG_PASS="+passed);
   } finally { await db.end(); }
