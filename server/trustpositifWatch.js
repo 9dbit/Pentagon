@@ -48,6 +48,7 @@ async function ensureMonitorTable(db = pool) {
     "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),PRIMARY KEY(tenant,domain))"
   ].join(" "));
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS first_anomaly_at TIMESTAMPTZ");
   await db.query("CREATE INDEX IF NOT EXISTS idx_tp_mon_tenant_status ON trustpositif_domain_monitor(tenant,listed,verified_at DESC)");
   if (db === pool) schemaReady = true;
 }
@@ -99,8 +100,11 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
     if (nodes.length) {
       await ensureMonitorTable(db);
       await db.query(
-        "INSERT INTO trustpositif_domain_monitor(tenant,domain,last_anomaly_at,anomaly_nodes,updated_at) " +
-        "VALUES($1,$2,$3,$4::jsonb,$3) ON CONFLICT(tenant,domain) DO UPDATE SET " +
+        "INSERT INTO trustpositif_domain_monitor(tenant,domain,first_anomaly_at,last_anomaly_at,anomaly_nodes,updated_at) " +
+        "VALUES($1,$2,$3,$3,$4::jsonb,$3) ON CONFLICT(tenant,domain) DO UPDATE SET " +
+        "first_anomaly_at=CASE WHEN trustpositif_domain_monitor.last_anomaly_at IS NULL OR " +
+        "trustpositif_domain_monitor.last_anomaly_at < EXCLUDED.last_anomaly_at-INTERVAL '20 minutes' " +
+        "THEN EXCLUDED.first_anomaly_at ELSE COALESCE(trustpositif_domain_monitor.first_anomaly_at,EXCLUDED.first_anomaly_at) END," +
         "last_anomaly_at=EXCLUDED.last_anomaly_at,anomaly_nodes=EXCLUDED.anomaly_nodes,updated_at=EXCLUDED.updated_at",
         [tenant,domain,now,JSON.stringify(nodes)]
       );
@@ -141,12 +145,19 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
       const at = verified.verifiedAt || now;
       const result = await db.query([
         "INSERT INTO trustpositif_domain_monitor",
-        "(tenant,domain,listed,verified_at,detected_at,last_anomaly_at,anomaly_nodes,next_check_at,last_error,source,updated_at)",
-        "VALUES($1,$2,$3::boolean,$4::timestamptz,CASE WHEN $3::boolean THEN $4::timestamptz ELSE NULL END,$5::timestamptz,$6::jsonb,NULL,'',$7,$5::timestamptz)",
+        "(tenant,domain,listed,verified_at,detected_at,first_anomaly_at,last_anomaly_at,anomaly_nodes,next_check_at,last_error,source,updated_at)",
+        "VALUES($1,$2,$3::boolean,$4::timestamptz,CASE WHEN $3::boolean THEN $5::timestamptz ELSE NULL END,",
+        "CASE WHEN $3::boolean THEN $5::timestamptz ELSE NULL END,$5::timestamptz,$6::jsonb,NULL,'',$7,$5::timestamptz)",
         "ON CONFLICT(tenant,domain) DO UPDATE SET",
         "listed=EXCLUDED.listed,verified_at=EXCLUDED.verified_at,",
-        "detected_at=CASE WHEN EXCLUDED.listed THEN COALESCE(trustpositif_domain_monitor.detected_at,EXCLUDED.detected_at)",
-        "ELSE NULL END,",
+        "detected_at=CASE WHEN EXCLUDED.listed THEN COALESCE(trustpositif_domain_monitor.detected_at,",
+        "CASE WHEN trustpositif_domain_monitor.last_anomaly_at >= EXCLUDED.last_anomaly_at-INTERVAL '20 minutes'",
+        "THEN COALESCE(trustpositif_domain_monitor.first_anomaly_at,EXCLUDED.detected_at)",
+        "ELSE EXCLUDED.detected_at END) ELSE NULL END,",
+        "first_anomaly_at=CASE WHEN EXCLUDED.listed THEN COALESCE(trustpositif_domain_monitor.detected_at,",
+        "CASE WHEN trustpositif_domain_monitor.last_anomaly_at >= EXCLUDED.last_anomaly_at-INTERVAL '20 minutes'",
+        "THEN COALESCE(trustpositif_domain_monitor.first_anomaly_at,EXCLUDED.first_anomaly_at)",
+        "ELSE EXCLUDED.first_anomaly_at END) ELSE NULL END,",
         "recovered_at=CASE WHEN EXCLUDED.listed THEN NULL",
         "WHEN trustpositif_domain_monitor.listed IS TRUE THEN EXCLUDED.verified_at",
         "ELSE trustpositif_domain_monitor.recovered_at END,",
@@ -194,7 +205,7 @@ async function listWatchlist(tenant = "admin", db = pool) {
     "BOOL_OR(rank_whitelisted) AS rank_whitelisted FROM members WHERE domain <> '' GROUP BY domain)",
     "SELECT r.domain,COALESCE(r.projects,'') AS project_name,r.rank_whitelisted,",
     "COALESCE(d.is_active,FALSE) AS monitored,COALESCE(d.global_status,'unknown') AS global_status,",
-    "d.last_checked_at AS last_node_check_at,s.listed,s.verified_at,s.detected_at,s.recovered_at,",
+    "d.last_checked_at AS last_node_check_at,s.listed,s.verified_at,s.detected_at,s.recovered_at,s.first_anomaly_at,",
     "s.last_anomaly_at,s.anomaly_nodes,s.last_error,s.next_check_at,s.source",
     "FROM registry r LEFT JOIN domains d ON LOWER(d.domain)=r.domain AND d.tenant=$1",
     "LEFT JOIN trustpositif_domain_monitor s ON s.domain=r.domain AND s.tenant=$1",
