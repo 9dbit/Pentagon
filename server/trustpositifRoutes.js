@@ -15,6 +15,39 @@ const SOURCE_URL = "https://trustpositif.komdigi.go.id/assets/db/domains_isp";
 const CACHE_PATH = process.env.TRUSTPOSITIF_CACHE_PATH || path.join(os.tmpdir(), "pentagon-domains_isp.txt");
 const CACHE_TTL_MS = Number(process.env.TRUSTPOSITIF_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
 let cacheDownloadPromise = null;
+// Global per-instance and disk-backed backoff to avoid repeated 200 MB+ downloads
+// when Komdigi is unreachable. Never invalidate an existing verified cache.
+const SOURCE_BACKOFF_PATH = CACHE_PATH + ".backoff.json";
+const SOURCE_BACKOFF_MS = Math.max(1800000, Number(process.env.TRUSTPOSITIF_SOURCE_BACKOFF_MS || 3600000));
+let sourceBackoffUntil = 0;
+function getSourceBackoffUntil() {
+  if (sourceBackoffUntil > Date.now()) return sourceBackoffUntil;
+  try {
+    const stored = JSON.parse(fs.readFileSync(SOURCE_BACKOFF_PATH, "utf8"));
+    const until = Number(stored?.until || 0);
+    if (Number.isFinite(until) && until > Date.now()) {
+      sourceBackoffUntil = until;
+      return until;
+    }
+  } catch (_) {}
+  return 0;
+}
+function setSourceBackoff(now = Date.now()) {
+  sourceBackoffUntil = now + SOURCE_BACKOFF_MS;
+  try {
+    fs.mkdirSync(path.dirname(SOURCE_BACKOFF_PATH), { recursive: true });
+    const tmp = SOURCE_BACKOFF_PATH + "." + process.pid + ".tmp";
+    fs.writeFileSync(tmp, JSON.stringify({ until: sourceBackoffUntil }), { mode: 0o600 });
+    fs.renameSync(tmp, SOURCE_BACKOFF_PATH);
+  } catch (err) {
+    // The in-memory breaker still protects this worker if disk is read-only.
+    console.warn("[trustpositif] backoff persistence unavailable:", err.code || "IO_ERROR");
+  }
+}
+function clearSourceBackoff() {
+  sourceBackoffUntil = 0;
+  try { fs.unlinkSync(SOURCE_BACKOFF_PATH); } catch (_) {}
+}
 const INDEX_DIR = process.env.TRUSTPOSITIF_INDEX_DIR || path.join(path.dirname(CACHE_PATH), "trustpositif-index");
 const INDEX_META_PATH = path.join(INDEX_DIR, "meta.json");
 const INDEX_BUCKETS = 256;
@@ -262,6 +295,7 @@ async function downloadSourceCache() {
         response.data.pipe(writer);
       });
       fs.renameSync(tmp, CACHE_PATH);
+      clearSourceBackoff();
       const stat = fs.statSync(CACHE_PATH);
       return {
         ok: stat.size > 1000,
@@ -275,6 +309,7 @@ async function downloadSourceCache() {
       };
     } catch (err) {
       try { fs.unlinkSync(tmp); } catch (_) {}
+      setSourceBackoff();
       throw err;
     } finally {
       cacheDownloadPromise = null;
@@ -291,6 +326,13 @@ async function ensureSourceCache() {
       latency_ms: 0, payload_bytes: info.bytes,
       fetched_at: new Date(info.mtime_ms).toISOString()
     };
+  }
+  const retryAt = getSourceBackoffUntil();
+  if (retryAt > Date.now()) {
+    const error = new Error("OFFICIAL_SOURCE_BACKOFF");
+    error.code = "OFFICIAL_SOURCE_BACKOFF";
+    error.retryAt = new Date(retryAt).toISOString();
+    throw error;
   }
   return downloadSourceCache();
 }
@@ -547,7 +589,7 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
     };
     res.json({
       ok: true, min_nodes: MIN_NODES, cache_ttl_minutes: Math.round(TTL_MS / 60000),
-      summary, domains, generated_at: new Date().toISOString()
+      summary, domains, worker: require("./scheduler").getScopedWatchHealth(), generated_at: new Date().toISOString()
     });
   } catch (err) { next(err); }
 });
@@ -573,3 +615,4 @@ router.get("/trustpositif/history", async (req, res, next) => {
 module.exports = router;
 module.exports.ensureIndexedCache = ensureIndexedCache;
 module.exports.lookupIndexedDomains = lookupIndexedDomains;
+module.exports.sourceBackoffDiagnostics = { getSourceBackoffUntil, setSourceBackoff, clearSourceBackoff };

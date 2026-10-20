@@ -69,6 +69,17 @@ async function run(){
     const answer=await watch.checkAfterNodeConsensus(alpha,samples,nodes,{db,lookup:async()=>{throw Error("CACHE_FAILED")}});
     assert.equal(answer.confirmedBlocked,true);assert.equal(answer.cached,true);
   });
+  await test("cached positive refreshes node evidence without official fetch",async()=>{
+    const swapped=[node(10,"warning","HTTP 451 from regional ISP"),node(20,"blocked")];
+    const current=new Date();
+    const r=await watch.checkAfterNodeConsensus(alpha,[...swapped],nodes,
+      {db,now:current,lookup:async()=>{throw Error("CACHED_NO_ENDPOINT")}});
+    assert.equal(r.confirmedBlocked,true);
+    const row=(await db.query("SELECT anomaly_nodes,last_anomaly_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
+    assert.equal(row.anomaly_nodes[0].status,"warning");
+    assert.equal(row.anomaly_nodes[1].status,"blocked");
+    assert.ok(Math.abs(new Date(row.last_anomaly_at).getTime()-current.getTime())<1000);
+  });
   await test("verified blocked status survives temporary loss of node consensus",async()=>{
     const r=await watch.checkAfterNodeConsensus({...alpha,global_status:"blocked"},[node(10,"blocked"),negative(20)],nodes,
       {db,lookup:async()=>{throw Error("NO_REMOTE_LOOKUP_WITH_SINGLE_NODE")}});
@@ -111,6 +122,21 @@ async function run(){
     assert.equal(r[1].monitored,false);
     const demo=await watch.listWatchlist("demo",db);
     assert.deepEqual(demo.map(x=>x.domain),["private.example"]);
+  });
+  await test("a delisted domain resets its original detection timestamp",async()=>{
+    const later=new Date(Date.now()+watch.TTL_MS+watch.RETRY_MS+120000);
+    const negative=await watch.checkAfterNodeConsensus({...alpha,global_status:"blocked"},[...two],nodes,
+      {db,now:later,lookup:async()=>({listed:false,verifiedAt:later,source:"test-official"})});
+    assert.equal(negative.confirmedBlocked,false);
+    const state=(await db.query("SELECT listed,detected_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
+    assert.equal(state.listed,false);
+    assert.equal(state.detected_at,null);
+    const again=new Date(later.getTime()+watch.TTL_MS+120000);
+    const positive=await watch.checkAfterNodeConsensus({...alpha,global_status:"warning"},[...two],nodes,
+      {db,now:again,lookup:async()=>({listed:true,verifiedAt:again,source:"test-official"})});
+    assert.equal(positive.confirmedBlocked,true);
+    const fresh=(await db.query("SELECT detected_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
+    assert.ok(Math.abs(new Date(fresh.detected_at).getTime()-again.getTime())<1000);
   });
   await test("scheduler sends alerts and Telegram on verified status transition",async()=>{
     const scheduler=fs.readFileSync(path.resolve(__dirname,"../server/scheduler.js"),"utf8");

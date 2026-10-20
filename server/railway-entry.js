@@ -54,3 +54,6 @@ if (!schedulerEnabled) {
 }
 
 require("./index");
+// Scoped TrustPositif worker is independent of the intentionally disabled
+// main scheduler. It only runs when explicitly enabled by a separate flag.
+scheduler.startScopedTrustPositifScheduler();
