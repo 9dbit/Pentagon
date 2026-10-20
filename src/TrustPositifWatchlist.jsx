@@ -123,7 +123,7 @@ export default function TrustPositifWatchlist() {
       <span>Telegram queued: <b>{delivery.queued ?? "—"}</b></span>
       <span>Delivered: <b>{delivery.sent ?? "—"}</b></span>
       <span>Needs review: <b>{delivery.attention ?? "—"}</b></span>
-      <span>Last sync: {displayTime(data?.generated_at)}</span>
+      <span>Dashboard refreshed: {displayTime(data?.generated_at)}</span>
     </p>
     {error && <p className="tpWatchError" role="status">{error}</p>}
     <div className="tpWatchTableHead">
