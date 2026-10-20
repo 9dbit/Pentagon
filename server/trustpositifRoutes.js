@@ -585,11 +585,28 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
       rank_whitelisted: domains.filter(d => d.rank_whitelisted).length,
       monitored: domains.filter(d => d.monitored).length,
       blocked: domains.filter(d => d.listed === true && d.global_status === "blocked").length,
+      suspected: domains.filter(d => d.last_anomaly_at && Array.isArray(d.anomaly_nodes) &&
+        d.anomaly_nodes.length === 1 && d.listed !== true).length,
+      recovered: domains.filter(d => d.recovered_at && d.listed === false).length,
       pending: domains.filter(d => d.last_anomaly_at && !d.verified_at).length
     };
+    const { deliverySummary, recentNotificationLog } = require("./trustpositifAlertOutbox");
+    const delivery = await deliverySummary(tenant).catch(() => ({ unavailable:true }));
+    const notificationLog = await recentNotificationLog(tenant).catch(() => []);
+    const nodeHealth = await pool.query(
+      "SELECT COUNT(*)::int AS total, " +
+      "COUNT(*) FILTER (WHERE is_active=TRUE)::int AS active, " +
+      "COUNT(*) FILTER (WHERE is_active=TRUE AND last_health_status='online' " +
+      "AND last_ping_at > NOW()-INTERVAL '20 minutes')::int AS recently_healthy, " +
+      "MAX(last_ping_at) AS last_seen_at FROM provider_nodes WHERE tenant=$1",
+      [tenant]
+    ).then(result => result.rows[0]).catch(() =>
+      ({total:0,active:0,recently_healthy:0,last_seen_at:null,unavailable:true}));
     res.json({
       ok: true, min_nodes: MIN_NODES, cache_ttl_minutes: Math.round(TTL_MS / 60000),
-      summary, domains, worker: require("./scheduler").getScopedWatchHealth(), generated_at: new Date().toISOString()
+      summary, domains, node_health:nodeHealth, notification_delivery:delivery,
+      notification_log:notificationLog,
+      worker: require("./scheduler").getScopedWatchHealth(), generated_at: new Date().toISOString()
     });
   } catch (err) { next(err); }
 });

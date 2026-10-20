@@ -45,6 +45,11 @@ async function run(){
       {db,lookup:async()=>{throw Error("SHOULD_NOT_CALL")}});
     assert.equal(result.triggered,false);
   });
+  await test("one node persisted as suspected without official call",async()=>{
+    const r=(await db.query("SELECT listed,first_anomaly_at,last_anomaly_at,anomaly_nodes FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
+    assert.equal(r.listed,null);assert.ok(r.last_anomaly_at);assert.ok(r.first_anomaly_at);
+    assert.equal(r.anomaly_nodes.length,1);
+  });
   await test("repeated samples from one node do not qualify",async()=>{
     assert.equal(watch.reliableNodeAnomalies([node(10,"blocked"),node(10,"blocked")],nodes).length,1);
   });
@@ -67,6 +72,7 @@ async function run(){
     assert.equal(firstResults.at(-1).checker_type,"provider_registry");
     const r=(await db.query("SELECT listed,detected_at,verified_at,anomaly_nodes FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
     assert.equal(r.listed,true);assert.ok(r.detected_at);assert.ok(r.verified_at);assert.equal(r.anomaly_nodes.length,2);
+    assert.ok(new Date(r.detected_at).getTime() <= new Date(r.verified_at).getTime());
   });
   await test("cached positive result does not request official endpoint again",async()=>{
     const samples=[...two];
@@ -136,12 +142,16 @@ async function run(){
     const state=(await db.query("SELECT listed,detected_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
     assert.equal(state.listed,false);
     assert.equal(state.detected_at,null);
+    const recovery=(await db.query("SELECT recovered_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
+    assert.ok(recovery.recovered_at);
     const again=new Date(later.getTime()+watch.TTL_MS+120000);
     const positive=await watch.checkAfterNodeConsensus({...alpha,global_status:"warning"},[...two],nodes,
       {db,now:again,lookup:async()=>({listed:true,verifiedAt:again,source:"test-official"})});
     assert.equal(positive.confirmedBlocked,true);
     const fresh=(await db.query("SELECT detected_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
     assert.ok(Math.abs(new Date(fresh.detected_at).getTime()-again.getTime())<1000);
+    const reset=(await db.query("SELECT recovered_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
+    assert.equal(reset.recovered_at,null);
   });
   await test("scheduler sends alerts and Telegram on verified status transition",async()=>{
     const scheduler=fs.readFileSync(path.resolve(__dirname,"../server/scheduler.js"),"utf8");

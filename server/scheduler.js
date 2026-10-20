@@ -7,6 +7,7 @@ const { getRuntimeSettings } = require("./runtimeSettings");
 const { getActiveNodes, checkViaNode } = require("./nodeChecker");
 const { classifyReasonType, reasonTypeLabel } = require("./reasonClassifier");
 const { checkAfterNodeConsensus, syncAdminWhitelist } = require("./trustpositifWatch");
+const { enqueueTransition, formatEventMessage, drainOutbox } = require("./trustpositifAlertOutbox");
 const { isAcknowledged, clearAcknowledged } = require("./noticeState");
 const { checkGroup: rankCheckGroup } = require("./rankRoutes");
 
@@ -691,7 +692,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
         ? "warning" : calculateGlobalStatus(effectiveResults);
     const oldStatus = domain.global_status || "unknown";
 
-    if (normalizeStatus(newStatus) !== "blocked") {
+    if (!options.trustpositifOnly && normalizeStatus(newStatus) !== "blocked") {
       await clearAcknowledged(domain.id);
       await clearRecurringAlert(domain.id);
     }
@@ -705,6 +706,34 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
         "UPDATE domains SET last_status=$1, last_checked_at=NOW() WHERE id=$2",
         [decision.value ? `pending:${decision.value}:${decision.count}/${decision.max}` : oldStatus, domain.id]
       );
+      return;
+    }
+
+    if (options.trustpositifOnly) {
+      if (oldStatus === newStatus) {
+        await pool.query("UPDATE domains SET last_checked_at=NOW() WHERE id=$1", [domain.id]);
+        return;
+      }
+      // The scoped worker can only change status after exact official evidence.
+      // Persist the state, alert and outbox item atomically, BEFORE any Telegram I/O.
+      const eventType = registryCheck.confirmedBlocked ? "BLOCKED" :
+        registryCheck.confirmedRecovered ? "REGISTRY_DELISTED" : null;
+      if (!eventType) return;
+      const message = formatEventMessage({
+        domain:domain.domain, eventType, nodes:registryCheck.nodes || [],
+        confirmedAt:registryCheck.verifiedAt || registryCheck.evidence?.verified_at,
+        detectedAt:registryCheck.detectedAt || null,
+        source:registryCheck.source
+      });
+      const queued = await enqueueTransition({ domain, oldStatus, newStatus, eventType, message });
+      if (queued.queued) {
+        if (eventType === "REGISTRY_DELISTED") {
+          await clearAcknowledged(domain.id);
+          await clearRecurringAlert(domain.id);
+        }
+        await drainOutbox().catch(err =>
+          console.warn("[TrustPositif Outbox] retry queued; dispatch unavailable:", err.code || "UNKNOWN"));
+      }
       return;
     }
 
@@ -909,6 +938,7 @@ async function runScopedTrustPositifChecks() {
   scopedWatch.lastStartedAt = new Date().toISOString();
   scopedWatch.lastError = "";
   scopedWatch.scanned = 0;
+  console.log("[TrustPositif Scoped] cycle started");
   try {
     // Read-only readiness first. Fails closed on missing migration tables.
     const { rows: missing } = await pool.query(
@@ -970,6 +1000,11 @@ async function runScopedTrustPositifChecks() {
   } finally {
     scopedWatch.running = false;
     scopedWatch.lastFinishedAt = new Date().toISOString();
+    // This heartbeat also describes idle and node-waiting runs without
+    // revealing domain names, customer records or configuration secrets.
+    console.log("[TrustPositif Scoped] heartbeat status=" + scopedWatch.lastResult +
+      " scanned=" + scopedWatch.scanned + " active_nodes=" + scopedWatch.activeNodes +
+      " whitelist_imported=" + scopedWatch.imported);
   }
 }
 let scopedTimerStarted = false;
@@ -984,6 +1019,15 @@ function startScopedTrustPositifScheduler() {
   }
   scopedTimerStarted = true;
   console.log("[TrustPositif Scoped] enabled, separate from full scheduler; interval_ms=" + scopedWatchIntervalMs);
+  // Independent delivery ticker: retries definite failures even when there
+  // are not enough healthy checker nodes to run a scan.
+  const deliver = () => drainOutbox().then(result => {
+    if (result.claimed) console.log("[TrustPositif Outbox] processed=" + result.claimed);
+  }).catch(err => console.warn("[TrustPositif Outbox] paused:", err.code || "DATABASE_UNAVAILABLE"));
+  const deliveryInitial = setTimeout(deliver, 12000);
+  deliveryInitial.unref?.();
+  const deliveryTick = setInterval(deliver, 60000);
+  deliveryTick.unref?.();
   const initial = setTimeout(() => {
     runScopedTrustPositifChecks().catch(err => console.error("[TrustPositif Scoped]", err.message));
   }, 30000);
