@@ -3,9 +3,12 @@ on:
   push:
     branches:
       - feature/pentagon-trustpositif-whitelist-consensus-20261020
+      - fix/pentagon-trustpositif-scoped-worker-20261020
   pull_request:
     paths:
       - "server/trustpositifWatch.js"
+      - "server/railway-entry.js"
+      - "scripts/test-pentagon-trustpositif-source-backoff.cjs"
       - "server/trustpositifRoutes.js"
       - "server/scheduler.js"
       - "server/nodeChecker.js"
@@ -57,7 +60,11 @@ jobs:
           node --check server/nodeChecker.js
           node --check server/scheduler.js
           node --check server/index.js
+          node --check server/railway-entry.js
+          node --check scripts/test-pentagon-trustpositif-source-backoff.cjs
           node --check scripts/test-pentagon-trustpositif-watch-pg.cjs
+      - name: Source circuit breaker and scoped worker security contract
+        run: node scripts/test-pentagon-trustpositif-source-backoff.cjs
       - name: Postgres synthetic whitelist and two-node consensus integration
         run: node scripts/test-pentagon-trustpositif-watch-pg.cjs
       - name: Compile current production UI

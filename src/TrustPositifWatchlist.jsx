@@ -55,8 +55,12 @@ export default function TrustPositifWatchlist() {
         <h2>Whitelist monitoring</h2>
         <p>Semua domain aktif dan whitelist Google Rank masuk dalam daftar ini. Minimal {data?.min_nodes || 2} node berbeda harus menemukan anomali sebelum pencocokan exact registry dilakukan.</p>
       </div>
-      <span className="tpWatchRefreshState"><RefreshCw size={14} aria-hidden="true"/>{loading ? "Sinkronisasi…" : "Pembaruan otomatis"}</span>
+      <span className="tpWatchRefreshState"><RefreshCw size={14} aria-hidden="true"/>{loading ? "Sinkronisasi…" : (data?.worker?.enabled ? "Pemeriksaan otomatis aktif" : "Pemeriksaan otomatis belum aktif")}</span>
     </div>
+    {data?.worker && <p className="tpWatchWorkerState" role="status">
+      Worker: {data.worker.enabled ? data.worker.lastResult === "complete" ? "Aktif, menjalankan pemeriksaan berkala" : data.worker.lastResult === "waiting_two_active_nodes" ? "Menunggu 2 node checker aktif" : data.worker.lastResult === "waiting_database_schema" ? "Menunggu kesiapan database" : data.worker.lastResult === "error" ? "Pemeriksaan tertunda, lihat sistem" : "Aktif, menunggu siklus berikutnya" : "Belum diaktifkan oleh administrator"}.
+      {data.worker.lastFinishedAt ? " Siklus terakhir: " + displayTime(data.worker.lastFinishedAt) : ""}
+    </p>}
     <div className="tpWatchMetrics">
       <div><span>Domain terdaftar</span><strong>{data?.summary?.total ?? "—"}</strong></div>
       <div><span>Aktif di monitor</span><strong>{data?.summary?.monitored ?? "—"}</strong></div>

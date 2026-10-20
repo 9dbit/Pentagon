@@ -105,6 +105,13 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
   let cached = false;
   if (verifiedAt > 0 && now.getTime() >= verifiedAt && now.getTime() - verifiedAt < TTL_MS) {
     cached = true;
+    // Refresh the node evidence even when the registry verdict is still cached.
+    // Keeping an old quorum snapshot can mislead the dashboard timestamp.
+    await db.query(
+      "UPDATE trustpositif_domain_monitor SET last_anomaly_at=$3,anomaly_nodes=$4::jsonb,updated_at=$3 WHERE tenant=$1 AND domain=$2",
+      [tenant,domain,now,JSON.stringify(nodes)]
+    );
+    state = { ...previous, last_anomaly_at: now, anomaly_nodes: nodes };
   } else if (retryAt > now.getTime()) {
     return { triggered: true, checked: false, confirmedBlocked: false,
       holdBlocked: Boolean(previous?.listed) && domainRow.global_status === "blocked",
@@ -121,7 +128,7 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
         "ON CONFLICT(tenant,domain) DO UPDATE SET",
         "listed=EXCLUDED.listed,verified_at=EXCLUDED.verified_at,",
         "detected_at=CASE WHEN EXCLUDED.listed THEN COALESCE(trustpositif_domain_monitor.detected_at,EXCLUDED.detected_at)",
-        "ELSE trustpositif_domain_monitor.detected_at END,",
+        "ELSE NULL END,",
         "last_anomaly_at=EXCLUDED.last_anomaly_at,anomaly_nodes=EXCLUDED.anomaly_nodes,",
         "next_check_at=NULL,last_error='',source=EXCLUDED.source,updated_at=EXCLUDED.updated_at",
         "RETURNING *"

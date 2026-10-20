@@ -29,7 +29,7 @@ const DIGEST_LIMIT = Number(process.env.TELEGRAM_DIGEST_LIMIT || 120);
 const DIGEST_WATCHDOG_MINUTES = Number(process.env.TELEGRAM_DIGEST_WATCHDOG_MINUTES || 5);
 const DOMAIN_CHECK_CONCURRENCY = Number(process.env.DOMAIN_CHECK_CONCURRENCY || 5);
 const TRUSTPOSITIF_ON_DIRECT_WARNING = String(process.env.TRUSTPOSITIF_ON_DIRECT_WARNING || "true").toLowerCase() !== "false";
-const DASHBOARD_URL = process.env.DOMAIN_RADAR_DASHBOARD_URL || "https://domain-radar.org";
+const DASHBOARD_URL = process.env.DOMAIN_RADAR_DASHBOARD_URL || "https://pentagon.quest";
 const RANK_CHECK_INTERVAL_MINUTES = Number(process.env.RANK_CHECK_INTERVAL_MINUTES || 20);
 
 function getRetryLimit() {
@@ -648,24 +648,31 @@ async function sendHourlyDigestIfDue(source = "scheduler") {
   }
 }
 
-async function checkOneDomain(domain, proxies, nodes, retryLimit) {
+async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) {
   try {
     const results = [];
 
-    const directResult = await checkDomain(domain.domain, { type: "direct", provider_name: "Direct" });
-    results.push(directResult);
-
-    for (const proxy of proxies) {
-      const proxyResult = await checkDomain(domain.domain, { type: "proxy", provider_name: proxy.provider_name, proxy });
-      results.push(proxyResult);
-    }
-
-    for (const node of nodes) {
-      const nodeResult = await checkViaNode(domain.domain, node);
-      results.push(nodeResult);
+    if (!options.trustpositifOnly) {
+      const directResult = await checkDomain(domain.domain, { type: "direct", provider_name: "Direct" });
+      results.push(directResult);
+      for (const proxy of proxies) {
+        const proxyResult = await checkDomain(domain.domain, { type: "proxy", provider_name: proxy.provider_name, proxy });
+        results.push(proxyResult);
+      }
+      for (const node of nodes) results.push(await checkViaNode(domain.domain, node));
+    } else {
+      // Dedicated worker runs only provider checks. It may never downgrade or
+      // mark a customer domain blocked from a direct/proxy-only observation.
+      const sampled = await Promise.all(nodes.map(node => checkViaNode(domain.domain, node)));
+      results.push(...sampled);
     }
 
     const registryCheck = await maybeAddProviderRegistryResult(domain, results, nodes);
+    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked) {
+      // Inconclusive / not listed / fewer than two credible node findings:
+      // preserve existing global status. Never emit a false block alert.
+      return;
+    }
 
     for (const r of results) {
       await pool.query(
@@ -713,7 +720,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
         effectiveResults[0];
 
       let sent = false;
-      let message = `SILENT STATUS CHANGE\n\nDomain: ${domain.domain}\nOld: ${oldStatus}\nNew: ${newStatus}\nChecker: ${worst.provider_name}\nReason Type: ${reasonTypeLabel(classifyReasonType(worst))}\nReason: ${worst.reason}\nTime: ${nowWib()} WIB`;
+      let message = `SILENT STATUS CHANGE\n\nDomain: ${htmlEsc(domain.domain)}\nOld: ${htmlEsc(oldStatus)}\nNew: ${htmlEsc(newStatus)}\nChecker: ${htmlEsc(worst.provider_name)}\nReason Type: ${htmlEsc(reasonTypeLabel(classifyReasonType(worst)))}\nReason: ${htmlEsc(worst.reason)}\nTime: ${htmlEsc(nowWib())} WIB`;
 
       if (isImportantTransition(oldStatus, newStatus, worst) && !(await sentRecently(domain.id, newStatus)) && !(normalizeStatus(newStatus) === "blocked" && await isAcknowledged(domain.id))) {
         const icon = iconFor(newStatus, worst.final_url);
@@ -722,10 +729,10 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
           : `${icon} WARNING STATUS CHANGE CONFIRMED`;
 
         const redirectLine = normalizeStatus(newStatus) === "blocked" && worst.final_url
-          ? `\nRedirected: ➡️ ${worst.final_url}`
+          ? `\nRedirected: ➡️ ${htmlEsc(worst.final_url)}`
           : "";
 
-        message = `${title}\n\nDomain: ${domain.domain}\nOld: ${oldStatus}\nNew: ${newStatus}\nConfirmation: ${registryCheck.confirmedBlocked ? "2+ nodes + exact Komdigi registry" : retryLimit + " checks"}\nNode votes: ${registryCheck.nodes?.map(n => n.name).join(", ") || "-"}\nChecker: ${worst.provider_name}\nReason: ${worst.reason}\nFinal URL: ${worst.final_url || "-"}${redirectLine}\nDetected: ${nowWib()} WIB`;
+        message = `${title}\n\nDomain: ${htmlEsc(domain.domain)}\nOld: ${htmlEsc(oldStatus)}\nNew: ${htmlEsc(newStatus)}\nConfirmation: ${registryCheck.confirmedBlocked ? "2+ nodes + exact Komdigi registry" : retryLimit + " checks"}\nNode votes: ${registryCheck.nodes?.map(n => htmlEsc(n.name)).join(", ") || "-"}\nChecker: ${htmlEsc(worst.provider_name)}\nReason: ${htmlEsc(worst.reason)}\nFinal URL: ${htmlEsc(worst.final_url || "-")}${redirectLine}\nDetected: ${htmlEsc(nowWib())} WIB`;
 
         const telegramExtra = normalizeStatus(newStatus) === "blocked"
           ? {
@@ -879,6 +886,111 @@ async function runAutoRankChecks() {
   }
 }
 
+
+const scopedWatch = {
+  enabled: false, running: false, lastStartedAt: null, lastFinishedAt: null,
+  lastResult: "not_started", activeNodes: 0, scanned: 0, imported: 0, lastError: "",
+  cursor: 0
+};
+const scopedWatchIntervalMs = Math.max(120000, Number(process.env.TRUSTPOSITIF_SCOPED_INTERVAL_MS || 300000));
+const scopedWatchBatchSize = Math.min(20, Math.max(1, Number(process.env.TRUSTPOSITIF_SCOPED_BATCH_SIZE || 4)));
+const scopedWatchMaxNodes = Math.min(6, Math.max(2, Number(process.env.TRUSTPOSITIF_SCOPED_MAX_NODES || 4)));
+
+function getScopedWatchHealth() {
+  return { ...scopedWatch, interval_minutes: Math.round(scopedWatchIntervalMs / 60000),
+    batch_size: scopedWatchBatchSize, min_nodes: 2 };
+}
+async function runScopedTrustPositifChecks() {
+  if (scopedWatch.running || running) return { status: "already_running" };
+  scopedWatch.running = true;
+  scopedWatch.lastStartedAt = new Date().toISOString();
+  scopedWatch.lastError = "";
+  scopedWatch.scanned = 0;
+  try {
+    // Read-only readiness first. Fails closed on missing migration tables.
+    const { rows: missing } = await pool.query(
+      "SELECT to_regclass('public.domains') AS domains, to_regclass('public.rank_keyword_groups') AS rank_groups, " +
+      "to_regclass('public.rank_keyword_domains') AS rank_domains, to_regclass('public.provider_nodes') AS provider_nodes, " +
+      "to_regclass('public.check_results') AS check_results, to_regclass('public.alerts') AS alerts"
+    );
+    if (Object.values(missing[0] || {}).some(v => !v)) {
+      scopedWatch.lastResult = "waiting_database_schema";
+      console.warn("[TrustPositif Scoped] required migration tables missing; no scans or writes");
+      return { status: scopedWatch.lastResult };
+    }
+    // Synchronize admin rank whitelist first, even when fewer than two nodes
+    // are online, so the TrustPositif page lists all eligible domains.
+    scopedWatch.imported = await syncAdminWhitelist();
+    const nodes = (await getActiveNodes()).filter(n => n?.is_active !== false &&
+      String(n.tenant || "admin") === "admin").slice(0, scopedWatchMaxNodes);
+    scopedWatch.activeNodes = nodes.length;
+    if (nodes.length < 2) {
+      scopedWatch.lastResult = "waiting_two_active_nodes";
+      console.warn("[TrustPositif Scoped] waiting for two active provider nodes");
+      return { status: scopedWatch.lastResult, activeNodes: nodes.length };
+    }
+    const total = Number((await pool.query(
+      "SELECT COUNT(*)::int AS total FROM domains WHERE tenant='admin' AND is_active=TRUE"
+    )).rows[0]?.total || 0);
+    if (!total) {
+      scopedWatch.lastResult = "no_active_domains";
+      scopedWatch.cursor = 0;
+      return { status: scopedWatch.lastResult };
+    }
+    if (scopedWatch.cursor >= total) scopedWatch.cursor = 0;
+    const { rows: domains } = await pool.query(
+      "SELECT id,domain,project_name,tenant,global_status FROM domains " +
+      "WHERE tenant='admin' AND is_active=TRUE ORDER BY id LIMIT $1 OFFSET $2",
+      [scopedWatchBatchSize, scopedWatch.cursor]
+    );
+    scopedWatch.cursor = (scopedWatch.cursor + domains.length) % total;
+    // Keep only two parallel domain tasks to avoid overwhelming node queues.
+    for (let i = 0; i < domains.length; i += 2) {
+      const checked = await Promise.allSettled(domains.slice(i,i+2).map(domain =>
+        checkOneDomain(domain, [], nodes, getRetryLimit(), { trustpositifOnly: true })
+      ));
+      scopedWatch.scanned += checked.length;
+      for (const result of checked) if (result.status === "rejected") {
+        throw result.reason;
+      }
+    }
+    scopedWatch.lastResult = "complete";
+    console.log("[TrustPositif Scoped] cycle complete: scanned=" + scopedWatch.scanned +
+      " nodes=" + nodes.length + " whitelist_imported=" + scopedWatch.imported);
+    return { status: scopedWatch.lastResult, scanned: scopedWatch.scanned,
+      activeNodes: nodes.length, imported: scopedWatch.imported };
+  } catch (err) {
+    scopedWatch.lastResult = "error";
+    scopedWatch.lastError = String(err?.code || err?.message || "UNKNOWN").slice(0,130);
+    console.warn("[TrustPositif Scoped] paused:", scopedWatch.lastError);
+    return { status: "error" };
+  } finally {
+    scopedWatch.running = false;
+    scopedWatch.lastFinishedAt = new Date().toISOString();
+  }
+}
+let scopedTimerStarted = false;
+function startScopedTrustPositifScheduler() {
+  const enabled = String(process.env.TRUSTPOSITIF_SCOPED_SCHEDULER || "false").toLowerCase() === "true";
+  scopedWatch.enabled = enabled;
+  if (!enabled || scopedTimerStarted) return;
+  // Prevent duplicate worker activity if the full scheduler is also enabled.
+  if (String(process.env.SCHEDULER_ENABLED || "true").toLowerCase() !== "false") {
+    scopedWatch.lastResult = "disabled_full_scheduler_active";
+    return;
+  }
+  scopedTimerStarted = true;
+  console.log("[TrustPositif Scoped] enabled, separate from full scheduler; interval_ms=" + scopedWatchIntervalMs);
+  const initial = setTimeout(() => {
+    runScopedTrustPositifChecks().catch(err => console.error("[TrustPositif Scoped]", err.message));
+  }, 30000);
+  initial.unref?.();
+  const interval = setInterval(() => {
+    runScopedTrustPositifChecks().catch(err => console.error("[TrustPositif Scoped]", err.message));
+  }, scopedWatchIntervalMs);
+  interval.unref?.();
+}
+
 function startScheduler() {
   const cronExpr = getCronExpr();
   cron.schedule(cronExpr, runChecks);
@@ -897,4 +1009,5 @@ function startScheduler() {
   console.log("Scheduler started:", cronExpr, "confirmations:", getRetryLimit());
 }
 
-module.exports = { startScheduler, runChecks, runManualCheck, maybeAddProviderRegistryResult, sendHourlyDigestIfDue, clearRecurringAlert, getScanCycleHealth };
+module.exports = { startScheduler, runChecks, runManualCheck, maybeAddProviderRegistryResult, sendHourlyDigestIfDue, clearRecurringAlert, getScanCycleHealth,
+  getScopedWatchHealth, runScopedTrustPositifChecks, startScopedTrustPositifScheduler };
