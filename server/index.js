@@ -22,6 +22,7 @@ const { loadSettings } = require("./settingsStore");
 const { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } = require("./telegram");
 const { markAcknowledged } = require("./noticeState");
 const { normalizeEmail, isEmailWhitelistEnabled, isEmailAllowed } = require("./authAllowlist");
+const { verifyTestUser } = require("./testAccountAuth");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -111,7 +112,48 @@ app.get("/api/provider-node/releases/cloud/latest", async (req, res) => {
 });
 app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScanCycleHealth()); });
 app.get("/api/auth/me", (req, res) => res.json({ authenticated: !adminPassword || Boolean(req.session && req.session.isAdmin), email: req.session?.adminEmail || "", isDemo: Boolean(req.session?.isDemo), tenant: req.session?.tenant || "admin" }));
-app.post("/api/auth/login", (req, res) => { const email = normalizeEmail(req.body.email || ""); const password = String(req.body.password || ""); const demoPassword = process.env.DEMO_PASSWORD || "Domainradar123"; if (email === "demo@domain-radar.org" && password === demoPassword) { req.session.isAdmin = true; req.session.isDemo = true; req.session.tenant = "demo"; req.session.adminEmail = email; return res.json({ ok: true, email, isDemo: true }); } if (!adminPassword) { req.session.isAdmin = true; req.session.isDemo = false; req.session.tenant = "admin"; req.session.adminEmail = email; return res.json({ ok: true }); } if (password !== adminPassword) return res.status(401).json({ error: "Invalid password" }); if (isEmailWhitelistEnabled() && !email) return res.status(401).json({ error: "Email required" }); if (!isEmailAllowed(email)) return res.status(403).json({ error: "Email not whitelisted" }); req.session.isAdmin = true; req.session.isDemo = false; req.session.tenant = "admin"; req.session.adminEmail = email; res.json({ ok: true, email }); });
+app.post("/api/auth/login", (req, res) => {
+  const email = normalizeEmail(req.body.email || "");
+  const password = String(req.body.password || "");
+  const demoPassword = process.env.DEMO_PASSWORD || "Domainradar123";
+
+  if (email === "demo@domain-radar.org" && password === demoPassword) {
+    req.session.isAdmin = true;
+    req.session.isDemo = true;
+    req.session.tenant = "demo";
+    req.session.adminEmail = email;
+    return res.json({ ok: true, email, isDemo: true });
+  }
+
+  // Test users have independent, salted password hashes. Their access is
+  // limited to the existing demo tenant and inherits all demo write guards.
+  // No changes to ADMIN_PASSWORD, the owner whitelist or production data.
+  const testAccount = verifyTestUser(email, password);
+  if (testAccount) {
+    req.session.isAdmin = true;
+    req.session.isDemo = true;
+    req.session.tenant = "demo";
+    req.session.adminEmail = testAccount.email;
+    return res.json({ ok: true, email: testAccount.email, isDemo: true });
+  }
+
+  // Preserve the existing administrator login semantics.
+  if (!adminPassword) {
+    req.session.isAdmin = true;
+    req.session.isDemo = false;
+    req.session.tenant = "admin";
+    req.session.adminEmail = email;
+    return res.json({ ok: true });
+  }
+  if (password !== adminPassword) return res.status(401).json({ error: "Invalid credentials" });
+  if (isEmailWhitelistEnabled() && !email) return res.status(401).json({ error: "Email required" });
+  if (!isEmailAllowed(email)) return res.status(403).json({ error: "Email not whitelisted" });
+  req.session.isAdmin = true;
+  req.session.isDemo = false;
+  req.session.tenant = "admin";
+  req.session.adminEmail = email;
+  return res.json({ ok: true, email });
+});
 app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.clearCookie("domain_radar_sid"); res.json({ ok: true }); }); });
 
 app.get("/api/auth/users", requireAdmin, requireNotDemo, async (req, res, next) => {

@@ -1,0 +1,43 @@
+name: Pentagon test-account auth safety
+on:
+  push:
+    branches:
+      - fix/pentagon-test-account-auth-20261020
+  pull_request:
+    paths:
+      - "server/index.js"
+      - "server/testAccountAuth.js"
+      - "src/App.jsx"
+      - "scripts/test-pentagon-test-account-auth.cjs"
+      - ".github/workflows/test-account-auth-safety.yml"
+permissions:
+  contents: read
+jobs:
+  test-account-auth:
+    runs-on: ubuntu-latest
+    timeout-minutes: 18
+    steps:
+      - name: Checkout exact commit
+        uses: actions/checkout@v4
+      - name: Configure Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+          cache: npm
+      - name: Verify standalone test account security
+        run: |
+          node --check server/testAccountAuth.js
+          node --check scripts/test-pentagon-test-account-auth.cjs
+          node scripts/test-pentagon-test-account-auth.cjs
+      - name: Install isolated build dependencies without altering old lockfile
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+      - name: Compile full production React UI
+        run: npm run build
+      - name: Verify compiled UI is available
+        run: |
+          test -s dist/index.html
+          test -d dist/assets
+          node scripts/test-pentagon-production-ui-shell.cjs
+      - name: Confirm no database or production mutation
+        run: |
+          echo "Auth verification uses synthetic fixture credentials only."
