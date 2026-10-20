@@ -20,54 +20,68 @@ const canonical=x=>String(x||"").trim().toLowerCase();
 
 function buildAdminPreview(sourceRows,targetRows){
   guard(Array.isArray(sourceRows)&&Array.isArray(targetRows),"MISSING_LOCAL_ROWS");
-  const perHost=new Map(),targetPerHost=new Map();
+  const allSource=new Map(), allTargets=new Map(), adminGroups=new Map();
   for(const r of sourceRows){
-    const host=canonical(r.domain);if(!host)continue;
-    if(!perHost.has(host))perHost.set(host,[]);
-    perHost.get(host).push(r);
+    const host=canonical(r.domain);
+    if(!host)continue;
+    if(!allSource.has(host))allSource.set(host,[]);
+    allSource.get(host).push(r);
+    if(canonical(r.tenant)==="admin"){
+      if(!adminGroups.has(host))adminGroups.set(host,[]);
+      adminGroups.get(host).push(r);
+    }
   }
   for(const r of targetRows){
-    const host=canonical(r.domain);if(!host)continue;
-    if(!targetPerHost.has(host))targetPerHost.set(host,[]);
-    targetPerHost.get(host).push(r);
+    const host=canonical(r.domain);
+    if(!host)continue;
+    if(!allTargets.has(host))allTargets.set(host,[]);
+    allTargets.get(host).push(r);
   }
   const rows=[];
-  for(const r of sourceRows.filter(x=>canonical(x.tenant)==="admin")){
-    const host=canonical(r.domain), fleet=String(r.fleet||"").trim();
-    const colliding=perHost.get(host)||[],target=targetPerHost.get(host)||[];
+  for(const [host,group] of [...adminGroups.entries()].sort(([a],[b])=>a.localeCompare(b))){
+    const other=allSource.get(host)||[],target=allTargets.get(host)||[];
+    const fleets=[...new Set(group.map(r=>String(r.fleet||"").trim()))];
+    const names=[...new Set(group.map(r=>String(r.project_name||"").trim()).filter(Boolean))];
     let reason;
     if(!HOST_RE.test(host)||host.length>253||host.includes("..")||
        host.startsWith("-")||host.endsWith("-"))reason="INVALID_HOSTNAME";
-    else if(r.is_active!==true)reason="SOURCE_NOT_ACTIVE";
-    else if(!fleet)reason="MISSING_SOURCE_FLEET";
-    else if(colliding.length!==1)reason="SOURCE_HOST_HAS_MULTIPLE_IDENTITIES";
+    else if(group.some(r=>r.is_active!==true))reason="SOURCE_HAS_DISABLED_RECORD";
+    else if(fleets.some(x=>!x))reason="MISSING_SOURCE_FLEET";
+    else if(other.some(r=>canonical(r.tenant)!=="admin"))reason="SOURCE_CROSS_TENANT_HOST_CONFLICT";
+    else if(new Set(group.map(r=>String(r.fleet||"").trim())).size!==group.length)
+      reason="SOURCE_DUPLICATE_WITHIN_FLEET";
     else if(target.length)reason="TARGET_HOST_ALREADY_OCCUPIED";
-    else reason="UNIQUE_SOURCE_ADMIN_CANDIDATE_NEEDS_OWNER_REVIEW";
+    else reason="MONITOR_ONLY_CANDIDATE_NEEDS_OWNER_ATTESTATION";
     rows.push({
-      source_id:String(r.id),domain:host,tenant:"admin",fleet,
-      project_name:String(r.project_name||"").slice(0,140),
-      source_is_active:r.is_active===true,
-      source_same_host_records:colliding.length,
+      domain:host,tenant:"admin",
+      source_ids:group.map(r=>String(r.id)),origin_fleets:fleets,
+      project_names:names,source_records:group.length,source_all_host_records:other.length,
       target_same_host_records:target.length,
-      reason,eligible_for_manual_review:reason==="UNIQUE_SOURCE_ADMIN_CANDIDATE_NEEDS_OWNER_REVIEW",
-      activation_allowed:false
+      all_source_admin_active:group.every(r=>r.is_active===true),
+      monitor_only_candidate:reason==="MONITOR_ONLY_CANDIDATE_NEEDS_OWNER_ATTESTATION",
+      history_requires_fleet_mapping:group.length>1,
+      // Neither source history nor node IDs are imported in this stage.
+      reason,activation_allowed:false
     });
   }
-  const candidates=rows.filter(x=>x.eligible_for_manual_review).length;
+  const previewable=rows.filter(x=>x.monitor_only_candidate).length;
   return {
     type:"pentagon_offline_admin_candidate_preview_v1",
     counts:{
-      source_total:sourceRows.length,source_admin:rows.length,
+      source_total:sourceRows.length,source_admin:sourceRows.filter(x=>canonical(x.tenant)==="admin").length,
       source_demo:sourceRows.filter(x=>canonical(x.tenant)==="demo").length,
+      source_admin_unique_hosts:rows.length,
       target_total:targetRows.length,target_admin:targetRows.filter(x=>canonical(x.tenant)==="admin").length,
       target_demo:targetRows.filter(x=>canonical(x.tenant)==="demo").length,
-      unique_admin_candidates:candidates,
-      admin_blocked:rows.length-candidates,
-      source_admin_active:rows.filter(x=>x.source_is_active).length
+      monitor_only_candidate_hosts:previewable,
+      monitor_only_blocked_hosts:rows.length-previewable,
+      historical_multi_fleet_admin_hosts:rows.filter(x=>x.history_requires_fleet_mapping).length,
+      source_admin_active:sourceRows.filter(x=>canonical(x.tenant)==="admin"&&x.is_active===true).length
     },
     source_admin_reviews:rows,
     gates:{data_from_historical_backup:true,fresh_target_check_required:true,
       fleet_identity_preserved:true,ownership_attestation_required:true,
+      monitor_only_no_historical_merge:true,
       task_history_not_migrated:true,activate_only_after_approved_release:true,
       activation_allowed:false,generated_sql:false,production_connections:0,production_writes:0}
   };
