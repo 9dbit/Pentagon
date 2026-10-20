@@ -109,7 +109,7 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
       const result = await db.query([
         "INSERT INTO trustpositif_domain_monitor",
         "(tenant,domain,listed,verified_at,detected_at,last_anomaly_at,anomaly_nodes,next_check_at,last_error,source,updated_at)",
-        "VALUES($1,$2,$3,$4,CASE WHEN $3 THEN $4 ELSE NULL END,$5,$6::jsonb,NULL,'',$7,$5)",
+        "VALUES($1,$2,$3::boolean,$4::timestamptz,CASE WHEN $3::boolean THEN $4::timestamptz ELSE NULL END,$5::timestamptz,$6::jsonb,NULL,'',$7,$5::timestamptz)",
         "ON CONFLICT(tenant,domain) DO UPDATE SET",
         "listed=EXCLUDED.listed,verified_at=EXCLUDED.verified_at,",
         "detected_at=CASE WHEN EXCLUDED.listed THEN COALESCE(trustpositif_domain_monitor.detected_at,EXCLUDED.detected_at)",
