@@ -6,7 +6,7 @@ const { decide } = require("./confirm");
 const { getRuntimeSettings } = require("./runtimeSettings");
 const { getActiveNodes, checkViaNode } = require("./nodeChecker");
 const { classifyReasonType, reasonTypeLabel } = require("./reasonClassifier");
-const { verifyProviderBlock } = require("./providerBlockVerifier");
+const { checkAfterNodeConsensus, syncAdminWhitelist } = require("./trustpositifWatch");
 const { isAcknowledged, clearAcknowledged } = require("./noticeState");
 const { checkGroup: rankCheckGroup } = require("./rankRoutes");
 
@@ -59,88 +59,25 @@ function isNodeTimeout(result) {
   return text.includes("node polling timeout") || text.includes("no response from device");
 }
 
-function hasProviderNodeWarning(results) {
-  return results.some((r) => {
-    const checker = String(r.checker_type || "").toLowerCase();
-    return checker.includes("node") && normalizeStatus(r.status) === "warning" && !isNodeTimeout(r);
-  });
-}
-
-function hasDirectWarning(results) {
-  return results.some((r) => {
-    const checker = String(r.checker_type || "").toLowerCase();
-    return checker === "direct" && normalizeStatus(r.status) === "warning";
-  });
-}
-
-function shouldCheckProviderRegistry(domain, results) {
-  // No longer skip already-blocked domains — they need re-validation to self-correct
-
-  if (hasProviderNodeWarning(results)) {
-    return { check: true, reason: "provider node warning" };
+async function maybeAddProviderRegistryResult(domain, results, nodes = []) {
+  if (process.env.TRUSTPOSITIF_AUTO_WATCH === "false") {
+    return { triggered: false, confirmedBlocked: false, source: "disabled" };
   }
-
-  // Also trigger when nodes report blocked (to confirm or deny ISP block)
-  if (results.some(r => String(r.checker_type || "").startsWith("node:") && r.status === "blocked")) {
-    return { check: true, reason: "provider node blocked" };
-  }
-
-  if (TRUSTPOSITIF_ON_DIRECT_WARNING && hasDirectWarning(results)) {
-    return { check: true, reason: "direct warning" };
-  }
-
-  // Also trigger when direct check reports blocked
-  if (results.some(r => r.checker_type === "direct" && r.status === "blocked")) {
-    return { check: true, reason: "direct blocked" };
-  }
-
-  return { check: false, reason: "no provider-node/direct warning or block" };
-}
-
-async function maybeAddProviderRegistryResult(domain, results) {
-  const decision = shouldCheckProviderRegistry(domain, results);
-  if (!decision.check) {
-    if (process.env.TRUSTPOSITIF_DEBUG === "true") {
-      console.log(`[TrustPositif] skip ${domain.domain}: ${decision.reason}`);
-    }
-    return;
-  }
-
   try {
-    console.log(`[TrustPositif] checking ${domain.domain}: ${decision.reason}`);
-    const registry = await verifyProviderBlock(domain.domain);
-
-    if (!registry.checked) {
-      console.log(`[TrustPositif] error ${domain.domain}: ${registry.reason || registry.status || "unchecked"}`);
-      return;
+    const confirmation = await checkAfterNodeConsensus(domain, results, nodes);
+    if (confirmation.triggered) {
+      console.log("[TrustPositif] " + domain.domain +
+        ": node_votes=" + confirmation.nodes.length +
+        " verified=" + Boolean(confirmation.checked) +
+        " listed=" + Boolean(confirmation.confirmedBlocked) +
+        " source=" + String(confirmation.source || "pending"));
     }
-
-    const result = registry.blocked
-      ? {
-          checker_type: "provider_registry",
-          provider_name: "TrustPositif",
-          status: "blocked",
-          http_status: 451,
-          final_url: "",
-          dns_result: "",
-          latency_ms: null,
-          reason: "TrustPositif status Ada"
-        }
-      : {
-          checker_type: "provider_registry",
-          provider_name: "TrustPositif",
-          status: "working",
-          http_status: 200,
-          final_url: "",
-          dns_result: "",
-          latency_ms: null,
-          reason: "TrustPositif status Tidak Ada"
-        };
-
-    results.push(result);
-    console.log(`[TrustPositif] result ${domain.domain}: ${result.status} / ${result.reason}`);
+    return confirmation;
   } catch (err) {
-    console.error("Provider registry verification error:", domain.domain, err.message);
+    // Fail closed. Never label a domain clean or blocked because the official
+    // registry or local database is unavailable.
+    console.warn("[TrustPositif] confirmation unavailable for " + domain.domain + ": " + err.message);
+    return { triggered: true, checked: false, confirmedBlocked: false, source: "error" };
   }
 }
 
@@ -728,7 +665,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
       results.push(nodeResult);
     }
 
-    await maybeAddProviderRegistryResult(domain, results);
+    const registryCheck = await maybeAddProviderRegistryResult(domain, results, nodes);
 
     for (const r of results) {
       await pool.query(
@@ -742,7 +679,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
     const domainResults = results.filter((r) => !isNodeTimeout(r));
     const effectiveResults = domainResults.length ? domainResults : results;
 
-    const newStatus = calculateGlobalStatus(effectiveResults);
+    const newStatus = registryCheck.confirmedBlocked || registryCheck.holdBlocked
+      ? "blocked" : calculateGlobalStatus(effectiveResults);
     const oldStatus = domain.global_status || "unknown";
 
     if (normalizeStatus(newStatus) !== "blocked") {
@@ -750,7 +688,9 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
       await clearRecurringAlert(domain.id);
     }
 
-    const decision = decide(domain.id, oldStatus, newStatus, retryLimit);
+    const decision = registryCheck.confirmedBlocked
+      ? { apply: true, value: "blocked", count: 1, max: 1 }
+      : decide(domain.id, oldStatus, newStatus, retryLimit);
 
     if (!decision.apply) {
       await pool.query(
@@ -811,34 +751,6 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit) {
           await upsertRecurringAlert(domain.id, domain.domain, emergencyMsg);
           await sendPendingRecurringAlerts();
         }
-      } else if (normalizeStatus(newStatus) === 'warning') {
-        try {
-          const ipResult = await verifyProviderBlock(domain.domain);
-          if (ipResult && ipResult.blocked === true && !(await isAcknowledged(domain.id))) {
-            const canonicalIpResult = {
-              checker_type: 'provider_registry',
-              provider_name: 'InternetPositif',
-              status: 'blocked',
-              reason: `Terdaftar di Internet Positif (${ipResult.raw_excerpt ? ipResult.raw_excerpt.slice(0, 80) : 'Ada'})`,
-              final_url: null,
-              latency_ms: null
-            };
-            await pool.query(
-              `INSERT INTO check_results (domain_id, checker_type, provider_name, status, reason) VALUES ($1,$2,$3,$4,$5)`,
-              [domain.id, canonicalIpResult.checker_type, canonicalIpResult.provider_name, canonicalIpResult.status, canonicalIpResult.reason]
-            ).catch(() => {});
-            await pool.query(
-              `UPDATE domains SET global_status='blocked', last_checked_at=NOW() WHERE id=$1`,
-              [domain.id]
-            ).catch(() => {});
-            const allResults = [...effectiveResults, canonicalIpResult];
-            const emergencyMsg = buildEmergencyBlockedMessage(domain, allResults);
-            await upsertRecurringAlert(domain.id, domain.domain, emergencyMsg);
-            await sendPendingRecurringAlerts();
-          }
-        } catch (ipErr) {
-          console.error(`[WarningIPCheck] ${domain.domain}:`, ipErr.message);
-        }
       }
     }
   } catch (err) {
@@ -857,6 +769,13 @@ async function runChecks() {
     await ensureReasonTypeColumn();
 
     const retryLimit = getRetryLimit();
+    try {
+      const imported = await syncAdminWhitelist();
+      if (imported > 0) console.log("[TrustPositif] new rank-whitelisted monitor domains: " + imported);
+    } catch (err) {
+      console.warn("[TrustPositif] whitelist sync unavailable: " + err.message);
+      _currentCycleErrors++;
+    }
     const { rows: domains } = await pool.query("SELECT * FROM domains WHERE is_active = TRUE AND tenant='admin' ORDER BY id ASC");
     const { rows: proxies } = await pool.query("SELECT * FROM proxies WHERE is_active = TRUE AND tenant='admin' ORDER BY id ASC");
     const nodes = await getActiveNodes();

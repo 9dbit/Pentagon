@@ -6,6 +6,7 @@ const path = require("path");
 const readline = require("readline");
 const { once } = require("events");
 const { pool } = require("./db");
+const { listWatchlist, MIN_NODES, TTL_MS } = require("./trustpositifWatch");
 const { ensureNodeTable } = require("./nodeRoutes");
 const { ensureTaskTable, enqueueNodeTask, waitForNodeTask } = require("./agentPollRoutes");
 
@@ -300,7 +301,7 @@ async function ensureIndexedCache() {
   return { ...source, index };
 }
 
-if (process.env.TRUSTPOSITIF_PREWARM !== "false") {
+if (process.env.TRUSTPOSITIF_PREWARM === "true") {
   const timer = setTimeout(() => {
     ensureIndexedCache()
       .then((info) => {
@@ -533,6 +534,24 @@ router.post("/trustpositif/nodes/:id/test", async (req, res, next) => {
   }
 });
 
+router.get("/trustpositif/watchlist", async (req, res, next) => {
+  try {
+    const tenant = req.session?.tenant || req.tenant || "admin";
+    const domains = await listWatchlist(tenant);
+    const summary = {
+      total: domains.length,
+      rank_whitelisted: domains.filter(d => d.rank_whitelisted).length,
+      monitored: domains.filter(d => d.monitored).length,
+      blocked: domains.filter(d => d.listed === true && d.global_status === "blocked").length,
+      pending: domains.filter(d => d.last_anomaly_at && !d.verified_at).length
+    };
+    res.json({
+      ok: true, min_nodes: MIN_NODES, cache_ttl_minutes: Math.round(TTL_MS / 60000),
+      summary, domains, generated_at: new Date().toISOString()
+    });
+  } catch (err) { next(err); }
+});
+
 router.get("/trustpositif/history", async (req, res, next) => {
   try {
     await ensureTrustPositifTable();
@@ -552,3 +571,5 @@ router.get("/trustpositif/history", async (req, res, next) => {
 });
 
 module.exports = router;
+module.exports.ensureIndexedCache = ensureIndexedCache;
+module.exports.lookupIndexedDomains = lookupIndexedDomains;

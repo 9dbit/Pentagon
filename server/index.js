@@ -63,15 +63,16 @@ async function runSingleDomainCheck(domainRow) {
   for (const proxy of proxies) checks.push(checkDomain(domainRow.domain, { type: "proxy", provider_name: proxy.provider_name || proxy.name, proxy }));
   for (const node of nodes) checks.push(checkViaNode(domainRow.domain, node));
   const results = await Promise.all(checks);
-  await maybeAddProviderRegistryResult(domainRow, results);
+  const registryCheck = await maybeAddProviderRegistryResult(domainRow, results, nodes);
   for (const result of results) {
     await pool.query(`INSERT INTO check_results (domain_id, checker_type, provider_name, status, http_status, final_url, dns_result, latency_ms, reason) VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9)`, [domainRow.id, result.checker_type, result.provider_name, result.status, result.http_status, result.final_url, result.dns_result, result.latency_ms, result.reason]);
   }
   const oldStatus = domainRow.global_status || "unknown";
-  const newStatus = calculateGlobalStatus(results);
+  const newStatus = registryCheck.confirmedBlocked || registryCheck.holdBlocked
+    ? "blocked" : calculateGlobalStatus(results);
   await pool.query("UPDATE domains SET last_status=$1, global_status=$2, last_checked_at=NOW() WHERE id=$3", [oldStatus, newStatus, domainRow.id]);
   if (oldStatus !== newStatus) {
-    const message = `DOMAIN STATUS CHANGED\n\nDomain: ${domainRow.domain}\nOld: ${oldStatus}\nNew: ${newStatus}\nMode: Single manual check`;
+    const message = `DOMAIN STATUS CHANGED\n\nDomain: ${domainRow.domain}\nOld: ${oldStatus}\nNew: ${newStatus}\nNodes reporting anomalies: ${registryCheck.nodes?.length || 0}\nTrustPositif: ${registryCheck.confirmedBlocked ? 'EXACT LISTED' : 'not confirmed'}\nTime: ${new Date().toISOString()}\nMode: Single manual check`;
     const sent = await sendTelegram(message);
     await pool.query("INSERT INTO alerts (domain_id, old_status, new_status, message, sent_to_telegram) VALUES ($1,$2,$3,$4,$5)", [domainRow.id, oldStatus, newStatus, message, sent]);
   }
@@ -199,7 +200,7 @@ app.use("/api/rank", requireAdmin, requireNotDemoWrite, attachTenant, rankRoutes
 app.use("/api/analytics", requireAdmin, requireNotDemo, analyticsRoutes);
 app.use("/api/nodes", requireAdmin, requireNotDemoWrite, attachTenant, nodeRoutes);
 app.use("/api/project-telegram", requireAdmin, requireNotDemoWrite, projectTelegramRoutes);
-app.use("/api", requireAdmin, trustpositifRoutes);
+app.use("/api", requireAdmin, requireNotDemoWrite, attachTenant, trustpositifRoutes);
 
 app.post("/api/telegram/webhook", async (req, res) => {
   try {
