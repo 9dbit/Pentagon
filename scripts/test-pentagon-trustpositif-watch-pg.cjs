@@ -48,6 +48,10 @@ async function run(){
   await test("repeated samples from one node do not qualify",async()=>{
     assert.equal(watch.reliableNodeAnomalies([node(10,"blocked"),node(10,"blocked")],nodes).length,1);
   });
+  await test("same-provider distinct node IDs do not form independent quorum",async()=>{
+    const shared=[...nodes,{id:40,name:"Backup",provider_name:"Sample ISP A",is_active:true}];
+    assert.equal(watch.reliableNodeAnomalies([node(10,"blocked"),node(40,"blocked")],shared).length,1);
+  });
   await test("agent error and disabled node excluded",async()=>{
     assert.equal(watch.reliableNodeAnomalies([node(10,"warning","Node polling timeout"),node(20,"blocked")],nodes).length,1);
     assert.equal(watch.reliableNodeAnomalies([node(10,"blocked"),node(30,"blocked")],nodes).length,1);
@@ -128,6 +132,7 @@ async function run(){
     const negative=await watch.checkAfterNodeConsensus({...alpha,global_status:"blocked"},[...two],nodes,
       {db,now:later,lookup:async()=>({listed:false,verifiedAt:later,source:"test-official"})});
     assert.equal(negative.confirmedBlocked,false);
+    assert.equal(negative.confirmedRecovered,true);
     const state=(await db.query("SELECT listed,detected_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
     assert.equal(state.listed,false);
     assert.equal(state.detected_at,null);
@@ -142,6 +147,7 @@ async function run(){
     const scheduler=fs.readFileSync(path.resolve(__dirname,"../server/scheduler.js"),"utf8");
     assert.match(scheduler,/syncAdminWhitelist\(\)/);
     assert.match(scheduler,/registryCheck\.confirmedBlocked/);
+    assert.match(scheduler,/registryCheck\\.confirmedRecovered/);
     assert.match(scheduler,/INSERT INTO alerts/);
     assert.match(scheduler,/sendTelegram\(message, telegramExtra\)/);
     assert.match(scheduler,/buildEmergencyBlockedMessage/);
