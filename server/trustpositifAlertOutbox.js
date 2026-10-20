@@ -245,7 +245,27 @@ async function deliverySummary(tenant = "admin", db = pool) {
   }
 }
 
+async function recentNotificationLog(tenant = "admin", db = pool, limit = 20) {
+  try {
+    const { rows } = await db.query(
+      "SELECT o.id,o.event_type,o.status,o.attempts,o.created_at,o.updated_at,o.sent_at," +
+      "o.last_error_code,d.domain,d.project_name," +
+      "COALESCE((SELECT jsonb_agg(jsonb_build_object(" +
+      "'at',a.attempted_at,'outcome',a.outcome,'code',a.error_code) " +
+      "ORDER BY a.attempted_at DESC) FROM trustpositif_notification_attempts a " +
+      "WHERE a.outbox_id=o.id),'[]'::jsonb) AS history " +
+      "FROM trustpositif_notification_outbox o JOIN domains d ON d.id=o.domain_id " +
+      "WHERE d.tenant=$1 ORDER BY o.id DESC LIMIT $2",
+      [tenant,Math.max(1,Math.min(50,Number(limit)||20))]
+    );
+    return rows;
+  } catch (err) {
+    if (err.code === "42P01") return [];
+    throw err;
+  }
+}
+
 module.exports = {
-  ensureOutboxTables,enqueueTransition,drainOutbox,deliverySummary,
+  ensureOutboxTables,enqueueTransition,drainOutbox,deliverySummary,recentNotificationLog,
   deliverTelegram,formatEventMessage,backoffMs
 };
