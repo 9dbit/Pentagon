@@ -23,6 +23,8 @@ on:
       - "scripts/test-pentagon-trustpositif-readiness-pg.cjs"
       - "scripts/pentagon-activation-review.cjs"
       - "scripts/test-pentagon-activation-review.cjs"
+      - "scripts/pentagon-admin-activation-preview.cjs"
+      - "scripts/test-pentagon-admin-activation-preview.cjs"
       - "docs/PENTAGON_SAFE_ACTIVATION_REVIEW_20261020.md"
       - ".github/workflows/trustpositif-watch-qa.yml"
 permissions:
@@ -76,6 +78,8 @@ jobs:
           node --check scripts/test-pentagon-trustpositif-readiness-pg.cjs
           node --check scripts/pentagon-activation-review.cjs
           node --check scripts/test-pentagon-activation-review.cjs
+          node --check scripts/pentagon-admin-activation-preview.cjs
+          node --check scripts/test-pentagon-admin-activation-preview.cjs
       - name: Source circuit breaker and scoped worker security contract
         run: node scripts/test-pentagon-trustpositif-source-backoff.cjs
       - name: Postgres synthetic whitelist and two-node consensus integration
@@ -86,6 +90,8 @@ jobs:
         run: node scripts/test-pentagon-trustpositif-readiness-pg.cjs
       - name: Fail-closed fleet-aware offline activation mapping review
         run: node scripts/test-pentagon-activation-review.cjs
+      - name: Administrator monitor-only deduplication without history import
+        run: node scripts/test-pentagon-admin-activation-preview.cjs
       - name: Compile current production UI
         run: npm run build
       - name: Verify compiled SPA shell
