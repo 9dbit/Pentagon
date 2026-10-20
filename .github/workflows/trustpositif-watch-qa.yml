@@ -21,6 +21,9 @@ on:
       - "scripts/test-pentagon-trustpositif-watch-pg.cjs"
       - "scripts/test-pentagon-trustpositif-outbox-pg.cjs"
       - "scripts/test-pentagon-trustpositif-readiness-pg.cjs"
+      - "scripts/pentagon-activation-review.cjs"
+      - "scripts/test-pentagon-activation-review.cjs"
+      - "docs/PENTAGON_SAFE_ACTIVATION_REVIEW_20261020.md"
       - ".github/workflows/trustpositif-watch-qa.yml"
 permissions:
   contents: read
@@ -71,6 +74,8 @@ jobs:
           node --check scripts/test-pentagon-trustpositif-watch-pg.cjs
           node --check scripts/test-pentagon-trustpositif-outbox-pg.cjs
           node --check scripts/test-pentagon-trustpositif-readiness-pg.cjs
+          node --check scripts/pentagon-activation-review.cjs
+          node --check scripts/test-pentagon-activation-review.cjs
       - name: Source circuit breaker and scoped worker security contract
         run: node scripts/test-pentagon-trustpositif-source-backoff.cjs
       - name: Postgres synthetic whitelist and two-node consensus integration
@@ -79,6 +84,8 @@ jobs:
         run: node scripts/test-pentagon-trustpositif-outbox-pg.cjs
       - name: PostgreSQL whitelist reconciliation readiness (strictly read only)
         run: node scripts/test-pentagon-trustpositif-readiness-pg.cjs
+      - name: Fail-closed fleet-aware offline activation mapping review
+        run: node scripts/test-pentagon-activation-review.cjs
       - name: Compile current production UI
         run: npm run build
       - name: Verify compiled SPA shell
