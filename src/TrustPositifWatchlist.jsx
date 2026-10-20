@@ -190,6 +190,28 @@ export default function TrustPositifWatchlist() {
     </div>
     {rows.length>visibleCount && <button className="tpWatchMoreButton" type="button"
       onClick={()=>setVisibleCount(v=>v+100)}>Tampilkan 100 lagi ({rows.length-visibleCount} tersisa)</button>}
+    <section className="tpWatchDeliveryLog" aria-label="Telegram delivery audit">
+      <div className="tpWatchTableHead">
+        <div><h3>Alert delivery log</h3>
+          <small>Riwayat notifikasi resmi yang persisten. Retry hanya untuk kegagalan pasti; timeout ambigu memerlukan review.</small>
+        </div>
+      </div>
+      {(Array.isArray(data?.notification_log) ? data.notification_log : []).slice(0,20).map(evt=>
+        <article className="tpWatchDeliveryRow" key={evt.id}>
+          <div><b>{evt.domain}</b><span>{evt.event_type === "BLOCKED" ? "Blocked" : "Registry delisted"} · {displayTime(evt.created_at)}</span></div>
+          <div className="tpWatchDeliveryStatus"><span className={"tpWatchPill "+(evt.status==="sent"?"healthy":evt.status==="retry"?"verifying":evt.status==="uncertain"?"suspected":"unknown")}>{evt.status}</span>
+            <small>Attempt {evt.attempts} · {evt.last_error_code || "No delivery error"}</small></div>
+          <details className="tpWatchDetails"><summary>Audit trail <ChevronDown size={13}/></summary>
+            <div className="tpWatchDetailBody">
+              {(Array.isArray(evt.history)?evt.history:[]).length ?
+                evt.history.map((attempt,i)=><div key={i}>{displayTime(attempt.at)} · {attempt.outcome} · {attempt.code || "OK"}</div>) :
+                <div>Belum ada pengiriman. Event tersimpan di database.</div>}
+            </div>
+          </details>
+        </article>
+      )}
+      {!data?.notification_log?.length && <p className="tpWatchEmpty">Belum ada event TrustPositif yang menghasilkan notifikasi.</p>}
+    </section>
     <div className="tpWatchFoot"><ShieldCheck size={14}/> Registry cache {Math.round((data?.cache_ttl_minutes || 360)/60)}
       jam. Endpoint gagal atau timeout tidak mengubah domain menjadi blocked atau healthy.
       Status delisted hanya mengonfirmasi hasil registry, bukan pemulihan seluruh jaringan.</div>
