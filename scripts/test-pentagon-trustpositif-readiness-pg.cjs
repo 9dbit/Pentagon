@@ -83,12 +83,20 @@ try {
     assert.equal(r.domains.active,1);
     assert.equal(r.reason,"ready_to_scan");
   });
+  await addDomain("BETA.EXAMPLE","demo",true);
+  await test("case-folded overlapping ownership counts once and fails closed",async()=>{
+    const r=await auditWhitelistReadiness(db);
+    assert.equal(r.whitelist.valid_distinct,1);
+    assert.equal(r.whitelist.cross_tenant_conflicts,1);
+    assert.equal(r.whitelist.admin_active,1);
+    assert.equal(r.reason,"review_cross_tenant_conflicts");
+  });
   await test("preflight SELECTs cannot create domains, remove demo data or activate rows",async()=>{
     const before=(await db.query("SELECT COUNT(*)::int n FROM domains")).rows[0].n;
     await auditWhitelistReadiness(db);await auditWhitelistReadiness(db);
     const after=(await db.query("SELECT COUNT(*)::int n FROM domains")).rows[0].n;
     assert.equal(before,after);
-    assert.equal((await db.query("SELECT COUNT(*)::int n FROM domains WHERE tenant='demo'")).rows[0].n,2);
+    assert.equal((await db.query("SELECT COUNT(*)::int n FROM domains WHERE tenant='demo'")).rows[0].n,3);
   });
   await test("non-admin tenant is explicitly rejected",async()=>{
     await assert.rejects(()=>auditWhitelistReadiness(db,"demo"),/ADMIN_TENANT_REQUIRED/);
