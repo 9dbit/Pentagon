@@ -14,6 +14,13 @@ on:
       - "server/trustpositifAlertOutbox.js"
       - "server/trustpositifReadiness.js"
       - "server/customerWhitelistSync.js"
+      - "server/customerViewerAuth.js"
+      - "server/customerViewerRoutes.js"
+      - "src/CustomerViewerPage.jsx"
+      - "src/CustomerViewerPage.css"
+      - "scripts/test-pentagon-customer-viewer-auth.cjs"
+      - "scripts/test-pentagon-customer-viewer-pg.cjs"
+      - "scripts/test-pentagon-test-account-auth.cjs"
       - "server/nodeChecker.js"
       - "server/index.js"
       - "src/TrustPositif*"
@@ -73,6 +80,10 @@ jobs:
           node --check server/trustpositifAlertOutbox.js
           node --check server/trustpositifReadiness.js
           node --check server/customerWhitelistSync.js
+          node --check server/customerViewerAuth.js
+          node --check server/customerViewerRoutes.js
+          node --check scripts/test-pentagon-customer-viewer-auth.cjs
+          node --check scripts/test-pentagon-customer-viewer-pg.cjs
           node --check server/index.js
           node --check server/railway-entry.js
           node --check scripts/test-pentagon-trustpositif-source-backoff.cjs
@@ -98,6 +109,12 @@ jobs:
         run: node scripts/test-pentagon-admin-activation-preview.cjs
       - name: Tenant-preserving customer whitelist sync and multi-node alert integration
         run: node scripts/test-pentagon-customer-whitelist-pg.cjs
+      - name: Customer viewer hashed login compatibility and API permission firewall
+        run: |
+          node scripts/test-pentagon-test-account-auth.cjs
+          node scripts/test-pentagon-customer-viewer-auth.cjs
+      - name: PostgreSQL customer portal tenant isolation and read-only HTTP
+        run: node scripts/test-pentagon-customer-viewer-pg.cjs
       - name: Compile current production UI
         run: npm run build
       - name: Verify compiled SPA shell

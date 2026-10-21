@@ -23,6 +23,8 @@ const { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } = require(".
 const { markAcknowledged } = require("./noticeState");
 const { normalizeEmail, isEmailWhitelistEnabled, isEmailAllowed } = require("./authAllowlist");
 const { verifyTestUser } = require("./testAccountAuth");
+const { customerTenantForEmail, currentViewerTenant, customerViewerFirewall } = require("./customerViewerAuth");
+const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -46,8 +48,11 @@ app.set("trust proxy", 1);
 app.use(cors({ credentials: true, origin: true }));
 app.use(express.json({ limit: "2mb" }));
 app.use(session({ store: new PgSessionStore(pool), name: "domain_radar_sid", secret: sessionSecret, resave: false, saveUninitialized: false, proxy: true, cookie: { httpOnly: true, sameSite: "lax", secure: "auto", maxAge: 1000 * 60 * 60 * 24 * 7 } }));
+// Deny every non-customer API for a viewer, including routes mounted before
+// normal admin middleware and future endpoints. Static assets remain public.
+app.use("/api", customerViewerFirewall);
 
-function requireAdmin(req, res, next) { if (!adminPassword) return next(); if (req.session && req.session.isAdmin) return next(); return res.status(401).json({ error: "Unauthorized" }); }
+function requireAdmin(req, res, next) { if (req.session?.isCustomerViewer) return res.status(403).json({ error: "CUSTOMER_VIEW_ONLY" }); if (!adminPassword) return next(); if (req.session && req.session.isAdmin) return next(); return res.status(401).json({ error: "Unauthorized" }); }
 function getTenant(req) { return (req.session && req.session.tenant) || 'admin'; }
 function requireNotDemo(req, res, next) { if (req.session && req.session.isDemo) return res.status(403).json({ error: "Demo mode — read only" }); next(); }
 function requireNotDemoWrite(req, res, next) { if (req.method !== 'GET' && req.session && req.session.isDemo) return res.status(403).json({ error: "Demo mode — read only" }); next(); }
@@ -112,7 +117,19 @@ app.get("/api/provider-node/releases/cloud/latest", async (req, res) => {
   }
 });
 app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScanCycleHealth()); });
-app.get("/api/auth/me", (req, res) => res.json({ authenticated: !adminPassword || Boolean(req.session && req.session.isAdmin), email: req.session?.adminEmail || "", isDemo: Boolean(req.session?.isDemo), tenant: req.session?.tenant || "admin" }));
+app.get("/api/auth/me", (req, res) => {
+  res.set("Cache-Control", "private, no-store");
+  const viewerTenant = currentViewerTenant(req.session);
+  const wasViewer = Boolean(req.session?.isCustomerViewer);
+  return res.json({
+    authenticated: wasViewer ? Boolean(viewerTenant) : (!adminPassword || Boolean(req.session?.isAdmin)),
+    email: req.session?.adminEmail || "",
+    isDemo: !wasViewer && Boolean(req.session?.isDemo),
+    isCustomerViewer: Boolean(viewerTenant),
+    role: viewerTenant ? "customer_viewer" : wasViewer ? "revoked" : req.session?.isDemo ? "demo" : "admin",
+    tenant: viewerTenant || (wasViewer ? null : (req.session?.tenant || "admin"))
+  });
+});
 app.post("/api/auth/login", (req, res) => {
   const email = normalizeEmail(req.body.email || "");
   const password = String(req.body.password || "");
@@ -126,11 +143,23 @@ app.post("/api/auth/login", (req, res) => {
     return res.json({ ok: true, email, isDemo: true });
   }
 
-  // Test users have independent, salted password hashes. Their access is
-  // limited to the existing demo tenant and inherits all demo write guards.
-  // No changes to ADMIN_PASSWORD, the owner whitelist or production data.
+  // Existing salted test-account password hashes remain unchanged.
+  // An independently configured, server-only email->tenant grant may
+  // convert a verified account into a strictly scoped read-only viewer.
   const testAccount = verifyTestUser(email, password);
   if (testAccount) {
+    const viewerTenant = customerTenantForEmail(testAccount.email);
+    if (viewerTenant) {
+      return req.session.regenerate((err) => {
+        if (err) return res.status(503).json({ error: "SESSION_UNAVAILABLE" });
+        req.session.isAdmin = false;
+        req.session.isDemo = false;
+        req.session.isCustomerViewer = true;
+        req.session.tenant = viewerTenant;
+        req.session.adminEmail = testAccount.email;
+        return res.json({ ok: true, email: testAccount.email, isCustomerViewer: true });
+      });
+    }
     req.session.isAdmin = true;
     req.session.isDemo = true;
     req.session.tenant = "demo";
@@ -156,6 +185,9 @@ app.post("/api/auth/login", (req, res) => {
   return res.json({ ok: true, email });
 });
 app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.clearCookie("domain_radar_sid"); res.json({ ok: true }); }); });
+// Dedicated customer routes are read-only and resolve the tenant from the
+// active server-side session and env grant, never from a request parameter.
+app.use("/api/customer", createCustomerViewerRouter());
 
 app.get("/api/auth/users", requireAdmin, requireNotDemo, async (req, res, next) => {
   try {
