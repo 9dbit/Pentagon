@@ -8,6 +8,7 @@ const { once } = require("events");
 const { pool } = require("./db");
 const { listWatchlist, MIN_NODES, TTL_MS } = require("./trustpositifWatch");
 const { auditWhitelistReadiness } = require("./trustpositifReadiness");
+const { customerWhitelistCoverage } = require("./customerWhitelistSync");
 const { ensureNodeTable } = require("./nodeRoutes");
 const { ensureTaskTable, enqueueNodeTask, waitForNodeTask } = require("./agentPollRoutes");
 
@@ -592,6 +593,8 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
   try {
     const tenant = req.session?.tenant || req.tenant || "admin";
     const domains = await listWatchlist(tenant);
+    const customerCoverage = tenant === "admin" && !req.session?.isDemo
+      ? await customerWhitelistCoverage().catch(() => ({ unavailable:true })) : null;
     const readiness = tenant === "admin" && !req.session?.isDemo
       ? await auditWhitelistReadiness(pool,"admin").catch(error =>
           ({ reason:"inventory_unavailable",read_only:true,code:String(error.code || "QUERY_ERROR").slice(0,30) }))
@@ -620,7 +623,8 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
       ({total:0,active:0,recently_healthy:0,last_seen_at:null,unavailable:true}));
     res.json({
       ok: true, min_nodes: MIN_NODES, cache_ttl_minutes: Math.round(TTL_MS / 60000),
-      summary, domains, readiness, node_health:nodeHealth, notification_delivery:delivery,
+      summary, domains, readiness, customer_coverage:customerCoverage,
+      node_health:nodeHealth, notification_delivery:delivery,
       notification_log:notificationLog,
       worker: require("./scheduler").getScopedWatchHealth(), generated_at: new Date().toISOString()
     });
