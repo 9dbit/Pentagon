@@ -50,6 +50,9 @@ async function ensureMonitorTable(db = pool) {
   ].join(" "));
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS first_anomaly_at TIMESTAMPTZ");
+  // Created through backend SQL inside public schema: enable RLS even though
+  // client-facing Data API grants are not needed for this private monitor log.
+  await db.query("ALTER TABLE trustpositif_domain_monitor ENABLE ROW LEVEL SECURITY");
   await db.query("CREATE INDEX IF NOT EXISTS idx_tp_mon_tenant_status ON trustpositif_domain_monitor(tenant,listed,verified_at DESC)");
   if (db === pool) schemaReady = true;
 }

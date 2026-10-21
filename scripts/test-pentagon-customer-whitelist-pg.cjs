@@ -139,6 +139,13 @@ try{
   assert.equal(sent,1);
   assert.equal((await outbox.drainOutbox({db,sender:async()=>{throw Error("DUPLICATE")}})).claimed,0);
  });
+ await test("monitor table is RLS protected in exposed public-compatible schemas",async()=>{
+  const result=await db.query(
+   "SELECT c.relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace "+
+   "WHERE c.relname='trustpositif_domain_monitor' AND n.nspname=current_schema()"
+  );
+  assert.equal(result.rows[0]?.relrowsecurity,true);
+ });
  await test("demo and cross-tenant transition attempts cannot generate notifications",async()=>{
   const demoDomain=(await db.query("SELECT * FROM domains WHERE domain='demo-clash.example'")).rows[0];
   await assert.rejects(()=>outbox.enqueueTransition({
