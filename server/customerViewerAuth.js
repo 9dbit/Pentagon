@@ -61,11 +61,13 @@ function currentViewerTenant(session) {
 // writes: otherwise newly added endpoints could leak customer or node data.
 function customerViewerFirewall(req, res, next) {
   if (!req.session?.isCustomerViewer) return next();
-  if (!VIEWER_PATHS.has(req.method + " " + req.path)) {
+  // In an /api-mounted Express middleware req.path omits /api.
+  const fullPath = (req.baseUrl || "") + req.path;
+  if (!VIEWER_PATHS.has(req.method + " " + fullPath)) {
     return res.status(403).json({ error: "CUSTOMER_VIEW_ONLY" });
   }
-  if (req.path !== "/api/auth/me" &&
-      req.path !== "/api/auth/logout" &&
+  if (fullPath !== "/api/auth/me" &&
+      fullPath !== "/api/auth/logout" &&
       !currentViewerTenant(req.session)) {
     return res.status(403).json({ error: "CUSTOMER_ACCESS_REVOKED" });
   }
