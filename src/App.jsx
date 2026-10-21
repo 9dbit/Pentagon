@@ -14,6 +14,7 @@ import GoogleRankReport from "./GoogleRankReport";
 import AnalyticsPage from "./AnalyticsPage";
 import DomainPopup from "./DomainPopup";
 import TrustPositifPage from "./TrustPositifPage";
+import CustomerViewerPage from "./CustomerViewerPage";
 
 async function api(url, opt = {}) {
   const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...opt });
@@ -731,5 +732,33 @@ function Dashboard({ onLogout, isDemo = false }) {
   return <div className="app">{renderMobileHeader()}{renderMobileDropdown()}{renderNav()}{isDemo && <div className="demoBanner"><span>🔒 Demo Mode — read only.</span><button className="demoBannerBtn" onClick={onLogout}>Login as admin</button></div>}<main>{page === "dashboard" && renderDashboardPage()}{page === "projects" && renderProjectsPage()}{page === "rank" && renderRankPage()}{page === "settings" && renderSettingsPage()}{page === "defense" && <DefenseCenterPage isDemo={isDemo}/>}{page === "analytics" && <AnalyticsPage/>}{page === "trustpositif" && <TrustPositifPage/>}{page === "users" && renderUserActivityPage()}</main>{cardPopup && <DomainPopup popup={cardPopup} onClose={() => setCardPopup(null)}/>}</div>;
 }
 
-function App() { const [checked, setChecked] = useState(false); const [auth, setAuth] = useState(false); const [isDemo, setIsDemo] = useState(false); const [error, setError] = useState(""); async function checkAuth() { try { const me = await api("/api/auth/me"); setAuth(Boolean(me.authenticated)); setIsDemo(Boolean(me.isDemo)); } catch (err) { setError(err.message || "Auth check failed"); setAuth(false); } finally { setChecked(true); } } useEffect(() => { checkAuth(); }, []); if (!checked) return <div className="loading">Loading Domain Radar...</div>; if (!auth) return <><Login onLogin={async () => { await checkAuth(); }}/>{error ? <div className="bootError">{error}</div> : null}</>; return <Dashboard onLogout={() => { setAuth(false); setIsDemo(false); }} isDemo={isDemo}/>; }
+function App() {
+  const [checked,setChecked]=useState(false);
+  const [auth,setAuth]=useState(false);
+  const [isDemo,setIsDemo]=useState(false);
+  const [isCustomerViewer,setIsCustomerViewer]=useState(false);
+  const [accountEmail,setAccountEmail]=useState("");
+  const [error,setError]=useState("");
+  async function checkAuth(){
+    try {
+      const me=await api("/api/auth/me");
+      setAuth(Boolean(me.authenticated));
+      setIsDemo(Boolean(me.isDemo));
+      setIsCustomerViewer(Boolean(me.isCustomerViewer));
+      setAccountEmail(me.email||"");
+      setError("");
+    }catch(err){
+      setError(err.message||"Auth check failed");
+      setAuth(false);setIsDemo(false);setIsCustomerViewer(false);
+    }finally{setChecked(true);}
+  }
+  useEffect(()=>{checkAuth();},[]);
+  const logout=()=>{
+    setAuth(false);setIsDemo(false);setIsCustomerViewer(false);setAccountEmail("");
+  };
+  if(!checked) return <div className="loading">Loading Pentagon...</div>;
+  if(!auth) return <><Login onLogin={checkAuth}/>{error?<div className="bootError">{error}</div>:null}</>;
+  if(isCustomerViewer) return <CustomerViewerPage accountEmail={accountEmail} onLogout={logout}/>;
+  return <Dashboard onLogout={logout} isDemo={isDemo}/>;
+}
 const rootEl = document.getElementById("root"); if (rootEl) createRoot(rootEl).render(<App/>);
