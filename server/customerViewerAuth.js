@@ -61,6 +61,13 @@ function currentViewerTenant(session) {
 // writes: otherwise newly added endpoints could leak customer or node data.
 function customerViewerFirewall(req, res, next) {
   if (!req.session?.isCustomerViewer) return next();
+  // No browser-origin may read a viewer's cookie-backed data from
+  // another website, even though the legacy general CORS middleware is broad.
+  const origin = req.headers?.origin;
+  if (origin && !["https://pentagon.quest", "https://www.pentagon.quest"].includes(origin) &&
+      !(process.env.NODE_ENV !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
+    return res.status(403).json({ error: "CUSTOMER_ORIGIN_DENIED" });
+  }
   // In an /api-mounted Express middleware req.path omits /api.
   const fullPath = (req.baseUrl || "") + req.path;
   if (!VIEWER_PATHS.has(req.method + " " + fullPath)) {
