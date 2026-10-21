@@ -217,7 +217,8 @@ async function drainOutbox({ db = pool, sender = deliverTelegram, limit = 5, now
         [entry.domain_id,TENANT_SQL,NON_PRODUCTION_SQL]
       );
       const currentStatus = current.rows[0]?.global_status || "unknown";
-      const stale = (entry.event_type === "BLOCKED" && currentStatus !== "blocked") ||
+      const stale = !current.rows.length ||
+        (entry.event_type === "BLOCKED" && currentStatus !== "blocked") ||
         (entry.event_type === "REGISTRY_DELISTED" && currentStatus === "blocked");
       let result;
       if (stale) result = { outcome:"cancelled",code:"EVENT_SUPERSEDED" };
