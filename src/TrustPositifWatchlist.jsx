@@ -30,7 +30,7 @@ function classify(row) {
 }
 const readinessLabels = {
   ready_to_scan:"Siap memeriksa domain admin dari dua provider sehat",
-  no_approved_admin_domain:"Belum ada domain admin aktif yang disetujui",
+  no_approved_admin_domain:"Belum ada domain produksi yang disetujui",
   eligible_rank_whitelist_pending_sync:"Whitelist Google Rank menunggu sinkronisasi",
   admin_domains_disabled:"Domain administrator belum diaktifkan",
   review_cross_tenant_conflicts:"Konflik kepemilikan domain antar-tenant harus ditinjau",
@@ -43,7 +43,10 @@ const workerLabel = worker => {
   if (worker.lastResult === "complete") return "Aktif, siklus selesai";
   if (worker.lastResult === "waiting_two_active_nodes") return "Menunggu dua node aktif";
   if (worker.lastResult === "waiting_database_schema") return "Menunggu kesiapan database";
-  if (worker.lastResult === "no_active_domains") return "Aktif, tidak ada domain";
+  if (worker.lastResult === "no_active_domains" || worker.lastResult === "no_customer_domains")
+    return "Aktif, belum ada domain pelanggan production";
+  if (worker.lastResult === "waiting_two_healthy_independent_providers")
+    return "Menunggu dua ISP berbeda dengan heartbeat terbaru";
   if (worker.lastResult === "error") return "Terjadi kesalahan pemeriksaan";
   return "Aktif, menunggu siklus";
 };
@@ -55,6 +58,7 @@ export default function TrustPositifWatchlist() {
   const [statusFilter,setStatusFilter] = useState("all");
   const [projectFilter,setProjectFilter] = useState("all");
   const [providerFilter,setProviderFilter] = useState("all");
+  const [tenantFilter,setTenantFilter] = useState("all");
   const [visibleCount,setVisibleCount] = useState(100);
   const [loading,setLoading] = useState(false);
   const [error,setError] = useState("");
@@ -93,20 +97,23 @@ export default function TrustPositifWatchlist() {
   const projects = useMemo(() => [...new Set(all.flatMap(row => String(row.project_name || "")
     .split(",").map(x=>x.trim()).filter(Boolean)))].sort(),[all]);
   const providers = useMemo(() => [...new Set(all.flatMap(providerNames))].sort(),[all]);
+  const tenants = useMemo(() => [...new Set(all.map(row => String(row.tenant || "admin")))].sort(),[all]);
   const rows = useMemo(() => {
     const q=filter.trim().toLowerCase();
     return all.filter(row => {
       if (statusFilter !== "all" && classify(row).key !== statusFilter) return false;
       if (projectFilter !== "all" && !String(row.project_name || "").split(",").map(x=>x.trim()).includes(projectFilter)) return false;
       if (providerFilter !== "all" && !providerNames(row).includes(providerFilter)) return false;
-      return !q || [row.domain,row.project_name,classify(row).text,...providerNames(row)]
+      if (tenantFilter !== "all" && String(row.tenant||"admin") !== tenantFilter) return false;
+      return !q || [row.domain,row.tenant,row.project_name,classify(row).text,...providerNames(row)]
         .some(value => String(value || "").toLowerCase().includes(q));
     });
-  },[all,filter,statusFilter,projectFilter,providerFilter]);
+  },[all,filter,statusFilter,projectFilter,providerFilter,tenantFilter]);
   const counts = all.reduce((obj,row)=>{const key=classify(row).key;obj[key]=(obj[key]||0)+1;return obj;},{});
   const nodeHealth=data?.node_health || {};
   const delivery=data?.notification_delivery || {};
   const readiness=data?.readiness || null;
+  const customerCoverage=data?.customer_coverage || null;
   function resetFilters(setter,value) {setter(value);setVisibleCount(100);}
 
   return <section className="tpWatchReport" aria-label="Whitelisted domain TrustPositif monitoring">
@@ -141,6 +148,18 @@ export default function TrustPositifWatchlist() {
         <span>Provider sehat independen <b>{readiness.nodes.online_independent_providers}</b></span>
       </div>}
       <small>Status admin perlu validasi kepemilikan. Data tenant demo dan impor migrasi yang belum disetujui tidak diaktifkan otomatis.</small>
+    </section>}
+    {customerCoverage && <section className="tpWatchCustomerCoverage" aria-label="Customer whitelist production coverage">
+      <div><b>Seluruh whitelist pelanggan production</b>
+        <p>Sinkronisasi otomatis mempertahankan tenant masing-masing. Data demo, benturan kepemilikan domain, dan monitor yang sengaja dinonaktifkan tidak diaktifkan.</p>
+      </div>
+      <div className="tpWatchCoverageCounts">
+        <span>Whitelist sumber valid <b>{customerCoverage.valid_tenant_domains ?? "—"}</b></span>
+        <span>Monitor aktif <b>{customerCoverage.active_production_domains ?? "—"}</b></span>
+        <span>Menunggu sinkronisasi <b>{customerCoverage.awaiting_import ?? "—"}</b></span>
+        <span>Konflik / karantina <b>{(Number(customerCoverage.quarantined_cross_tenant_sources||0)+Number(customerCoverage.occupied_by_other_tenant||0))}</b></span>
+        <span>Data demo dikecualikan <b>{customerCoverage.excluded_nonproduction_rows ?? "—"}</b></span>
+      </div>
     </section>}
     <div className="tpWatchMetrics">
       <div><span>Domain whitelist</span><strong>{data?.summary?.total ?? "—"}</strong></div>
@@ -182,13 +201,17 @@ export default function TrustPositifWatchlist() {
         onChange={e=>resetFilters(setProviderFilter,e.target.value)}>
         <option value="all">Semua provider</option>{providers.map(p=><option key={p} value={p}>{p}</option>)}
       </select></label>
+      <label><span>Pelanggan</span><select aria-label="Filter pelanggan" value={tenantFilter}
+        onChange={e=>resetFilters(setTenantFilter,e.target.value)}>
+        <option value="all">Semua pelanggan</option>{tenants.map(t=><option key={t} value={t}>{t}</option>)}
+      </select></label>
     </div>
     <p className="tpWatchResultCount">{rows.length} dari {all.length} domain sesuai filter</p>
     <div className="tpWatchRows">
       {rows.slice(0,visibleCount).map(row => {
         const status=classify(row),nodes=Array.isArray(row.anomaly_nodes)?row.anomaly_nodes:[];
-        return <article className="tpWatchRow" key={row.domain}>
-          <div className="tpWatchDomain"><b>{row.domain}</b><span>{row.project_name || "No project"}
+        return <article className="tpWatchRow" key={(row.tenant||"admin")+":"+row.domain}>
+          <div className="tpWatchDomain"><b>{row.domain}</b><span>{row.project_name || "No project"} · Tenant {row.tenant||"admin"}
             {row.rank_whitelisted ? " · Google Rank whitelist" : " · Domain monitor"}</span></div>
           <div className="tpWatchEvidence"><span className={"tpWatchPill "+status.key}>
             {status.key==="blocked" ? <ShieldAlert size={13}/> :
@@ -229,7 +252,7 @@ export default function TrustPositifWatchlist() {
       </div>
       {(Array.isArray(data?.notification_log) ? data.notification_log : []).slice(0,20).map(evt=>
         <article className="tpWatchDeliveryRow" key={evt.id}>
-          <div><b>{evt.domain}</b><span>{evt.event_type === "BLOCKED" ? "Blocked" : "Registry delisted"} · {displayTime(evt.created_at)}</span></div>
+          <div><b>{evt.domain}</b><span>{evt.tenant || "admin"} · {evt.event_type === "BLOCKED" ? "Blocked" : "Registry delisted"} · {displayTime(evt.created_at)}</span></div>
           <div className="tpWatchDeliveryStatus"><span className={"tpWatchPill "+(evt.status==="sent"?"healthy":evt.status==="retry"?"verifying":evt.status==="uncertain"?"suspected":"unknown")}>{evt.status}</span>
             <small>Attempt {evt.attempts} · {evt.last_error_code || "No delivery error"}</small></div>
           <details className="tpWatchDetails"><summary>Audit trail <ChevronDown size={13}/></summary>

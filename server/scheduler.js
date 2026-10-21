@@ -9,6 +9,7 @@ const { classifyReasonType, reasonTypeLabel } = require("./reasonClassifier");
 const { checkAfterNodeConsensus, syncAdminWhitelist } = require("./trustpositifWatch");
 const { enqueueTransition, formatEventMessage, drainOutbox } = require("./trustpositifAlertOutbox");
 const { auditWhitelistReadiness } = require("./trustpositifReadiness");
+const { syncEligibleCustomerWhitelist,customerWhitelistCoverage,TENANT_SQL,NON_PRODUCTION_SQL } = require("./customerWhitelistSync");
 const { isAcknowledged, clearAcknowledged } = require("./noticeState");
 const { checkGroup: rankCheckGroup } = require("./rankRoutes");
 
@@ -721,7 +722,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
         registryCheck.confirmedRecovered ? "REGISTRY_DELISTED" : null;
       if (!eventType) return;
       const message = formatEventMessage({
-        domain:domain.domain, eventType, nodes:registryCheck.nodes || [],
+        domain:domain.domain, tenant:domain.tenant, project:domain.project_name,
+        eventType, nodes:registryCheck.nodes || [],
         confirmedAt:registryCheck.verifiedAt || registryCheck.evidence?.verified_at,
         detectedAt:registryCheck.detectedAt || null,
         source:registryCheck.source
@@ -923,7 +925,7 @@ async function runAutoRankChecks() {
 const scopedWatch = {
   enabled: false, running: false, lastStartedAt: null, lastFinishedAt: null,
   lastResult: "not_started", activeNodes: 0, scanned: 0, imported: 0, lastError: "",
-  cursor: 0, readiness: null
+  cursor: 0, readiness: null, sourceCoverage: null, configuredNodes: 0
 };
 const scopedWatchIntervalMs = Math.max(120000, Number(process.env.TRUSTPOSITIF_SCOPED_INTERVAL_MS || 300000));
 const scopedWatchBatchSize = Math.min(20, Math.max(1, Number(process.env.TRUSTPOSITIF_SCOPED_BATCH_SIZE || 4)));
@@ -952,48 +954,59 @@ async function runScopedTrustPositifChecks() {
       console.warn("[TrustPositif Scoped] required migration tables missing; no scans or writes");
       return { status: scopedWatch.lastResult };
     }
-    // Synchronize admin rank whitelist first, even when fewer than two nodes
-    // are online, so the TrustPositif page lists all eligible domains.
-    scopedWatch.imported = await syncAdminWhitelist();
-    const nodes = (await getActiveNodes()).filter(n => n?.is_active !== false &&
-      String(n.tenant || "admin") === "admin").slice(0, scopedWatchMaxNodes);
-    scopedWatch.activeNodes = nodes.length;
-    if (nodes.length < 2) {
-      scopedWatch.lastResult = "waiting_two_active_nodes";
-      console.warn("[TrustPositif Scoped] waiting for two active provider nodes");
-      return { status: scopedWatch.lastResult, activeNodes: nodes.length };
-    }
-    const total = Number((await pool.query(
-      "SELECT COUNT(*)::int AS total FROM domains WHERE tenant='admin' AND is_active=TRUE"
-    )).rows[0]?.total || 0);
-    if (!total) {
-      scopedWatch.lastResult = "no_active_domains";
-      scopedWatch.cursor = 0;
-      try {
-        scopedWatch.readiness = await auditWhitelistReadiness(pool, "admin");
-        // Aggregate counts only, no customer domains or environment secrets.
-        const r = scopedWatch.readiness;
-        console.warn("[TrustPositif Scoped] no active targets; reason=" + r.reason +
-          " admin_inactive=" + r.domains.inactive +
-          " rank_whitelisted=" + r.whitelist.valid_distinct +
-          " unimported=" + r.whitelist.unimported +
-          " cross_tenant_conflicts=" + r.whitelist.cross_tenant_conflicts +
-          " recent_independent_providers=" + r.nodes.online_independent_providers);
-      } catch (error) {
-        scopedWatch.readiness = { reason:"inventory_unavailable",read_only:true };
-        console.warn("[TrustPositif Scoped] readiness inventory unavailable; code=" +
-          String(error.code || "DATABASE_QUERY_ERROR").slice(0,30));
-      }
-      return { status: scopedWatch.lastResult };
-    }
-    scopedWatch.readiness = null;
-    if (scopedWatch.cursor >= total) scopedWatch.cursor = 0;
-    const { rows: domains } = await pool.query(
-      "SELECT id,domain,project_name,tenant,global_status FROM domains " +
-      "WHERE tenant='admin' AND is_active=TRUE ORDER BY id LIMIT $1 OFFSET $2",
-      [scopedWatchBatchSize, scopedWatch.cursor]
+    // Sync only approved production-tenant sources. Existing disabled rows and
+    // any competing tenant/domain claims stay untouched and visible in coverage.
+    scopedWatch.imported = await syncEligibleCustomerWhitelist();
+    scopedWatch.sourceCoverage = await customerWhitelistCoverage();
+    const { rows: countRows } = await pool.query(
+      "SELECT COUNT(*)::int AS total FROM domains WHERE is_active=TRUE " +
+      "AND tenant ~ $1 AND tenant !~* $2",
+      [TENANT_SQL,NON_PRODUCTION_SQL]
     );
-    scopedWatch.cursor = (scopedWatch.cursor + domains.length) % total;
+    const total=Number(countRows[0]?.total||0);
+    const configured=(await getActiveNodes()).filter(n =>
+      n?.is_active!==false && String(n.tenant||"admin")==="admin"
+    ).slice(0,scopedWatchMaxNodes);
+    scopedWatch.configuredNodes=configured.length;
+    const recent=Date.now()-20*60*1000;
+    const providers=new Set();
+    const nodes=configured.filter(n=>{
+      const provider=String(n.provider_name||"").trim().toLowerCase();
+      const last=n.last_ping_at ? new Date(n.last_ping_at).getTime() : 0;
+      if (!provider || providers.has(provider) || String(n.last_health_status||"").toLowerCase()!=="online"
+        || !Number.isFinite(last) || last<recent || last>Date.now()+60000) return false;
+      providers.add(provider); return true;
+    });
+    scopedWatch.activeNodes=nodes.length;
+    if (!total) {
+      scopedWatch.lastResult="no_customer_domains";
+      scopedWatch.cursor=0;
+      try {
+        scopedWatch.readiness=await auditWhitelistReadiness(pool,"admin");
+        console.warn("[TrustPositif Scoped] no production customer domains; " +
+          "eligible_sources="+scopedWatch.sourceCoverage.valid_tenant_domains +
+          " demo_excluded="+scopedWatch.sourceCoverage.excluded_nonproduction_rows +
+          " collisions="+scopedWatch.sourceCoverage.quarantined_cross_tenant_sources);
+      } catch(err) {
+        scopedWatch.readiness={reason:"inventory_unavailable",read_only:true};
+      }
+      return {status:scopedWatch.lastResult,sourceCoverage:scopedWatch.sourceCoverage};
+    }
+    scopedWatch.readiness=null;
+    if (nodes.length<2) {
+      scopedWatch.lastResult="waiting_two_healthy_independent_providers";
+      console.warn("[TrustPositif Scoped] insufficient recent independent checker providers; " +
+        "configured_nodes="+configured.length+" healthy_providers="+nodes.length);
+      return {status:scopedWatch.lastResult,healthyProviders:nodes.length};
+    }
+    if (scopedWatch.cursor>=total) scopedWatch.cursor=0;
+    const {rows:domains}=await pool.query(
+      "SELECT id,domain,project_name,tenant,global_status FROM domains " +
+      "WHERE is_active=TRUE AND tenant ~ $3 AND tenant !~* $4 " +
+      "ORDER BY id LIMIT $1 OFFSET $2",
+      [scopedWatchBatchSize,scopedWatch.cursor,TENANT_SQL,NON_PRODUCTION_SQL]
+    );
+    scopedWatch.cursor=(scopedWatch.cursor+domains.length)%total;
     // Keep only two parallel domain tasks to avoid overwhelming node queues.
     for (let i = 0; i < domains.length; i += 2) {
       const checked = await Promise.allSettled(domains.slice(i,i+2).map(domain =>

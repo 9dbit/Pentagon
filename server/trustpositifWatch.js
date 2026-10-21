@@ -3,6 +3,7 @@
 // before an EXACT local indexed Komdigi registry lookup can confirm a block.
 const { pool } = require("./db");
 const { normalizeDomain } = require("./checker");
+const { isProductionTenant, TENANT_SQL, NON_PRODUCTION_SQL } = require("./customerWhitelistSync");
 
 const MIN_NODES = 2;
 const TTL_MS = Math.max(900000, Number(process.env.TRUSTPOSITIF_VERIFY_TTL_MS || 21600000));
@@ -92,7 +93,7 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
   if (!domain || domain.length > 253 || !/^[a-z0-9][a-z0-9.-]*[.][a-z]{2,}$/.test(domain))
     return { triggered: false, confirmedBlocked: false, nodes };
   const tenant = domainRow.tenant || "admin";
-  if (tenant !== "admin") return { triggered: false, confirmedBlocked: false, nodes };
+  if (!isProductionTenant(tenant)) return { triggered: false, confirmedBlocked: false, nodes };
   const db = options.db || pool, lookup = options.lookup || exactOfficialLookup, now = options.now || new Date();
   if (nodes.length < MIN_NODES && domainRow.global_status !== "blocked") {
     // A single credible provider finding is Suspected, never Blocked.
@@ -194,25 +195,29 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
 
 async function listWatchlist(tenant = "admin", db = pool) {
   await ensureMonitorTable(db);
+  // The administrator's report spans every production tenant while retaining
+  // tenant-qualified evidence. Customer/demo sessions see only their tenant.
+  const visibility = "(($1='admin' AND tenant ~ $2 AND tenant !~* $3) OR ($1<>'admin' AND tenant=$1))";
   const response = await db.query([
     "WITH members AS (",
-    "SELECT LOWER(TRIM(d.domain)) AS domain,d.project_name,false AS rank_whitelisted",
-    "FROM domains d WHERE d.tenant=$1 AND d.is_active=TRUE",
-    "UNION ALL SELECT LOWER(TRIM(rkd.domain)),rkg.project_name,true",
+    "SELECT LOWER(TRIM(d.domain)) AS domain,d.project_name,false AS rank_whitelisted,d.tenant",
+    "FROM domains d WHERE d.is_active=TRUE AND " + visibility.replace(/\btenant\b/g,"d.tenant"),
+    "UNION ALL SELECT LOWER(TRIM(rkd.domain)),rkg.project_name,true,rkg.tenant",
     "FROM rank_keyword_domains rkd JOIN rank_keyword_groups rkg ON rkg.id=rkd.group_id",
-    "WHERE rkg.tenant=$1 AND rkg.is_active=TRUE AND rkd.is_whitelisted=TRUE),",
-    "registry AS (SELECT domain,STRING_AGG(DISTINCT NULLIF(TRIM(project_name),''),', ') AS projects,",
-    "BOOL_OR(rank_whitelisted) AS rank_whitelisted FROM members WHERE domain <> '' GROUP BY domain)",
-    "SELECT r.domain,COALESCE(r.projects,'') AS project_name,r.rank_whitelisted,",
+    "WHERE rkg.is_active=TRUE AND rkd.is_whitelisted=TRUE",
+    "AND " + visibility.replace(/\btenant\b/g,"rkg.tenant"),"),",
+    "registry AS (SELECT tenant,domain,STRING_AGG(DISTINCT NULLIF(TRIM(project_name),''),', ') AS projects,",
+    "BOOL_OR(rank_whitelisted) AS rank_whitelisted FROM members WHERE domain <> '' GROUP BY tenant,domain)",
+    "SELECT r.tenant,r.domain,COALESCE(r.projects,'') AS project_name,r.rank_whitelisted,",
     "COALESCE(d.is_active,FALSE) AS monitored,COALESCE(d.global_status,'unknown') AS global_status,",
     "d.last_checked_at AS last_node_check_at,s.listed,s.verified_at,s.detected_at,s.recovered_at,s.first_anomaly_at,",
     "s.last_anomaly_at,s.anomaly_nodes,s.last_error,s.next_check_at,s.source",
-    "FROM registry r LEFT JOIN domains d ON LOWER(d.domain)=r.domain AND d.tenant=$1",
-    "LEFT JOIN trustpositif_domain_monitor s ON s.domain=r.domain AND s.tenant=$1",
+    "FROM registry r LEFT JOIN domains d ON LOWER(TRIM(d.domain))=r.domain AND d.tenant=r.tenant",
+    "LEFT JOIN trustpositif_domain_monitor s ON s.domain=r.domain AND s.tenant=r.tenant",
     "ORDER BY CASE WHEN s.listed=TRUE AND d.global_status='blocked' THEN 0",
-    "WHEN s.last_anomaly_at IS NOT NULL AND s.listed IS NULL THEN 1 ELSE 2 END,r.domain",
+    "WHEN s.last_anomaly_at IS NOT NULL AND s.listed IS NULL THEN 1 ELSE 2 END,r.tenant,r.domain",
     "LIMIT 5000"
-  ].join(" "),[tenant]);
+  ].join(" "),[tenant,TENANT_SQL,NON_PRODUCTION_SQL]);
   return response.rows;
 }
 

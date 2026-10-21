@@ -36,12 +36,13 @@ function test(name,fn){fn();count++;process.stdout.write("PASS "+name+"\n");}
   });
   test("scoped worker never marks domain blocked without confirmation",()=>{
    assert.match(source,/options\.trustpositifOnly && !registryCheck\.confirmedBlocked && !registryCheck\.holdBlocked/);
-   assert.match(source,/nodes\.length < 2/);
+   assert.match(source,/nodes\.length\s*<\s*2/);
   });
   test("scanner bound limits and rotates across active domains",()=>{
    assert.match(source,/Math\.min\(20, Math\.max\(1/);
-   assert.match(source,/scopedWatch\.cursor = \(scopedWatch\.cursor \+ domains\.length\) % total/);
-   assert.match(source,/tenant='admin' AND is_active=TRUE/);
+   assert.match(source,/scopedWatch\.cursor\s*=\s*\(scopedWatch\.cursor\s*\+\s*domains\.length\)\s*%\s*total/);
+   assert.ok(source.includes("tenant ~ $3 AND tenant !~* $4"));
+   assert.ok(source.includes('String(n.tenant||"admin")==="admin"'));
   });
   test("Telegram output HTML escaping and existing alert persistence",()=>{
    assert.match(source,/registryCheck\.nodes\?\.map\(n => htmlEsc\(n\.name\)\)/);

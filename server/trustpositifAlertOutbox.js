@@ -8,6 +8,7 @@
 const axios = require("axios");
 const { pool } = require("./db");
 const { getTelegramConfig } = require("./telegram");
+const { isProductionTenant,TENANT_SQL,NON_PRODUCTION_SQL } = require("./customerWhitelistSync");
 
 const MAX_ATTEMPTS = 6;
 const RETRY_BASE_MS = 60000;
@@ -65,7 +66,7 @@ function wib(value) {
   }) + " WIB";
 }
 
-function formatEventMessage({ domain, eventType, nodes = [], confirmedAt, detectedAt, source }) {
+function formatEventMessage({ domain, tenant, project, eventType, nodes = [], confirmedAt, detectedAt, source }) {
   const blocked = eventType === "BLOCKED";
   const uniqueProviders = [...new Set(nodes.map(n => String(n.provider || "").trim()).filter(Boolean))];
   const names = nodes.map(n => n.name || String(n.id)).filter(Boolean);
@@ -74,6 +75,8 @@ function formatEventMessage({ domain, eventType, nodes = [], confirmedAt, detect
     "",
     "<b>Status:</b> " + (blocked ? "BLOCKED (official registry + node quorum)" : "REGISTRY DELISTED (network not yet cleared)"),
     "<b>Domain:</b> <code>" + escapeHtml(domain) + "</code>",
+    "<b>Customer:</b> " + escapeHtml(tenant || "admin"),
+    "<b>Project:</b> " + escapeHtml(project || "Not available"),
     "<b>First detected:</b> " + escapeHtml(wib(detectedAt)),
     "<b>Confirmed:</b> " + escapeHtml(wib(confirmedAt)),
     "<b>Confirmed nodes:</b> " + String(nodes.length),
@@ -89,7 +92,7 @@ function formatEventMessage({ domain, eventType, nodes = [], confirmedAt, detect
 }
 
 async function enqueueTransition({ domain, oldStatus, newStatus, eventType, message, db = pool }) {
-  if (!domain || domain.tenant !== "admin" || !["BLOCKED", "REGISTRY_DELISTED"].includes(eventType))
+  if (!domain || !isProductionTenant(domain.tenant) || !["BLOCKED", "REGISTRY_DELISTED"].includes(eventType))
     throw new Error("INVALID_TRUSTPOSITIF_EVENT");
   await ensureOutboxTables(db);
   const client = await db.connect();
@@ -97,8 +100,8 @@ async function enqueueTransition({ domain, oldStatus, newStatus, eventType, mess
     await client.query("BEGIN");
     const updated = await client.query(
       "UPDATE domains SET last_status=$1,global_status=$2,last_checked_at=NOW() " +
-      "WHERE id=$3 AND tenant='admin' AND COALESCE(global_status,'unknown')=$4 RETURNING id",
-      [oldStatus, newStatus, domain.id, oldStatus]
+      "WHERE id=$3 AND tenant=$5 AND is_active=TRUE AND COALESCE(global_status,'unknown')=$4 RETURNING id",
+      [oldStatus, newStatus, domain.id, oldStatus, domain.tenant]
     );
     if (!updated.rowCount) {
       await client.query("ROLLBACK");
@@ -209,7 +212,9 @@ async function drainOutbox({ db = pool, sender = deliverTelegram, limit = 5, now
     const outcomes = [];
     for (const entry of candidates.rows) {
       const current = await db.query(
-        "SELECT global_status FROM domains WHERE id=$1 AND tenant='admin' LIMIT 1", [entry.domain_id]
+        "SELECT global_status FROM domains WHERE id=$1 AND is_active=TRUE AND " +
+        "tenant ~ $2 AND tenant !~* $3 LIMIT 1",
+        [entry.domain_id,TENANT_SQL,NON_PRODUCTION_SQL]
       );
       const currentStatus = current.rows[0]?.global_status || "unknown";
       const stale = (entry.event_type === "BLOCKED" && currentStatus !== "blocked") ||
@@ -235,8 +240,9 @@ async function deliverySummary(tenant = "admin", db = pool) {
       "COUNT(*) FILTER (WHERE o.status='sent')::int AS sent," +
       "COUNT(*) FILTER (WHERE o.status IN ('failed','uncertain','sending'))::int AS attention," +
       "MAX(o.updated_at) AS last_activity " +
-      "FROM trustpositif_notification_outbox o JOIN domains d ON d.id=o.domain_id WHERE d.tenant=$1",
-      [tenant]
+      "FROM trustpositif_notification_outbox o JOIN domains d ON d.id=o.domain_id " +
+      "WHERE (($1='admin' AND d.tenant ~ $2 AND d.tenant !~* $3) OR ($1<>'admin' AND d.tenant=$1))",
+      [tenant,TENANT_SQL,NON_PRODUCTION_SQL]
     );
     return rows[0] || { queued:0,sent:0,attention:0,last_activity:null };
   } catch (err) {
@@ -249,14 +255,15 @@ async function recentNotificationLog(tenant = "admin", db = pool, limit = 20) {
   try {
     const { rows } = await db.query(
       "SELECT o.id,o.event_type,o.status,o.attempts,o.created_at,o.updated_at,o.sent_at," +
-      "o.last_error_code,d.domain,d.project_name," +
+      "o.last_error_code,d.domain,d.project_name,d.tenant," +
       "COALESCE((SELECT jsonb_agg(jsonb_build_object(" +
       "'at',a.attempted_at,'outcome',a.outcome,'code',a.error_code) " +
       "ORDER BY a.attempted_at DESC) FROM trustpositif_notification_attempts a " +
       "WHERE a.outbox_id=o.id),'[]'::jsonb) AS history " +
       "FROM trustpositif_notification_outbox o JOIN domains d ON d.id=o.domain_id " +
-      "WHERE d.tenant=$1 ORDER BY o.id DESC LIMIT $2",
-      [tenant,Math.max(1,Math.min(50,Number(limit)||20))]
+      "WHERE (($1='admin' AND d.tenant ~ $3 AND d.tenant !~* $4) OR " +
+      "($1<>'admin' AND d.tenant=$1)) ORDER BY o.id DESC LIMIT $2",
+      [tenant,Math.max(1,Math.min(50,Number(limit)||20)),TENANT_SQL,NON_PRODUCTION_SQL]
     );
     return rows;
   } catch (err) {
