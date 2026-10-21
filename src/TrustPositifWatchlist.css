@@ -97,3 +97,17 @@
 .tpWatchReadinessCounts b{color:#eef2f6;margin-left:5px;font-variant-numeric:tabular-nums}
 @media(max-width:800px){.tpWatchReadinessCounts{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:390px){.tpWatchReadinessCounts{gap:6px 8px}.tpWatchReadinessCounts span{font-size:10px}}
+
+
+/* Tenant-aware customer whitelist. Keep all customer metrics on wrapped rows. */
+.tpWatchCustomerCoverage{padding:12px 0 18px;margin:8px 0 14px;border-bottom:1px solid rgba(255,255,255,.08);min-width:0}
+.tpWatchCustomerCoverage>div:first-child b{font-size:13px;color:#edf2f7}
+.tpWatchCustomerCoverage p{margin:6px 0 13px;color:#9ba8b7;font-size:11px;line-height:1.6;overflow-wrap:anywhere}
+.tpWatchCoverageCounts{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:8px 12px}
+.tpWatchCoverageCounts span{min-width:0;font-size:10px;color:#9eacbb;line-height:1.5;overflow-wrap:anywhere}
+.tpWatchCoverageCounts b{display:block;margin-top:3px;font-size:17px;color:#eef4fc;font-weight:700;font-variant-numeric:tabular-nums}
+.tpWatchFilters{grid-template-columns:minmax(185px,1.5fr) repeat(4,minmax(106px,1fr))}
+.tpWatchDomain span{overflow-wrap:anywhere}
+@media(max-width:1180px){.tpWatchFilters{grid-template-columns:repeat(3,minmax(0,1fr))}.tpWatchFilters .tpWatchSearch{grid-column:span 2}}
+@media(max-width:800px){.tpWatchCoverageCounts{grid-template-columns:repeat(3,minmax(0,1fr))}.tpWatchFilters{grid-template-columns:repeat(2,minmax(0,1fr))}.tpWatchFilters .tpWatchSearch{grid-column:span 2}}
+@media(max-width:560px){.tpWatchCoverageCounts{grid-template-columns:repeat(2,minmax(0,1fr))}.tpWatchFilters{grid-template-columns:minmax(0,1fr)}.tpWatchFilters .tpWatchSearch{grid-column:1}}
