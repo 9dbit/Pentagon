@@ -12,9 +12,9 @@ const config=JSON.stringify([{email,tenant,role:"customer_viewer"}]);
 const old=process.env.PENTAGON_CUSTOMER_VIEWERS_JSON;
 process.env.PENTAGON_CUSTOMER_VIEWERS_JSON=config;
 const viewer={isCustomerViewer:true,isAdmin:false,isDemo:false,adminEmail:email,tenant};
-function checkFirewall(session,method,path){
+function checkFirewall(session,method,path,origin){
   let result="allowed",next=false;
-  const req={session,method,path,baseUrl:"/api"};
+  const req={session,method,path,baseUrl:"/api",headers:origin?{origin}:{}};
   const res={status(code){result=code;return this;},json(body){return body;}};
   security.customerViewerFirewall(req,res,()=>{next=true;});
   return next?200:result;
@@ -68,6 +68,12 @@ test("all admin, checker, export and mutation APIs blocked",()=>{
   ["POST","/activity/heartbeat"],["PATCH","/domains/1"],["POST","/customer/domains"],
   ["DELETE","/domains/1"],["GET","/customer/unknown"]])
    assert.equal(checkFirewall(viewer,method,path),403,method+" "+path);
+});
+test("untrusted browser origins cannot read viewer session data",()=>{
+ assert.equal(checkFirewall(viewer,"GET","/customer/domains","https://attacker.example"),403);
+ assert.equal(checkFirewall(viewer,"GET","/customer/domains","null"),403);
+ assert.equal(checkFirewall(viewer,"GET","/customer/domains","https://pentagon.quest"),200);
+ assert.equal(checkFirewall(viewer,"GET","/customer/domains","https://www.pentagon.quest"),200);
 });
 test("revoking server mapping invalidates existing viewer session without logout",()=>{
  process.env.PENTAGON_CUSTOMER_VIEWERS_JSON="[]";
