@@ -13,6 +13,7 @@ on:
       - "server/scheduler.js"
       - "server/trustpositifAlertOutbox.js"
       - "server/trustpositifReadiness.js"
+      - "server/customerWhitelistSync.js"
       - "server/nodeChecker.js"
       - "server/index.js"
       - "src/TrustPositif*"
@@ -21,6 +22,7 @@ on:
       - "scripts/test-pentagon-trustpositif-watch-pg.cjs"
       - "scripts/test-pentagon-trustpositif-outbox-pg.cjs"
       - "scripts/test-pentagon-trustpositif-readiness-pg.cjs"
+      - "scripts/test-pentagon-customer-whitelist-pg.cjs"
       - "scripts/pentagon-activation-review.cjs"
       - "scripts/test-pentagon-activation-review.cjs"
       - "scripts/pentagon-admin-activation-preview.cjs"
@@ -70,12 +72,14 @@ jobs:
           node --check server/scheduler.js
           node --check server/trustpositifAlertOutbox.js
           node --check server/trustpositifReadiness.js
+          node --check server/customerWhitelistSync.js
           node --check server/index.js
           node --check server/railway-entry.js
           node --check scripts/test-pentagon-trustpositif-source-backoff.cjs
           node --check scripts/test-pentagon-trustpositif-watch-pg.cjs
           node --check scripts/test-pentagon-trustpositif-outbox-pg.cjs
           node --check scripts/test-pentagon-trustpositif-readiness-pg.cjs
+          node --check scripts/test-pentagon-customer-whitelist-pg.cjs
           node --check scripts/pentagon-activation-review.cjs
           node --check scripts/test-pentagon-activation-review.cjs
           node --check scripts/pentagon-admin-activation-preview.cjs
@@ -92,6 +96,8 @@ jobs:
         run: node scripts/test-pentagon-activation-review.cjs
       - name: Administrator monitor-only deduplication without history import
         run: node scripts/test-pentagon-admin-activation-preview.cjs
+      - name: Tenant-preserving customer whitelist sync and multi-node alert integration
+        run: node scripts/test-pentagon-customer-whitelist-pg.cjs
       - name: Compile current production UI
         run: npm run build
       - name: Verify compiled SPA shell
