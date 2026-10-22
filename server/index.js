@@ -25,6 +25,7 @@ const { normalizeEmail, isEmailWhitelistEnabled, isEmailAllowed } = require("./a
 const { verifyTestUser } = require("./testAccountAuth");
 const { customerTenantForEmail, currentViewerTenant, customerViewerFirewall } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
+const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -188,6 +189,7 @@ app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.cle
 // Dedicated customer routes are read-only and resolve the tenant from the
 // active server-side session and env grant, never from a request parameter.
 app.use("/api/customer", createCustomerViewerRouter());
+app.use("/api/merchant", createMerchantAdminRouter());
 
 app.get("/api/auth/users", requireAdmin, requireNotDemo, async (req, res, next) => {
   try {
