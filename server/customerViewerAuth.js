@@ -58,15 +58,14 @@ function currentViewerTenant(session) {
       session.isAdmin === true || session.isDemo === true) return null;
   const grant = customerGrantForEmail(session.adminEmail);
   if (!grant || grant.tenant !== session.tenant) return null;
-  // A merchant session must be revoked immediately when its role is demoted.
-  if (session.isMerchantAdmin === true && grant.role !== "merchant_admin") return null;
   return grant.tenant;
 }
 
 function currentMerchantTenant(session) {
-  if (!session || session.isMerchantAdmin !== true) return null;
+  const tenant = currentViewerTenant(session);
+  if (!tenant) return null;
   const grant = customerGrantForEmail(session.adminEmail);
-  return grant?.role === "merchant_admin" ? currentViewerTenant(session) : null;
+  return grant?.role === "merchant_admin" ? tenant : null;
 }
 
 // Guards ALL APIs, including provider-node and rank routes mounted before
@@ -110,7 +109,7 @@ function requireCustomerViewer(req, res, next) {
 }
 
 function requireMerchantAdmin(req, res, next) {
-  if (!req.session?.isCustomerViewer || req.session.isMerchantAdmin !== true) {
+  if (!req.session?.isCustomerViewer) {
     return res.status(403).json({ error: "MERCHANT_ADMIN_ONLY" });
   }
   const tenant = currentMerchantTenant(req.session);
