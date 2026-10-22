@@ -23,8 +23,9 @@ const { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } = require(".
 const { markAcknowledged } = require("./noticeState");
 const { normalizeEmail, isEmailWhitelistEnabled, isEmailAllowed } = require("./authAllowlist");
 const { verifyTestUser } = require("./testAccountAuth");
-const { customerTenantForEmail, currentViewerTenant, customerViewerFirewall } = require("./customerViewerAuth");
+const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
+const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -120,13 +121,15 @@ app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScan
 app.get("/api/auth/me", (req, res) => {
   res.set("Cache-Control", "private, no-store");
   const viewerTenant = currentViewerTenant(req.session);
+  const merchantTenant = currentMerchantTenant(req.session);
   const wasViewer = Boolean(req.session?.isCustomerViewer);
   return res.json({
     authenticated: wasViewer ? Boolean(viewerTenant) : (!adminPassword || Boolean(req.session?.isAdmin)),
     email: req.session?.adminEmail || "",
     isDemo: !wasViewer && Boolean(req.session?.isDemo),
     isCustomerViewer: Boolean(viewerTenant),
-    role: viewerTenant ? "customer_viewer" : wasViewer ? "revoked" : req.session?.isDemo ? "demo" : "admin",
+    isMerchantAdmin: Boolean(merchantTenant),
+    role: merchantTenant ? "merchant_admin" : viewerTenant ? "customer_viewer" : wasViewer ? "revoked" : req.session?.isDemo ? "demo" : "admin",
     tenant: viewerTenant || (wasViewer ? null : (req.session?.tenant || "admin"))
   });
 });
@@ -188,6 +191,7 @@ app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.cle
 // Dedicated customer routes are read-only and resolve the tenant from the
 // active server-side session and env grant, never from a request parameter.
 app.use("/api/customer", createCustomerViewerRouter());
+app.use("/api/merchant", createMerchantAdminRouter());
 
 app.get("/api/auth/users", requireAdmin, requireNotDemo, async (req, res, next) => {
   try {

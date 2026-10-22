@@ -28,7 +28,7 @@ function readCustomerViewers(raw = process.env.PENTAGON_CUSTOMER_VIEWERS_JSON ||
     const seen = new Set(), out = [];
     for (const row of input) {
       if (!row || typeof row !== "object" || Array.isArray(row) ||
-          row.role !== "customer_viewer" || "password" in row ||
+          !["customer_viewer", "merchant_admin"].includes(row.role) || "password" in row ||
           "hash" in row || "salt" in row) return [];
       const email = normalizeEmail(row.email);
       const tenant = String(row.tenant || "");
@@ -36,7 +36,7 @@ function readCustomerViewers(raw = process.env.PENTAGON_CUSTOMER_VIEWERS_JSON ||
           email.length > 254 || seen.has(email) ||
           !isEligibleCustomerTenant(tenant)) return [];
       seen.add(email);
-      out.push({ email, tenant });
+      out.push({ email, tenant, role: row.role });
     }
     return out;
   } catch (_) {
@@ -44,16 +44,28 @@ function readCustomerViewers(raw = process.env.PENTAGON_CUSTOMER_VIEWERS_JSON ||
   }
 }
 
-function customerTenantForEmail(email, raw) {
+function customerGrantForEmail(email, raw) {
   const normalized = normalizeEmail(email);
-  return readCustomerViewers(raw).find(item => item.email === normalized)?.tenant || null;
+  return readCustomerViewers(raw).find(item => item.email === normalized) || null;
+}
+
+function customerTenantForEmail(email, raw) {
+  return customerGrantForEmail(email, raw)?.tenant || null;
 }
 
 function currentViewerTenant(session) {
   if (!session || session.isCustomerViewer !== true ||
       session.isAdmin === true || session.isDemo === true) return null;
-  const tenant = customerTenantForEmail(session.adminEmail);
-  return tenant && tenant === session.tenant ? tenant : null;
+  const grant = customerGrantForEmail(session.adminEmail);
+  if (!grant || grant.tenant !== session.tenant) return null;
+  return grant.tenant;
+}
+
+function currentMerchantTenant(session) {
+  const tenant = currentViewerTenant(session);
+  if (!tenant) return null;
+  const grant = customerGrantForEmail(session.adminEmail);
+  return grant?.role === "merchant_admin" ? tenant : null;
 }
 
 // Guards ALL APIs, including provider-node and rank routes mounted before
@@ -64,12 +76,18 @@ function customerViewerFirewall(req, res, next) {
   // No browser-origin may read a viewer's cookie-backed data from
   // another website, even though the legacy general CORS middleware is broad.
   const origin = req.headers?.origin;
-  if (origin && !["https://pentagon.quest", "https://www.pentagon.quest"].includes(origin) &&
+  if (origin && !["https://pentagon.quest", "https://www.pentagon.quest", "https://pentagon-hot-standby.onrender.com"].includes(origin) &&
       !(process.env.NODE_ENV !== "production" && /^http:\/\/(localhost|127\.0\.0\.1)(:\d+)?$/.test(origin))) {
     return res.status(403).json({ error: "CUSTOMER_ORIGIN_DENIED" });
   }
   // In an /api-mounted Express middleware req.path omits /api.
   const fullPath = (req.baseUrl || "") + req.path;
+  // Merchant APIs are mounted only behind requireMerchantAdmin.
+  // All other historic administrator endpoints remain explicitly blocked.
+  if (fullPath.startsWith("/api/merchant/")) {
+    if (!currentMerchantTenant(req.session)) return res.status(403).json({ error: "MERCHANT_ADMIN_ONLY" });
+    return next();
+  }
   if (!VIEWER_PATHS.has(req.method + " " + fullPath)) {
     return res.status(403).json({ error: "CUSTOMER_VIEW_ONLY" });
   }
@@ -90,7 +108,18 @@ function requireCustomerViewer(req, res, next) {
   next();
 }
 
+function requireMerchantAdmin(req, res, next) {
+  if (!req.session?.isCustomerViewer) {
+    return res.status(403).json({ error: "MERCHANT_ADMIN_ONLY" });
+  }
+  const tenant = currentMerchantTenant(req.session);
+  if (!tenant) return res.status(403).json({ error: "CUSTOMER_ACCESS_REVOKED" });
+  req.merchantTenant = tenant;
+  next();
+}
+
 module.exports = {
-  readCustomerViewers, customerTenantForEmail, currentViewerTenant,
-  customerViewerFirewall, requireCustomerViewer, isEligibleCustomerTenant
+  readCustomerViewers, customerGrantForEmail, customerTenantForEmail,
+  currentViewerTenant, currentMerchantTenant, customerViewerFirewall,
+  requireCustomerViewer, requireMerchantAdmin, isEligibleCustomerTenant
 };

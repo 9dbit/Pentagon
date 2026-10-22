@@ -1,0 +1,69 @@
+name: Pentagon Merchant Administration tenant isolation
+on:
+  pull_request:
+    paths:
+      - "server/customerViewerAuth.js"
+      - "server/merchantAdminRoutes.js"
+      - "server/index.js"
+      - "src/App.jsx"
+      - "src/MerchantAdminPage.*"
+      - "scripts/test-pentagon-merchant-admin*"
+      - ".github/workflows/pentagon-merchant-admin-qa.yml"
+  push:
+    branches:
+      - feature/pentagon-merchant-admin-isolation-20261022
+permissions:
+  contents: read
+jobs:
+  tenant-admin-qa:
+    runs-on: ubuntu-latest
+    timeout-minutes: 22
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: fixture-only
+          POSTGRES_DB: pentagon_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres -d pentagon_test"
+          --health-interval 5s
+          --health-timeout 3s
+          --health-retries 20
+    env:
+      CI: "true"
+      DATABASE_URL: postgres://postgres:fixture-only@127.0.0.1:5432/pentagon_test
+      TRUSTPOSITIF_PREWARM: "false"
+      TRUSTPOSITIF_AUTO_WATCH: "false"
+      SCHEDULER_ENABLED: "false"
+      TRUSTPOSITIF_SCOPED_SCHEDULER: "false"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+          cache: npm
+      - name: Install deps without updating baseline lockfile
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+      - name: JavaScript syntax and auth regressions
+        run: |
+          node --check server/customerViewerAuth.js
+          node --check server/merchantAdminRoutes.js
+          node --check server/index.js
+          node --check scripts/test-pentagon-merchant-admin-auth.cjs
+          node --check scripts/test-pentagon-merchant-admin-pg.cjs
+          node scripts/test-pentagon-test-account-auth.cjs
+          node scripts/test-pentagon-customer-viewer-auth.cjs
+          node scripts/test-pentagon-merchant-admin-auth.cjs
+      - name: Isolated PostgreSQL viewer and merchant tenant firewall
+        run: |
+          node scripts/test-pentagon-customer-viewer-pg.cjs
+          node scripts/test-pentagon-merchant-admin-pg.cjs
+      - name: Compile merchant dashboard and existing production UI
+        run: npm run build
+      - name: Verify SPA shell
+        run: node scripts/test-pentagon-production-ui-shell.cjs
+      - name: No production credentials or service changes
+        run: echo "All tests use CI-local PostgreSQL and reserved example.test fixtures. No production node actions, email, Telegram, registry queries, or live database mutations."

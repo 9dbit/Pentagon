@@ -15,6 +15,7 @@ import AnalyticsPage from "./AnalyticsPage";
 import DomainPopup from "./DomainPopup";
 import TrustPositifPage from "./TrustPositifPage";
 import CustomerViewerPage from "./CustomerViewerPage";
+import MerchantAdminPage from "./MerchantAdminPage";
 
 async function api(url, opt = {}) {
   const res = await fetch(url, { credentials: "include", headers: { "Content-Type": "application/json" }, ...opt });
@@ -737,6 +738,7 @@ function App() {
   const [auth,setAuth]=useState(false);
   const [isDemo,setIsDemo]=useState(false);
   const [isCustomerViewer,setIsCustomerViewer]=useState(false);
+  const [isMerchantAdmin,setIsMerchantAdmin]=useState(false);
   const [accountEmail,setAccountEmail]=useState("");
   const [error,setError]=useState("");
   async function checkAuth(){
@@ -745,19 +747,21 @@ function App() {
       setAuth(Boolean(me.authenticated));
       setIsDemo(Boolean(me.isDemo));
       setIsCustomerViewer(Boolean(me.isCustomerViewer));
+      setIsMerchantAdmin(Boolean(me.isMerchantAdmin));
       setAccountEmail(me.email||"");
       setError("");
     }catch(err){
       setError(err.message||"Auth check failed");
-      setAuth(false);setIsDemo(false);setIsCustomerViewer(false);
+      setAuth(false);setIsDemo(false);setIsCustomerViewer(false);setIsMerchantAdmin(false);
     }finally{setChecked(true);}
   }
   useEffect(()=>{checkAuth();},[]);
   const logout=()=>{
-    setAuth(false);setIsDemo(false);setIsCustomerViewer(false);setAccountEmail("");
+    setAuth(false);setIsDemo(false);setIsCustomerViewer(false);setIsMerchantAdmin(false);setAccountEmail("");
   };
   if(!checked) return <div className="loading">Loading Pentagon...</div>;
   if(!auth) return <><Login onLogin={checkAuth}/>{error?<div className="bootError">{error}</div>:null}</>;
+  if(isMerchantAdmin) return <MerchantAdminPage accountEmail={accountEmail} onLogout={logout}/>;
   if(isCustomerViewer) return <CustomerViewerPage accountEmail={accountEmail} onLogout={logout}/>;
   return <Dashboard onLogout={logout} isDemo={isDemo}/>;
 }
