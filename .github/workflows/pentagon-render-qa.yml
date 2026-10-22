@@ -1,0 +1,37 @@
+name: Pentagon Render safe migration QA
+on:
+  pull_request:
+    paths:
+      - "server/render-entry.js"
+      - "scripts/test-pentagon-render-preflight.cjs"
+      - ".github/workflows/pentagon-render-qa.yml"
+      - "Dockerfile"
+  push:
+    branches:
+      - deploy/pentagon-render-preflight-20261022
+permissions:
+  contents: read
+jobs:
+  render-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20.18.1"
+          cache: npm
+      - name: Install deps without modifying existing lockfile
+        run: npm install --no-save --package-lock=false --ignore-scripts --no-audit --no-fund
+      - name: Static entrypoint checks
+        run: |
+          node --check server/render-entry.js
+          node --check scripts/test-pentagon-render-preflight.cjs
+      - name: Verify safe Render staging and secret gate
+        run: node scripts/test-pentagon-render-preflight.cjs
+      - name: Compile production frontend
+        run: npm run build
+      - name: Verify compiled UI
+        run: node scripts/test-pentagon-production-ui-shell.cjs
+      - name: Confirm no live migrations or Telegram notifications
+        run: echo "CI tests use no production DB, provider node, registry or Telegram credentials."
