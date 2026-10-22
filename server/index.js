@@ -23,7 +23,7 @@ const { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } = require(".
 const { markAcknowledged } = require("./noticeState");
 const { normalizeEmail, isEmailWhitelistEnabled, isEmailAllowed } = require("./authAllowlist");
 const { verifyTestUser } = require("./testAccountAuth");
-const { customerTenantForEmail, currentViewerTenant, customerViewerFirewall } = require("./customerViewerAuth");
+const { customerGrantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
 const axios = require("axios");
@@ -121,13 +121,15 @@ app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScan
 app.get("/api/auth/me", (req, res) => {
   res.set("Cache-Control", "private, no-store");
   const viewerTenant = currentViewerTenant(req.session);
+  const merchantTenant = currentMerchantTenant(req.session);
   const wasViewer = Boolean(req.session?.isCustomerViewer);
   return res.json({
     authenticated: wasViewer ? Boolean(viewerTenant) : (!adminPassword || Boolean(req.session?.isAdmin)),
     email: req.session?.adminEmail || "",
     isDemo: !wasViewer && Boolean(req.session?.isDemo),
     isCustomerViewer: Boolean(viewerTenant),
-    role: viewerTenant ? "customer_viewer" : wasViewer ? "revoked" : req.session?.isDemo ? "demo" : "admin",
+    isMerchantAdmin: Boolean(merchantTenant),
+    role: merchantTenant ? "merchant_admin" : viewerTenant ? "customer_viewer" : wasViewer ? "revoked" : req.session?.isDemo ? "demo" : "admin",
     tenant: viewerTenant || (wasViewer ? null : (req.session?.tenant || "admin"))
   });
 });
