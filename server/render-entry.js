@@ -27,7 +27,7 @@ function startPreflight() {
       { ok: false, ready: false, reason: "RENDER_MIGRATION_PREFLIGHT_ONLY" }));
   });
   app.listen(port, host, () =>
-    console.log("[Render Preflight] build started safely; customer API disabled"));
+    console.log("[Render Preflight] LISTENING PORT=" + app.address().port + "; customer API disabled"));
 }
 
 function fail(reason) {
