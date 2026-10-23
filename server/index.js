@@ -23,7 +23,7 @@ const { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } = require(".
 const { markAcknowledged } = require("./noticeState");
 const { normalizeEmail, isEmailWhitelistEnabled, isEmailAllowed } = require("./authAllowlist");
 const { verifyTestUser } = require("./testAccountAuth");
-const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall } = require("./customerViewerAuth");
+const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall, isStaleMerchantDemoSession } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
 const axios = require("axios");
@@ -120,6 +120,24 @@ app.get("/api/provider-node/releases/cloud/latest", async (req, res) => {
 app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScanCycleHealth()); });
 app.get("/api/auth/me", (req, res) => {
   res.set("Cache-Control", "private, no-store");
+  // Legacy demo sessions can survive role migration in the shared PostgreSQL
+  // session store. Reject them instead of keeping the user in the demo tenant.
+  // A fresh credential verification is mandatory before merchant elevation.
+  if (isStaleMerchantDemoSession(req.session)) {
+    return req.session.destroy((error) => {
+      if (error) return res.status(503).json({ authenticated: false, error: "SESSION_RESET_UNAVAILABLE" });
+      res.clearCookie("domain_radar_sid", { path: "/" });
+      return res.json({
+        authenticated: false,
+        email: "",
+        isDemo: false,
+        isCustomerViewer: false,
+        isMerchantAdmin: false,
+        role: "reauth_required",
+        tenant: null
+      });
+    });
+  }
   const viewerTenant = currentViewerTenant(req.session);
   const merchantTenant = currentMerchantTenant(req.session);
   const wasViewer = Boolean(req.session?.isCustomerViewer);
