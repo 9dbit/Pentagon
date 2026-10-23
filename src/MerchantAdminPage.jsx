@@ -308,8 +308,45 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
             <div><small>Role</small><strong>Merchant Administrator</strong></div>
             <div><small>Akun</small><strong>{accountEmail || "—"}</strong></div>
             <div><small>Ruang lingkup</small><strong>Domain, keyword, whitelist, laporan merchant</strong></div></div>
+          <h2 className="maTelegramHeading">Telegram Merchant</h2>
+          <p>Gunakan Telegram Chat ID grup merchant. Bot pusat tetap dikelola Super Admin.</p>
+          <form className="maForm maTelegramForm" onSubmit={async e=>{
+            e.preventDefault();
+            await act("/api/merchant/telegram","PATCH",telegramForm,"Pengaturan Telegram tersimpan.");
+          }}>
+            <label>Telegram Chat ID<input value={telegramForm.chat_id}
+              placeholder="-1001234567890" onChange={e=>setTelegramForm(p=>({...p,chat_id:e.target.value}))}/></label>
+            <label className="maTelegramToggle">
+              <input type="checkbox" checked={telegramForm.enabled}
+                onChange={e=>setTelegramForm(p=>({...p,enabled:e.target.checked}))}/>
+              Aktifkan notifikasi</label>
+            <button className="maPrimary" disabled={busy}>Simpan</button>
+            <button className="maPill" type="button" disabled={busy||!data.telegram?.enabled}
+              onClick={()=>act("/api/merchant/telegram/test","POST",{},"Pesan uji Telegram terkirim.")}>
+              <Bell size={14}/> Test Send
+            </button>
+          </form>
+          <div className="maInfo"><LockKeyhole size={16}/>
+            <span>Bot: {data.telegram?.bot_configured?"Tersedia":"Belum dikonfigurasi"}.
+              Test Send hanya mengirim pesan ketika ditekan. Notifikasi otomatis harus dihubungkan ke jalur alert terverifikasi.</span></div>
           <div className="maInfo"><LockKeyhole size={18}/><span>Pengaturan Super Admin, node fisik, Telegram global, serta data merchant lain tetap dilindungi.</span></div>
         </section>}
+        {detail && <div className="maDialogBackdrop" role="presentation"
+          onMouseDown={e=>{if(e.target===e.currentTarget)setDetail(null);}}>
+          <section role="dialog" aria-modal="true" aria-label={"Detail "+detail.label} className="maDetailDialog">
+            <div className="maPanelHead"><div><span className="maNodeEyebrow">STATUS DETAIL</span>
+              <h2>{detail.label}</h2></div><button type="button" className="maPill"
+              onClick={()=>setDetail(null)} aria-label="Tutup"><X size={18}/></button></div>
+            <div className="maDetailValue">{String(detail.value ?? "Belum tersedia")}</div>
+            {detail.domain && <p>Node independen: {detail.domain.recent_node_providers}. Evidence terbaru: {dateWib(detail.domain.latest_evidence_at)}.
+              Hanya domain merchant ini.</p>}
+            {detail.direct && <p>HTTP: {detail.direct.http_status ?? "N/A"}, durasi: {detail.direct.latency_ms ?? "N/A"} ms,
+              terakhir diperiksa: {dateWib(detail.direct.checked_at)}.</p>}
+            {!detail.domain && !detail.direct && <p>Angka berasal dari data tenant merchant. Buka halaman terkait untuk rincian.</p>}
+            {detail.section && <button className="maPrimary" type="button"
+              onClick={()=>{setPage(detail.section);setDetail(null);}}>Buka {detail.section}</button>}
+          </section>
+        </div>}
       </main>
     </div>
   </div>;
