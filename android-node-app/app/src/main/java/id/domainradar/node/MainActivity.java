@@ -333,6 +333,13 @@ public class MainActivity extends Activity {
             boolean provisioned = !node.isEmpty() && !Prefs.secret(this).isEmpty();
             boolean cellular = t.optBoolean("cellular_available", false);
 
+            long lastAck = 0L;
+            try { lastAck = Long.parseLong(Prefs.get(this, "last_poll_ok_ms", "0")); }
+            catch (Exception ignored) {}
+            long ackAge = lastAck > 0L ? System.currentTimeMillis() - lastAck : Long.MAX_VALUE;
+            boolean serverAcknowledgedRecently = ackAge >= 0L && ackAge <= 150000L;
+            String lastPollError = Prefs.get(this, "last_poll_error", "");
+
             if (!lastSetupError.isEmpty() && !provisioned) {
                 statusDot.setTextColor(RED);
                 statusTitle.setText("Setup waiting");
@@ -340,18 +347,27 @@ public class MainActivity extends Activity {
                 servicePill.setText("Needs attention");
                 servicePill.setTextColor(RED);
                 servicePill.setBackground(roundRect(Color.rgb(46, 24, 28), RED, 1, 18));
-            } else if (enabled && provisioned && cellular) {
+            } else if (enabled && provisioned && cellular && serverAcknowledgedRecently) {
                 statusDot.setTextColor(GREEN);
                 statusTitle.setText("Node Online");
-                statusSubtitle.setText("Running and connected");
-                servicePill.setText("Service Enabled");
+                statusSubtitle.setText("Railway heartbeat acknowledged " + Math.max(0L, ackAge / 1000L) + "s ago");
+                servicePill.setText("Server Connected");
                 servicePill.setTextColor(GREEN);
                 servicePill.setBackground(roundRect(Color.rgb(17, 48, 40), GREEN, 1, 18));
+            } else if (enabled && !lastPollError.isEmpty()) {
+                statusDot.setTextColor(RED);
+                statusTitle.setText("Polling Error");
+                statusSubtitle.setText(lastPollError.substring(0, Math.min(140, lastPollError.length())));
+                servicePill.setText("Server Not Connected");
+                servicePill.setTextColor(RED);
+                servicePill.setBackground(roundRect(Color.rgb(46, 24, 28), RED, 1, 18));
             } else if (enabled) {
                 statusDot.setTextColor(ORANGE);
-                statusTitle.setText("Node Starting");
-                statusSubtitle.setText("Waiting for validated cellular transport");
-                servicePill.setText("Starting");
+                statusTitle.setText("Waiting for Railway");
+                statusSubtitle.setText(provisioned
+                        ? (cellular ? "Awaiting first confirmed server heartbeat" : "SIM transport unavailable; retrying poll")
+                        : "Awaiting secure node provisioning");
+                servicePill.setText("Heartbeat Pending");
                 servicePill.setTextColor(ORANGE);
                 servicePill.setBackground(roundRect(Color.rgb(51, 37, 20), ORANGE, 1, 18));
             } else {
@@ -399,7 +415,9 @@ public class MainActivity extends Activity {
             String reason = t.optString("subscription_reason", "");
             subscriptionSub.setText(humanReason(reason));
 
-            updatedText.setText("Updated just now");
+            updatedText.setText(lastAck > 0L
+                    ? "Last Railway heartbeat: " + (Math.max(0L, System.currentTimeMillis() - lastAck) / 1000L) + "s ago"
+                    : "No confirmed Railway heartbeat yet");
             refreshLogsOnly();
         } catch (Exception e) {
             statusDot.setTextColor(RED);
