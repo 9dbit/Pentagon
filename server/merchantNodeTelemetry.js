@@ -26,8 +26,8 @@ function networkLabel(rawTelemetry, rawFallback) {
   const s = String(rawTelemetry || "").trim().toLowerCase().replace(/[^a-z0-9+]/g, "");
   const modes = {
     nr: "5G", nsa: "5G", sa: "5G", nr5g: "5G", "5g": "5G",
-    lte: "4G LTE", lte+: "4G LTE", lteplus: "4G LTE", "4g": "4G LTE",
-    hspa: "3G", hspap: "3G", hspa+: "3G", umts: "3G", wcdma: "3G", "3g": "3G",
+    lte: "4G LTE", "lte+": "4G LTE", lteplus: "4G LTE", "4g": "4G LTE",
+    hspa: "3G", hspap: "3G", "hspa+": "3G", umts: "3G", wcdma: "3G", "3g": "3G",
     edge: "2G", gprs: "2G", gsm: "2G", "2g": "2G",
     wifi: "Wi-Fi", wlan: "Wi-Fi", iwlan: "Wi-Fi"
   };
