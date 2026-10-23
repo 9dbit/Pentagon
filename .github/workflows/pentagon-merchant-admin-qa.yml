@@ -10,6 +10,7 @@ on:
       - "src/MerchantAdminPage.*"
       - "src/MerchantNodeCardV2.jsx"
       - "scripts/test-pentagon-merchant-admin*"
+      - "scripts/test-pentagon-merchant-session*"
       - "scripts/test-pentagon-node-health*"
       - ".github/workflows/pentagon-merchant-admin-qa.yml"
   push:
@@ -60,10 +61,12 @@ jobs:
           node --check scripts/test-pentagon-node-health-ui.cjs
           node --check server/index.js
           node --check scripts/test-pentagon-merchant-admin-auth.cjs
+          node --check scripts/test-pentagon-merchant-session-migration.cjs
           node --check scripts/test-pentagon-merchant-admin-pg.cjs
           node scripts/test-pentagon-test-account-auth.cjs
           node scripts/test-pentagon-customer-viewer-auth.cjs
           node scripts/test-pentagon-merchant-admin-auth.cjs
+          node scripts/test-pentagon-merchant-session-migration.cjs
           node scripts/test-pentagon-node-health-v2.cjs
       - name: Isolated PostgreSQL viewer and merchant tenant firewall
         run: |
