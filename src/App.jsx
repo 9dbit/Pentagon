@@ -756,8 +756,14 @@ function App() {
     }finally{setChecked(true);}
   }
   useEffect(()=>{checkAuth();},[]);
-  const logout=()=>{
-    setAuth(false);setIsDemo(false);setIsCustomerViewer(false);setIsMerchantAdmin(false);setAccountEmail("");
+  const logout=async()=>{
+    // Clearing only React state leaves the shared server-side demo session alive.
+    // Terminate the cookie-backed PostgreSQL session before returning to login.
+    try { await api("/api/auth/logout", { method: "POST" }); }
+    catch (_) { /* Login view still opens if the session is already expired. */ }
+    finally {
+      setAuth(false);setIsDemo(false);setIsCustomerViewer(false);setIsMerchantAdmin(false);setAccountEmail("");
+    }
   };
   if(!checked) return <div className="loading">Loading Pentagon...</div>;
   if(!auth) return <><Login onLogin={checkAuth}/>{error?<div className="bootError">{error}</div>:null}</>;
