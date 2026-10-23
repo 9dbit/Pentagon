@@ -30,7 +30,7 @@ async function main(){
   const app=express();app.use(express.json());
   app.use((req,_res,next)=>{
     const p=req.headers["x-persona"];
-    req.session=p==="viewer"?{isCustomerViewer:true,isAdmin:false,adminEmail:"merchant-fixture@example.test",tenant:"fixture"}:
+    req.session=p==="viewer"?{isCustomerViewer:true,isAdmin:false,adminEmail:"viewer-fixture@example.test",tenant:"fixture"}:
       p==="merchant"?{isCustomerViewer:true,isAdmin:false,isDemo:false,adminEmail:"merchant-fixture@example.test",tenant:"fixture"}:
       {isAdmin:false};next();
   });
