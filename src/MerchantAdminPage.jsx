@@ -32,6 +32,8 @@ const NAV = [
   { key: "domains", text: "Domain", icon: Globe2 },
   { key: "keywords", text: "Google Rank", icon: Layers3 },
   { key: "nodes", text: "Node Health", icon: Wifi },
+  { key: "trust", text: "Trust Positif", icon: ShieldCheck },
+  { key: "direct", text: "Direct Checker", icon: Activity },
   { key: "alerts", text: "Notifikasi", icon: Bell },
   { key: "settings", text: "Merchant Settings", icon: Settings2 }
 ];
@@ -56,6 +58,8 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
   const [linkFor, setLinkFor] = useState({});
   const [showDomainForm, setShowDomainForm] = useState(false);
   const [showKeywordForm, setShowKeywordForm] = useState(false);
+  const [detail, setDetail] = useState(null);
+  const [telegramForm, setTelegramForm] = useState({enabled:false,chat_id:""});
 
   const reload = useCallback(async () => {
     try {
@@ -65,7 +69,14 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
         request("/api/customer/alerts"), request("/api/merchant/history"),
         request("/api/merchant/profile")
       ]);
-      setData({ overview, domains, keywords, nodes: nodeHealth.nodes || [], nodeAsOf: nodeHealth.as_of, alerts, history, profile });
+      const [trust,direct,telegram]=await Promise.all([
+        request("/api/merchant/trust-positif").catch(()=>null),
+        request("/api/merchant/direct-checker").catch(()=>null),
+        request("/api/merchant/telegram").catch(()=>null)
+      ]);
+      setData({ overview, domains, keywords, nodes: nodeHealth.nodes || [], nodeAsOf: nodeHealth.as_of,
+        alerts, history, profile, trust, direct, telegram });
+      if (telegram) setTelegramForm({enabled:telegram.enabled,chat_id:telegram.chat_id || ""});
       setError("");
       setRefreshedAt(new Date().toISOString());
     } catch (err) {
@@ -144,7 +155,13 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               ["Whitelist", overview.whitelist_links, ShieldCheck],
               ["Blocked / review", overview.blocked, ShieldAlert],
               ["Node responsif", healthyNodes + " / " + activeNodes, Radio]
-            ].map(([label, value, I]) => <div className="maMetric" key={label}><span>{label}</span><I size={18}/><strong>{value ?? "—"}</strong></div>)}
+            ].map(([label, value, I]) => <button type="button" className="maMetric maMetricButton"
+              key={label} aria-label={"Detail " + label}
+              onClick={() => setDetail({label, value, section:
+                label.includes("Node") ? "nodes" : label.includes("Keyword") || label.includes("Whitelist")
+                ? "keywords" : label.includes("Blocked") ? "trust" : "domains"})}>
+              <span>{label}</span><I size={18}/><strong>{value ?? "—"}</strong><small>Klik untuk detail</small>
+            </button>)}
           </div>
           <div className="maInfo"><ShieldAlert size={20}/><span>Status <b>Unknown</b> bukan konfirmasi aman. Bukti blokir memerlukan sumber resmi dan minimal dua node independen.</span></div>
           <section className="maPanel"><h2>Aktivitas pemeriksaan terakhir</h2><p>Hanya hasil untuk domain merchant ini.</p>
