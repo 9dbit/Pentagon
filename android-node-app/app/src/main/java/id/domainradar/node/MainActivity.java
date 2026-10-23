@@ -347,13 +347,21 @@ public class MainActivity extends Activity {
                 servicePill.setText("Needs attention");
                 servicePill.setTextColor(RED);
                 servicePill.setBackground(roundRect(Color.rgb(46, 24, 28), RED, 1, 18));
-            } else if (enabled && provisioned && cellular && serverAcknowledgedRecently) {
+            } else if (enabled && provisioned && cellular && serverAcknowledgedRecently
+                    && Prefs.getBool(this, "last_poll_network_ok", false)) {
                 statusDot.setTextColor(GREEN);
                 statusTitle.setText("Node Online");
                 statusSubtitle.setText("Railway heartbeat acknowledged " + Math.max(0L, ackAge / 1000L) + "s ago");
                 servicePill.setText("Server Connected");
                 servicePill.setTextColor(GREEN);
                 servicePill.setBackground(roundRect(Color.rgb(17, 48, 40), GREEN, 1, 18));
+            } else if (enabled && provisioned && serverAcknowledgedRecently) {
+                statusDot.setTextColor(ORANGE);
+                statusTitle.setText("Railway Connected, SIM Waiting");
+                statusSubtitle.setText("Heartbeat received; SIM provider or cellular transport not verified");
+                servicePill.setText("Provider Verification");
+                servicePill.setTextColor(ORANGE);
+                servicePill.setBackground(roundRect(Color.rgb(51, 37, 20), ORANGE, 1, 18));
             } else if (enabled && !lastPollError.isEmpty()) {
                 statusDot.setTextColor(RED);
                 statusTitle.setText("Polling Error");
