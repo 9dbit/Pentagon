@@ -216,6 +216,8 @@ function createMerchantAdminRouter(db = pool) {
     });
   }));
 
+  router.all("/node-health", (req, res) => res.status(405).json({ error: "READ_ONLY" }));
+
   router.get("/nodes", safely(async (req, res) => {
     // Shared infrastructure is summary-only: no endpoint, secret, device ID,
     // subscriber ID, IP, precise location or controls may leave this endpoint.
