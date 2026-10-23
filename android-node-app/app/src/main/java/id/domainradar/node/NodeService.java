@@ -80,6 +80,7 @@ public class NodeService extends Service {
         // This timestamp means the Railway API really acknowledged the request,
         // NOT merely that the Android service is enabled.
         Prefs.put(this, "last_poll_ok_ms", String.valueOf(System.currentTimeMillis()));
+        Prefs.putBool(this, "last_poll_network_ok", networkOk);
         Prefs.put(this, "last_poll_error", "");
         Prefs.put(this, "last_poll_error_at", "");
         JSONObject task = response.optJSONObject("task");
