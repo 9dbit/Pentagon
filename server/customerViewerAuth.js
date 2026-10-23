@@ -53,6 +53,15 @@ function customerTenantForEmail(email, raw) {
   return customerGrantForEmail(email, raw)?.tenant || null;
 }
 
+// A formerly demo-only account that is now explicitly bound to a merchant
+// must reauthenticate. The old cookie cannot silently retain demo privileges
+// or be promoted to a merchant admin session without a fresh password check.
+function isStaleMerchantDemoSession(session, raw) {
+  if (!session || session.isDemo !== true || session.isAdmin !== true ||
+      session.isCustomerViewer === true) return false;
+  return Boolean(customerGrantForEmail(session.adminEmail, raw));
+}
+
 function currentViewerTenant(session) {
   if (!session || session.isCustomerViewer !== true ||
       session.isAdmin === true || session.isDemo === true) return null;
@@ -119,7 +128,7 @@ function requireMerchantAdmin(req, res, next) {
 }
 
 module.exports = {
-  readCustomerViewers, customerGrantForEmail, customerTenantForEmail,
+  readCustomerViewers, customerGrantForEmail, customerTenantForEmail, isStaleMerchantDemoSession,
   currentViewerTenant, currentMerchantTenant, customerViewerFirewall,
   requireCustomerViewer, requireMerchantAdmin, isEligibleCustomerTenant
 };
