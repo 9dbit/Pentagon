@@ -359,7 +359,17 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               {detail.node.signal_bars ?? "N/A"} / 5 bar. Battery: {detail.node.battery_percent ?? "N/A"}%.
               Active: {detail.node.is_active ? "Yes" : "No"}. Heartbeat: {dateWib(detail.node.last_seen_at)}.
               Status online memerlukan heartbeat terbaru, bukan hanya APK terbuka.</p>}
-            {!detail.domain && !detail.direct && <p>Angka berasal dari data tenant merchant. Buka halaman terkait untuk rincian.</p>}
+            {!detail.domain && !detail.direct && !detail.node && <div>
+              <p>Rincian berasal dari data tenant merchant, bukan simulasi. Klik halaman terkait untuk hasil lengkap.</p>
+              <div className="maDetailEntries">
+                {(detail.section==="nodes" ? data.nodes.map(n=>({name:n.public_alias,description:n.connectivity+" · "+dateWib(n.last_seen_at)})):
+                  detail.section==="keywords" ? data.keywords.map(k=>({name:k.keyword,description:(k.whitelist||[]).length+" relasi whitelist"})):
+                  detail.section==="trust" ? (data.trust?.domains||[]).filter(d=>["blocked","warning"].includes(d.global_status))
+                    .map(d=>({name:d.domain,description:statusText(d.global_status)})):
+                  data.domains.map(d=>({name:d.domain,description:statusText(d.global_status)}))
+                ).slice(0,12).map((item,i)=><div key={i}><strong>{item.name}</strong><small>{item.description}</small></div>)}
+              </div>
+            </div>}
             {detail.section && <button className="maPrimary" type="button"
               onClick={()=>{setPage(detail.section);setDetail(null);}}>Buka {detail.section}</button>}
           </section>
