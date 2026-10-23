@@ -5,6 +5,7 @@ const axios = require("axios");
 const { pool } = require("./db");
 const { getTelegramConfig } = require("./telegram");
 const { requireMerchantAdmin } = require("./customerViewerAuth");
+const { checkDirectOwnedDomain } = require("./merchantDirectChecker");
 
 // Mounted exclusively inside the tenant-guarded merchant router.
 // No global platform secrets, device IDs or other tenant's domain results.
@@ -99,6 +100,41 @@ function createMerchantOperationsRouter(db = pool) {
       verification_notice:"Unknown is not safe; official source lookup and two independent checker providers required for confirmation."
     });
   }));
+  const activeChecks=new Set();
+  router.post("/direct-checker/run",safe(async(req,res)=>{
+    const domain=String(req.body?.domain||"").trim().toLowerCase();
+    if(!domain||domain.length>253) return res.status(400).json({error:"INVALID_DOMAIN"});
+    const {rows}=await db.query(
+      "SELECT id,domain FROM domains WHERE tenant=$1 AND domain=$2 AND is_active=TRUE LIMIT 1",
+      [own(req),domain]
+    );
+    if(!rows.length) return res.status(404).json({error:"OWN_ACTIVE_DOMAIN_NOT_FOUND"});
+    const id=rows[0].id;
+    const lock=own(req)+":"+id;
+    if(activeChecks.has(lock)) return res.status(429).json({error:"CHECK_ALREADY_RUNNING"});
+    const latest=await db.query(
+      "SELECT checked_at FROM check_results WHERE domain_id=$1 AND checker_type='direct' "+
+      "ORDER BY checked_at DESC LIMIT 1",[id]
+    );
+    const age=latest.rows[0]?.checked_at ? Date.now()-new Date(latest.rows[0].checked_at).getTime():Infinity;
+    if(age>=0&&age<60000) return res.status(429).json({error:"CHECK_RATE_LIMIT",retry_after_seconds:Math.ceil((60000-age)/1000)});
+    activeChecks.add(lock);
+    try {
+      const data=await checkDirectOwnedDomain(domain);
+      await db.query(
+        "INSERT INTO check_results(domain_id,checker_type,provider_name,status,http_status,latency_ms,reason) "+
+        "VALUES($1,$2,$3,$4,$5,$6,$7)",
+        [id,data.checker_type,data.provider_name,data.status,data.http_status,data.latency_ms,data.reason]
+      );
+      return res.json({ok:true,domain,status:data.status,http_status:data.http_status,
+        latency_ms:data.latency_ms,checked_at:new Date().toISOString(),
+        notice:"Direct HTTP availability only. Not an official Trust Positif result."});
+    }catch(e){
+      if(e.status) return res.status(e.status).json({error:String(e.message).slice(0,90)});
+      throw e;
+    }finally{activeChecks.delete(lock);}
+  }));
+
   router.get("/direct-checker",safe(async(req,res)=>{
     const {rows}=await db.query(
       "SELECT d.domain,d.is_active,d.global_status, "+
@@ -124,6 +160,7 @@ function createMerchantOperationsRouter(db = pool) {
   router.all("/telegram/test",(_req,res)=>res.status(405).json({error:"METHOD_NOT_ALLOWED"}));
   router.all("/trust-positif",(_req,res)=>res.status(405).json({error:"METHOD_NOT_ALLOWED"}));
   router.all("/direct-checker",(_req,res)=>res.status(405).json({error:"METHOD_NOT_ALLOWED"}));
+  router.all("/direct-checker/run",(_req,res)=>res.status(405).json({error:"METHOD_NOT_ALLOWED"}));
   return router;
 }
 
