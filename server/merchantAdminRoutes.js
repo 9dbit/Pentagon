@@ -3,6 +3,7 @@
 const express = require("express");
 const { pool } = require("./db");
 const { requireMerchantAdmin } = require("./customerViewerAuth");
+const { serializeMerchantNodes } = require("./merchantNodeTelemetry");
 
 // Merchant administration is intentionally separate from /api/domains, /api/rank,
 // /api/nodes and other platform-admin routes. The server session owns tenant identity.
@@ -194,6 +195,28 @@ function createMerchantAdminRouter(db = pool) {
     if (!rows.length) return res.status(404).json({ error: "LINK_NOT_FOUND" });
     return res.json({ ok: true });
   }));
+
+  // Each checker is a sanitized read-only card, scoped to shared/own nodes.
+  // Do not return node IDs, secrets, device nicknames, SIM, IP, endpoint or raw data.
+  router.get("/node-health", safely(async (req, res) => {
+    const { rows } = await db.query(
+      "SELECT n.provider_name, n.network_type, n.is_active, n.last_health_status, " +
+      "t.signal_level, t.signal_percent, t.signal_dbm, " +
+      "t.battery_percent, t.is_charging, t.network_type_label, " +
+      "t.last_seen_at AS telemetry_last_seen_at " +
+      "FROM provider_nodes n LEFT JOIN node_telemetry t ON t.node_id=n.id " +
+      "WHERE n.tenant IN ('admin',$1) " +
+      "ORDER BY LOWER(n.provider_name), n.id LIMIT 80",
+      [ownTenant(req)]
+    );
+    const now = Date.now();
+    return res.json({
+      as_of: new Date(now).toISOString(),
+      nodes: serializeMerchantNodes(rows, now)
+    });
+  }));
+
+  router.all("/node-health", (req, res) => res.status(405).json({ error: "READ_ONLY" }));
 
   router.get("/nodes", safely(async (req, res) => {
     // Shared infrastructure is summary-only: no endpoint, secret, device ID,

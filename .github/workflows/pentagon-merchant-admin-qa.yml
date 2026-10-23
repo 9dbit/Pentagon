@@ -4,14 +4,18 @@ on:
     paths:
       - "server/customerViewerAuth.js"
       - "server/merchantAdminRoutes.js"
+      - "server/merchantNodeTelemetry.js"
       - "server/index.js"
       - "src/App.jsx"
       - "src/MerchantAdminPage.*"
+      - "src/MerchantNodeCardV2.jsx"
       - "scripts/test-pentagon-merchant-admin*"
+      - "scripts/test-pentagon-node-health*"
       - ".github/workflows/pentagon-merchant-admin-qa.yml"
   push:
     branches:
       - feature/pentagon-merchant-admin-isolation-20261022
+      - feature/pentagon-node-health-v2-20261023
 permissions:
   contents: read
 jobs:
@@ -51,18 +55,24 @@ jobs:
         run: |
           node --check server/customerViewerAuth.js
           node --check server/merchantAdminRoutes.js
+          node --check server/merchantNodeTelemetry.js
+          node --check scripts/test-pentagon-node-health-v2.cjs
+          node --check scripts/test-pentagon-node-health-ui.cjs
           node --check server/index.js
           node --check scripts/test-pentagon-merchant-admin-auth.cjs
           node --check scripts/test-pentagon-merchant-admin-pg.cjs
           node scripts/test-pentagon-test-account-auth.cjs
           node scripts/test-pentagon-customer-viewer-auth.cjs
           node scripts/test-pentagon-merchant-admin-auth.cjs
+          node scripts/test-pentagon-node-health-v2.cjs
       - name: Isolated PostgreSQL viewer and merchant tenant firewall
         run: |
           node scripts/test-pentagon-customer-viewer-pg.cjs
           node scripts/test-pentagon-merchant-admin-pg.cjs
       - name: Compile merchant dashboard and existing production UI
-        run: npm run build
+        run: |
+          node scripts/test-pentagon-node-health-ui.cjs
+          npm run build
       - name: Verify SPA shell
         run: node scripts/test-pentagon-production-ui-shell.cjs
       - name: No production credentials or service changes

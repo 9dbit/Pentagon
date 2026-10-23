@@ -23,8 +23,8 @@ async function main(){
     await db.query("CREATE TABLE domains (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,domain TEXT UNIQUE NOT NULL,project_name TEXT,label TEXT,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW())");
     await db.query("CREATE TABLE rank_keyword_groups (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,project_name TEXT,keyword TEXT,keyword_lc TEXT,is_active BOOLEAN DEFAULT TRUE,last_checked_at TIMESTAMPTZ,UNIQUE(keyword_lc,tenant))");
     await db.query("CREATE TABLE rank_keyword_domains (id SERIAL PRIMARY KEY,group_id INT REFERENCES rank_keyword_groups(id),domain TEXT,is_whitelisted BOOLEAN DEFAULT TRUE,UNIQUE(group_id,domain))");
-    await db.query("CREATE TABLE provider_nodes (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,provider_name TEXT,endpoint_url TEXT,secret_key TEXT,is_active BOOLEAN,last_health_status TEXT,last_ping_at TIMESTAMPTZ)");
-    await db.query("CREATE TABLE node_telemetry (node_id INT PRIMARY KEY REFERENCES provider_nodes(id),last_seen_at TIMESTAMPTZ,ip TEXT,subscription_id INT)");
+    await db.query("CREATE TABLE provider_nodes (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,provider_name TEXT,endpoint_url TEXT,secret_key TEXT,is_active BOOLEAN,last_health_status TEXT,last_ping_at TIMESTAMPTZ,network_type TEXT)");
+    await db.query("CREATE TABLE node_telemetry (node_id INT PRIMARY KEY REFERENCES provider_nodes(id),last_seen_at TIMESTAMPTZ,ip TEXT,subscription_id INT,signal_level INT,signal_percent INT,signal_dbm INT,battery_percent INT,is_charging BOOLEAN,network_type_label TEXT)");
     await db.query("CREATE TABLE check_results (id SERIAL PRIMARY KEY,domain_id INT REFERENCES domains(id),provider_name TEXT,checker_type TEXT,status TEXT,checked_at TIMESTAMPTZ DEFAULT NOW(),latency_ms INT)");
 
     const own=(await db.query("INSERT INTO domains(tenant,domain,project_name,label) VALUES($1,'own.example','OWN','ms') RETURNING id",[tenant])).rows[0].id;
@@ -34,6 +34,13 @@ async function main(){
     await db.query("INSERT INTO rank_keyword_domains(group_id,domain,is_whitelisted) VALUES($1,'own.example',TRUE),($2,'other.example',TRUE)",[group,alienGroup]);
     await db.query("INSERT INTO provider_nodes(tenant,provider_name,endpoint_url,secret_key,is_active,last_health_status,last_ping_at) VALUES('admin','ProviderPublic','https://private.example','SECRET_ADMIN_KEY',TRUE,'online',NOW()),('other_merchant','OtherOnly','https://other.example','SECRET_OTHER_KEY',TRUE,'online',NOW())");
     await db.query("INSERT INTO check_results(domain_id,provider_name,checker_type,status) VALUES($1,'ISP-ONE','node:isp','working'),($2,'OTHER SECRET','node:other','blocked')",[own,other]);
+    const provider=(await db.query("SELECT id FROM provider_nodes WHERE provider_name='ProviderPublic'")).rows[0].id;
+    await db.query(
+      "INSERT INTO node_telemetry(node_id,last_seen_at,signal_level,signal_percent,signal_dbm,battery_percent,is_charging,network_type_label,ip,subscription_id) " +
+      "VALUES($1,NOW()-INTERVAL '45 seconds',4,88,-75,84,TRUE,'LTE','10.0.0.44',777)",
+      [provider]
+    );
+
 
     const app=express();app.use(express.json());
     app.use((req,res,next)=>{
@@ -149,6 +156,64 @@ async function main(){
     await test("foreign browser origin denied for writes",async()=>{
       const r=await request("/api/merchant/domains",{method:"POST",body:{domain:"evil.example"},origin:"https://evil.example"});
       assert.equal(r.status,403);
+    });
+    await test("per-node merchant telemetry returns sanitized public data",async()=>{
+      const r=await request("/api/merchant/node-health");
+      assert.equal(r.status,200);
+      assert.match(r.cache,/no-store/);
+      assert.equal(typeof r.data.as_of,"string");
+      assert.ok(Array.isArray(r.data.nodes));
+      assert.equal(r.data.nodes.length,1);
+      const row=r.data.nodes[0];
+      assert.equal(row.provider_name,"ProviderPublic");
+      assert.equal(row.public_alias,"PROVIDERPUBLIC NODE 01");
+      assert.equal(row.network_type,"4G LTE");
+      assert.equal(row.is_active,true);
+      assert.equal(row.connectivity,"online");
+      assert.equal(row.signal_bars,5);
+      assert.equal(row.signal_label,"Strong");
+      assert.equal(row.battery_percent,84);
+      assert.equal(row.is_charging,true);
+      assert.equal(row.telemetry_fresh,true);
+      const payload=JSON.stringify(r.data);
+      for(const secret of ["SECRET_ADMIN_KEY","SECRET_OTHER_KEY","10.0.0.44","private.example","OtherOnly","node_id","subscription_id","endpoint_url","secret_key","\"id\"","\"name\"","\"tenant\""])
+        assert.equal(payload.includes(secret),false,secret);
+    });
+    await test("node telemetry merchant scope cannot be forged",async()=>{
+      assert.equal((await request("/api/merchant/node-health?tenant=other_merchant")).data.nodes.length,1);
+      assert.equal((await request("/api/merchant/node-health",{persona:"spoof"})).status,403);
+      assert.equal((await request("/api/merchant/node-health",{persona:"anonymous"})).status,403);
+      process.env.PENTAGON_CUSTOMER_VIEWERS_JSON=JSON.stringify([{email,tenant,role:"customer_viewer"}]);
+      assert.equal((await request("/api/merchant/node-health",{persona:"viewer"})).status,403);
+      process.env.PENTAGON_CUSTOMER_VIEWERS_JSON=grant;
+      assert.equal((await request("/api/merchant/node-health",{method:"POST",body:{is_active:false}})).status,405);
+      assert.equal((await request("/api/nodes",{method:"POST",body:{is_active:false}})).status,403);
+      assert.equal((await request("/api/merchant/node-health",{origin:"https://forged.example"})).status,403);
+    });
+    await test("stale heartbeat and inactive status not mislabeled online",async()=>{
+      await db.query("UPDATE node_telemetry SET last_seen_at=NOW()-INTERVAL '20 minutes' WHERE node_id=$1",[provider]);
+      const stale=(await request("/api/merchant/node-health")).data.nodes[0];
+      assert.equal(stale.connectivity,"offline");
+      assert.equal(stale.telemetry_fresh,false);
+      assert.equal(stale.battery_percent,84);
+      await db.query("UPDATE provider_nodes SET is_active=FALSE WHERE id=$1",[provider]);
+      const inactive=(await request("/api/merchant/node-health")).data.nodes[0];
+      assert.equal(inactive.connectivity,"inactive");
+      assert.equal(inactive.is_active,false);
+      await db.query("UPDATE provider_nodes SET is_active=TRUE WHERE id=$1",[provider]);
+      await db.query("UPDATE node_telemetry SET last_seen_at=NOW()+INTERVAL '5 minutes' WHERE node_id=$1",[provider]);
+      const future=(await request("/api/merchant/node-health")).data.nodes[0];
+      assert.equal(future.connectivity,"unknown");
+      assert.equal(future.telemetry_fresh,false);
+      assert.equal(future.last_seen_at,null);
+    });
+    await test("missing signal and battery fields remain unknown, never fake data",async()=>{
+      await db.query("UPDATE node_telemetry SET signal_level=NULL,signal_percent=NULL,signal_dbm=NULL,battery_percent=NULL,is_charging=NULL,last_seen_at=NOW()-INTERVAL '40 seconds' WHERE node_id=$1",[provider]);
+      const row=(await request("/api/merchant/node-health")).data.nodes[0];
+      assert.equal(row.signal_bars,null);
+      assert.equal(row.signal_label,"Unknown");
+      assert.equal(row.battery_percent,null);
+      assert.equal(row.is_charging,null);
     });
     console.log("PENTAGON_MERCHANT_ADMIN_POSTGRES_PASS="+passed);
   }finally{
