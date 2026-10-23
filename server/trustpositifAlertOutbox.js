@@ -132,8 +132,7 @@ function errorCode(code) {
 
 // Resolve alert recipient from the database-owned domain tenant, never from a
 // request/body parameter. Merchant settings override the platform fallback.
-async function outboxRecipient(entry, db = pool) {
-  const defaults = getTelegramConfig();
+async function outboxRecipient(entry, db = pool, defaults = getTelegramConfig()) {
   if (!entry?.domain_id) return { ...defaults, outcome:null };
   const { rows } = await db.query(
     "SELECT d.tenant,s.value FROM domains d LEFT JOIN app_settings s " +
@@ -160,7 +159,7 @@ async function outboxRecipient(entry, db = pool) {
 async function deliverTelegram(message, entry = null, options = {}) {
   let recipient;
   try {
-    recipient = await outboxRecipient(entry, options.db || pool);
+    recipient = await outboxRecipient(entry, options.db || pool, options.botConfig || getTelegramConfig());
   } catch (err) {
     return { outcome:"retry", code:"MERCHANT_ROUTING_UNAVAILABLE" };
   }
