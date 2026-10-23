@@ -30,16 +30,23 @@ final class AutoProvisioner {
         CellularNetworkHelper.Info cell = CellularNetworkHelper.inspect(context);
         String operator = safe(cell.operator).trim();
         String detectedProvider = providerFromOperator(operator);
+        final String existingNode = Prefs.nodeName(context);
+        final String existingProvider = Prefs.provider(context);
+        final boolean alreadyProvisioned = !existingNode.isEmpty() && !Prefs.secret(context).isEmpty();
+        // SIM operator name can be temporarily unavailable while Android switches
+        // networks, revokes phone permission, or resumes after battery optimization.
+        // Preserve an already-provisioned node identity and let the polling loop
+        // report "waiting" to Railway rather than abort before its heartbeat.
+        // NEVER claim a different detected SIM operator as the previous provider.
+        if (alreadyProvisioned && (detectedProvider.isEmpty()
+                || detectedProvider.equalsIgnoreCase(existingProvider))) {
+            return new Result(operator, existingProvider, existingNode, false);
+        }
+
         if (detectedProvider.isEmpty()) {
             throw new IllegalStateException(operator.isEmpty()
                     ? "No active mobile operator detected"
                     : "Unsupported operator: " + operator);
-        }
-
-        if (detectedProvider.equalsIgnoreCase(Prefs.provider(context))
-                && !Prefs.nodeName(context).isEmpty()
-                && !Prefs.secret(context).isEmpty()) {
-            return new Result(operator, Prefs.provider(context), Prefs.nodeName(context), false);
         }
 
         JSONObject request = new JSONObject();
