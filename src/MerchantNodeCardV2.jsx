@@ -23,7 +23,7 @@ function lastSeenText(value, asOf) {
   return Math.floor(age / 86400000) + " hari lalu";
 }
 
-export default function MerchantNodeCardV2({ node, asOf }) {
+export default function MerchantNodeCardV2({ node, asOf, onSelect }) {
   const bars = Number.isInteger(node.signal_bars) && node.signal_bars >= 0 &&
     node.signal_bars <= 5 ? node.signal_bars : null;
   const battery = typeof node.battery_percent === "number" &&
@@ -33,8 +33,10 @@ export default function MerchantNodeCardV2({ node, asOf }) {
   const isCharging = node.is_charging === true;
   const BatteryIcon = isCharging ? BatteryCharging : isLow ? BatteryWarning : Battery;
 
-  return <article className={"maNodeCardV2 maNodeHealth-" + node.connectivity}
-    aria-label={node.public_alias + " " + (connectivityText[node.connectivity] || "UNKNOWN")}>
+  return <article role="button" tabIndex={0} onClick={onSelect}
+    onKeyDown={e=>{if(e.key==="Enter"||e.key===" "){e.preventDefault();onSelect?.();}}}
+    className={"maNodeCardV2 maNodeHealth-" + node.connectivity}
+    aria-label={"Detail " + node.public_alias + " " + (connectivityText[node.connectivity] || "UNKNOWN")}>
     <div className="maNodeTopV2">
       <div className="maNodeBrandV2">
         <span className="maNodeProvider">{node.provider_name}</span>

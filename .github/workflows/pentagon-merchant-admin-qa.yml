@@ -4,12 +4,15 @@ on:
     paths:
       - "server/customerViewerAuth.js"
       - "server/merchantAdminRoutes.js"
+      - "server/merchantOperationsRoutes.js"
+      - "server/merchantDirectChecker.js"
       - "server/merchantNodeTelemetry.js"
       - "server/index.js"
       - "src/App.jsx"
       - "src/MerchantAdminPage.*"
       - "src/MerchantNodeCardV2.jsx"
       - "scripts/test-pentagon-merchant-admin*"
+      - "scripts/test-pentagon-merchant-ops.cjs"
       - "scripts/test-pentagon-merchant-session*"
       - "scripts/test-pentagon-node-health*"
       - ".github/workflows/pentagon-merchant-admin-qa.yml"
@@ -17,6 +20,7 @@ on:
     branches:
       - feature/pentagon-merchant-admin-isolation-20261022
       - feature/pentagon-node-health-v2-20261023
+      - feature/merchant-trust-telegram-node-diagnostics-20261023
 permissions:
   contents: read
 jobs:
@@ -56,6 +60,8 @@ jobs:
         run: |
           node --check server/customerViewerAuth.js
           node --check server/merchantAdminRoutes.js
+          node --check server/merchantOperationsRoutes.js
+          node --check server/merchantDirectChecker.js
           node --check server/merchantNodeTelemetry.js
           node --check scripts/test-pentagon-node-health-v2.cjs
           node --check scripts/test-pentagon-node-health-ui.cjs
@@ -66,6 +72,7 @@ jobs:
           node scripts/test-pentagon-test-account-auth.cjs
           node scripts/test-pentagon-customer-viewer-auth.cjs
           node scripts/test-pentagon-merchant-admin-auth.cjs
+          node scripts/test-pentagon-merchant-ops.cjs
           node scripts/test-pentagon-merchant-session-migration.cjs
           node scripts/test-pentagon-node-health-v2.cjs
       - name: Isolated PostgreSQL viewer and merchant tenant firewall

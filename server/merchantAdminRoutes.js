@@ -4,12 +4,14 @@ const express = require("express");
 const { pool } = require("./db");
 const { requireMerchantAdmin } = require("./customerViewerAuth");
 const { serializeMerchantNodes } = require("./merchantNodeTelemetry");
+const { createMerchantOperationsRouter } = require("./merchantOperationsRoutes");
 
 // Merchant administration is intentionally separate from /api/domains, /api/rank,
 // /api/nodes and other platform-admin routes. The server session owns tenant identity.
 function createMerchantAdminRouter(db = pool) {
   const router = express.Router();
   router.use(requireMerchantAdmin);
+  router.use(createMerchantOperationsRouter(db));
   router.use((req, res, next) => {
     res.set("Cache-Control", "private, no-store");
     next();
