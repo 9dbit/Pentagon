@@ -249,8 +249,16 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               node.is_active && node.connectivity !== "online").length}</strong></div>
           </div>
           <div className="maNodeGridV2">
+            <button type="button" className="maDirectNodeCard" onClick={()=>setPage("direct")}>
+              <Activity size={29}/>
+              <strong>Direct Checker</strong>
+              <span>HTTP/HTTPS dari Railway, terpisah dari node SIM</span>
+              <small>Riwayat untuk {data.direct?.domains?.length ?? 0} domain merchant</small>
+              <b>Buka Direct Checker →</b>
+            </button>
             {data.nodes.map(node =>
-              <MerchantNodeCardV2 key={node.public_alias} node={node} asOf={data.nodeAsOf || refreshedAt}/>
+              <MerchantNodeCardV2 key={node.public_alias} node={node} asOf={data.nodeAsOf || refreshedAt}
+                onSelect={()=>setDetail({label:node.public_alias,value:node.connectivity,node})}/>
             )}
             {!data.nodes.length && <div className="maNodeEmptyV2">
               <Radio size={28}/>
@@ -290,11 +298,16 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           <h2>Direct Checker</h2>
           <p>Riwayat hasil pemeriksaan koneksi langsung dari server, bukan node SIM atau daftar resmi Trust Positif.</p>
           <div className="maInfo"><Activity size={18}/><span>Belum ada hasil berarti belum diperiksa, bukan otomatis normal. Pemeriksaan ini hanya menampilkan hasil yang benar-benar tersimpan.</span></div>
-          {data.direct ? <div className="maList">{data.direct.domains?.map(d=><button type="button"
-            className="maDataRowBtn" key={d.domain} onClick={()=>setDetail({label:d.domain,value:d.status,direct:d})}>
-            <strong>{d.domain}</strong><span>{statusText(d.status)}</span>
-            <small>HTTP {d.http_status ?? "N/A"} · {d.latency_ms ?? "N/A"} ms · {dateWib(d.checked_at)}</small>
-          </button>)}</div>:<div className="maEmpty">Data Direct Checker belum tersedia.</div>}
+          {data.direct ? <div className="maList">{data.direct.domains?.map(d=><div key={d.domain} className="maDirectRow">
+            <button type="button" className="maDataRowBtn" onClick={()=>setDetail({label:d.domain,value:d.status,direct:d})}>
+              <strong>{d.domain}</strong><span>{statusText(d.status)}</span>
+              <small>HTTP {d.http_status ?? "N/A"} · {d.latency_ms ?? "N/A"} ms · {dateWib(d.checked_at)}</small>
+            </button>
+            <button type="button" className="maPrimary" disabled={busy||!d.is_active} onClick={()=>
+              act("/api/merchant/direct-checker/run","POST",{domain:d.domain},"Direct Checker selesai.")}>
+              <RefreshCw size={14}/> Periksa Langsung
+            </button>
+          </div>)}</div>:<div className="maEmpty">Data Direct Checker belum tersedia.</div>}
         </section>}
 
         {page === "alerts" && <section className="maPanel"><h2>Notifikasi Merchant</h2><p>Hanya kejadian domain merchant ini, tanpa notifikasi pelanggan lain.</p>
@@ -342,6 +355,10 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               Hanya domain merchant ini.</p>}
             {detail.direct && <p>HTTP: {detail.direct.http_status ?? "N/A"}, durasi: {detail.direct.latency_ms ?? "N/A"} ms,
               terakhir diperiksa: {dateWib(detail.direct.checked_at)}.</p>}
+            {detail.node && <p>Provider: {detail.node.provider_name}. Sinyal: {detail.node.signal_label},
+              {detail.node.signal_bars ?? "N/A"} / 5 bar. Battery: {detail.node.battery_percent ?? "N/A"}%.
+              Active: {detail.node.is_active ? "Yes" : "No"}. Heartbeat: {dateWib(detail.node.last_seen_at)}.
+              Status online memerlukan heartbeat terbaru, bukan hanya APK terbuka.</p>}
             {!detail.domain && !detail.direct && <p>Angka berasal dari data tenant merchant. Buka halaman terkait untuk rincian.</p>}
             {detail.section && <button className="maPrimary" type="button"
               onClick={()=>{setPage(detail.section);setDetail(null);}}>Buka {detail.section}</button>}
