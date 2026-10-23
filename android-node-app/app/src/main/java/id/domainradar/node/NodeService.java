@@ -33,7 +33,12 @@ public class NodeService extends Service {
         worker = new Thread(() -> {
             while (running) {
                 try { pollOnce(); }
-                catch (Exception e) { log("Poll error: " + safe(e.getMessage())); }
+                catch (Exception e) {
+                    String reason = safe(e.getMessage());
+                    Prefs.put(this, "last_poll_error", reason.substring(0, Math.min(220, reason.length())));
+                    Prefs.put(this, "last_poll_error_at", String.valueOf(System.currentTimeMillis()));
+                    log("Poll error: " + reason);
+                }
                 try { Thread.sleep(Math.max(1500, Prefs.pollMs(this))); } catch (InterruptedException ignored) {}
             }
         }, "PentagonNodeLoop");
@@ -56,15 +61,28 @@ public class NodeService extends Service {
         JSONObject poll = base();
         poll.put("telemetry", telemetry);
 
-        boolean networkOk = !mobile || cell.available;
+        String detectedProvider = AutoProvisioner.providerFromOperator(cell.operator);
+        boolean correctSim = !mobile || (!detectedProvider.isEmpty()
+                && detectedProvider.equalsIgnoreCase(Prefs.provider(this)));
+        boolean networkOk = !mobile || (cell.available && correctSim);
         String networkReason = mobile
-                ? cell.reason + (cell.operator.isEmpty() ? "" : " · " + cell.operator)
+                ? cell.reason + (cell.operator.isEmpty() ? " · SIM_OPERATOR_UNKNOWN" : " · " + cell.operator)
+                    + (correctSim ? "" : " · PROVIDER_IDENTITY_NOT_VERIFIED")
                 : "broadband/default network";
 
         poll.put("network_ok", networkOk);
         poll.put("network_reason", networkReason);
 
         JSONObject response = ApiClient.post(this, "/api/agent/poll", poll);
+        if (!response.optBoolean("ok", false)) {
+            throw new IllegalStateException("Central did not acknowledge poll");
+        }
+        // This timestamp means the Railway API really acknowledged the request,
+        // NOT merely that the Android service is enabled.
+        Prefs.put(this, "last_poll_ok_ms", String.valueOf(System.currentTimeMillis()));
+        Prefs.putBool(this, "last_poll_network_ok", networkOk);
+        Prefs.put(this, "last_poll_error", "");
+        Prefs.put(this, "last_poll_error_at", "");
         JSONObject task = response.optJSONObject("task");
 
         if (!networkOk) {

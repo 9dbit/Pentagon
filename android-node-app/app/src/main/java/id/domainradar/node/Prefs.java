@@ -12,10 +12,16 @@ class Prefs {
     static void putBool(Context c, String key, boolean value) { sp(c).edit().putBoolean(key, value).apply(); }
 
     static String central(Context c) {
-        String value = get(c, "central", "https://pentagon-web-production.up.railway.app").replaceAll("/+$", "");
-        if ("https://domain-radar.org".equalsIgnoreCase(value)
-                || "https://pentagon.quest".equalsIgnoreCase(value)
-                || "https://demo.pentagon.quest".equalsIgnoreCase(value)) {
+        String value = get(c, "central", "https://pentagon-web-production.up.railway.app").trim().replaceAll("/+$", "");
+        String lower = value.toLowerCase(java.util.Locale.US);
+        // Migrate only known legacy Pentagon hostnames. Keep existing node
+        // credentials, provider identity, and install ID exactly as stored.
+        if (lower.isEmpty() || lower.equals("https://domain-radar.org")
+                || lower.equals("https://pentagon.quest")
+                || lower.equals("https://demo.pentagon.quest")
+                || lower.endsWith(".replit.app")
+                || lower.endsWith(".replit.dev")
+                || lower.endsWith(".repl.co")) {
             return "https://pentagon-web-production.up.railway.app";
         }
         return value;
