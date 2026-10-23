@@ -6,6 +6,7 @@ import {
   Trash2, Wifi, X
 } from "lucide-react";
 import "./MerchantAdminPage.css";
+import MerchantNodeCardV2 from "./MerchantNodeCardV2";
 
 const dateWib = value => value && Number.isFinite(new Date(value).getTime())
   ? new Date(value).toLocaleString("id-ID", { timeZone: "Asia/Jakarta",
@@ -58,13 +59,13 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
 
   const reload = useCallback(async () => {
     try {
-      const [overview, domains, keywords, nodes, alerts, history, profile] = await Promise.all([
+      const [overview, domains, keywords, nodeHealth, alerts, history, profile] = await Promise.all([
         request("/api/customer/overview"), request("/api/merchant/domains"),
-        request("/api/merchant/keywords"), request("/api/merchant/nodes"),
+        request("/api/merchant/keywords"), request("/api/merchant/node-health"),
         request("/api/customer/alerts"), request("/api/merchant/history"),
         request("/api/merchant/profile")
       ]);
-      setData({ overview, domains, keywords, nodes, alerts, history, profile });
+      setData({ overview, domains, keywords, nodes: nodeHealth.nodes || [], nodeAsOf: nodeHealth.as_of, alerts, history, profile });
       setError("");
       setRefreshedAt(new Date().toISOString());
     } catch (err) {
@@ -106,8 +107,8 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
     () => data.domains.filter(item => (item.domain + " " + (item.project_name || "")).toLowerCase().includes(search.toLowerCase())),
     [data.domains, search]
   );
-  const healthyNodes = data.nodes.reduce((sum, node) => sum + n(node.fresh), 0);
-  const activeNodes = data.nodes.reduce((sum, node) => sum + n(node.active), 0);
+  const healthyNodes = data.nodes.filter(node => node.is_active && node.connectivity === "online").length;
+  const activeNodes = data.nodes.filter(node => node.is_active).length;
   const overview = data.overview || {};
 
   return <div className="maApp">
@@ -212,15 +213,40 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           </div>)}{!data.keywords.length && <div className="maEmpty">Belum ada keyword untuk merchant ini.</div>}</div>
         </section>}
 
-        {page === "nodes" && <section className="maPanel"><h2>Provider Node Health</h2>
-          <p>Ringkasan kondisi jaringan checker bersama, tanpa akses konfigurasi perangkat, secret, atau identitas SIM.</p>
-          <div className="maNodeGrid">{data.nodes.map(node => <article className="maNode" key={node.provider_name}>
-            <Radio size={20}/><strong>{node.provider_name}</strong>
-            <div><b>{n(node.fresh)} / {n(node.active)}</b><span> node responsif / aktif</span></div>
-            <small>Terdaftar: {n(node.total)} · Menunggu: {n(node.waiting)}</small>
-            <small>Heartbeat: {dateWib(node.last_seen_at)}</small>
-          </article>)}{!data.nodes.length && <div className="maEmpty">Belum ada data node.</div>}</div>
-          <div className="maInfo"><ShieldAlert size={18}/><span>Node responsif belum otomatis berarti hasil domain aman. Status domain tetap menunggu konsensus dan bukti pemeriksaan.</span></div>
+        {page === "nodes" && <section className="maNodePageV2">
+          <div className="maNodePageHead">
+            <div>
+              <span className="maNodeEyebrow">PENTAGON NETWORK MONITORING</span>
+              <h2>Provider Node Health</h2>
+              <p>Live telemetry, signal strength, battery dan konektivitas checker. Read-only untuk Merchant Admin.</p>
+            </div>
+            <button className="maNodeRefreshBtn" type="button" onClick={reload} disabled={loading}>
+              <RefreshCw size={16}/> Refresh Status
+            </button>
+          </div>
+          <div className="maNodeStatsV2">
+            <div><span>TOTAL NODES</span><strong>{data.nodes.length}</strong></div>
+            <div><span>ACTIVE</span><strong>{activeNodes}</strong></div>
+            <div><span>ONLINE</span><strong>{healthyNodes}</strong></div>
+            <div><span>WAITING / OFFLINE</span><strong>{data.nodes.filter(node =>
+              node.is_active && node.connectivity !== "online").length}</strong></div>
+          </div>
+          <div className="maNodeGridV2">
+            {data.nodes.map(node =>
+              <MerchantNodeCardV2 key={node.public_alias} node={node} asOf={data.nodeAsOf || refreshedAt}/>
+            )}
+            {!data.nodes.length && <div className="maNodeEmptyV2">
+              <Radio size={28}/>
+              <strong>Belum ada node</strong>
+              <span>{loading ? "Memuat telemetry..." : "Tidak ada node pemeriksa yang tersedia untuk merchant ini."}</span>
+            </div>}
+          </div>
+          <div className="maNodeInfoV2"><ShieldAlert size={18}/>
+            <span>Indikator ACTIVE menunjukkan node diaktifkan. ONLINE memerlukan heartbeat terbaru.
+              Sinyal dan battery bertanda Last Reading berasal dari pembacaan sebelumnya.
+              Status domain tetap memerlukan bukti pemeriksaan resmi dan minimal dua node independen.</span>
+          </div>
+          <div className="maNodeFootV2">Terakhir diperbarui: {dateWib(data.nodeAsOf || refreshedAt)} · Network data read-only</div>
         </section>}
 
         {page === "alerts" && <section className="maPanel"><h2>Notifikasi Merchant</h2><p>Hanya kejadian domain merchant ini, tanpa notifikasi pelanggan lain.</p>
