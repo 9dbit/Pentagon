@@ -130,11 +130,45 @@ function errorCode(code) {
   return String(code || "DELIVERY_UNKNOWN").replace(/[^A-Za-z0-9_]/g, "").slice(0,64) || "DELIVERY_UNKNOWN";
 }
 
-async function deliverTelegram(message) {
-  const { token, chatId } = getTelegramConfig();
+// Resolve alert recipient from the database-owned domain tenant, never from a
+// request/body parameter. Merchant settings override the platform fallback.
+async function outboxRecipient(entry, db = pool) {
+  const defaults = getTelegramConfig();
+  if (!entry?.domain_id) return { ...defaults, outcome:null };
+  const { rows } = await db.query(
+    "SELECT d.tenant,s.value FROM domains d LEFT JOIN app_settings s " +
+    "ON s.key='merchant_telegram_'||d.tenant WHERE d.id=$1 AND d.is_active=TRUE LIMIT 1",
+    [entry.domain_id]
+  );
+  if (!rows.length) return { outcome:"cancelled", code:"DOMAIN_NOT_ACTIVE" };
+  const row=rows[0];
+  if (row.value === null || row.value === undefined || row.value === "") {
+    return { ...defaults, outcome:null };
+  }
+  try {
+    const cfg = JSON.parse(row.value);
+    if (cfg.enabled !== true) return { outcome:"cancelled", code:"MERCHANT_NOTIFICATIONS_DISABLED" };
+    if (!/^-?[0-9]{5,20}$/.test(String(cfg.chat_id||""))) {
+      return { outcome:"failed", code:"MERCHANT_CHAT_ID_INVALID" };
+    }
+    return { token:defaults.token,chatId:String(cfg.chat_id),outcome:null };
+  } catch (_) {
+    return { outcome:"failed", code:"MERCHANT_SETTINGS_MALFORMED" };
+  }
+}
+
+async function deliverTelegram(message, entry = null, options = {}) {
+  let recipient;
+  try {
+    recipient = await outboxRecipient(entry, options.db || pool);
+  } catch (err) {
+    return { outcome:"retry", code:"MERCHANT_ROUTING_UNAVAILABLE" };
+  }
+  if (recipient.outcome) return { outcome:recipient.outcome, code:recipient.code };
+  const { token, chatId } = recipient;
   if (!token || !chatId) return { outcome:"retry", code:"TELEGRAM_NOT_CONFIGURED" };
   try {
-    const response = await axios.post("https://api.telegram.org/bot" + token + "/sendMessage", {
+    const response = await (options.transport || axios).post("https://api.telegram.org/bot" + token + "/sendMessage", {
       chat_id:chatId, text:String(message).slice(0,3900), parse_mode:"HTML",
       disable_web_page_preview:true
     }, { timeout:12000, validateStatus:() => true });
