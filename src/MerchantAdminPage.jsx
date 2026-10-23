@@ -266,6 +266,37 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           <div className="maNodeFootV2">Terakhir diperbarui: {dateWib(data.nodeAsOf || refreshedAt)} · Network data read-only</div>
         </section>}
 
+        {page === "trust" && <section className="maPanel">
+          <div className="maPanelHead"><div><h2>Trust Positif Monitoring</h2>
+            <p>Evidence domain merchant dan sumber pengecekan. Status Unknown bukan indikasi aman.</p></div>
+            <button type="button" className="maPill" onClick={reload}><RefreshCw size={15}/> Refresh</button></div>
+          {data.trust ? <>
+            <div className="maMetrics">
+              <div className="maMetric"><span>DOMAIN</span><strong>{data.trust.domain_summary?.total ?? 0}</strong></div>
+              <div className="maMetric"><span>AKTIF</span><strong>{data.trust.domain_summary?.active ?? 0}</strong></div>
+              <div className="maMetric"><span>SUMBER DIPERIKSA</span><strong>{data.trust.official_source_checks?.length ?? 0}</strong></div>
+            </div>
+            <div className="maInfo"><ShieldAlert size={19}/>
+              <span>Konfirmasi blocked memerlukan evidence resmi dan minimum dua provider node independen. Tidak ada simulasi status.</span></div>
+            <div className="maList">{data.trust.domains?.map(d=><button key={d.domain} className="maDataRowBtn"
+              type="button" onClick={()=>setDetail({label:d.domain,value:d.global_status,domain:d})}>
+              <strong>{d.domain}</strong><span>{statusText(d.global_status)}</span>
+              <small>Checker independen 24 jam: {d.recent_node_providers} · Bukti: {dateWib(d.latest_evidence_at)}</small>
+            </button>)}{!data.trust.domains?.length&&<div className="maEmpty">Belum ada domain.</div>}</div>
+          </>:<div className="maEmpty">Evidence Trust Positif belum dapat dimuat. Periksa koneksi server.</div>}
+        </section>}
+
+        {page === "direct" && <section className="maPanel">
+          <h2>Direct Checker</h2>
+          <p>Riwayat hasil pemeriksaan koneksi langsung dari server, bukan node SIM atau daftar resmi Trust Positif.</p>
+          <div className="maInfo"><Activity size={18}/><span>Belum ada hasil berarti belum diperiksa, bukan otomatis normal. Pemeriksaan ini hanya menampilkan hasil yang benar-benar tersimpan.</span></div>
+          {data.direct ? <div className="maList">{data.direct.domains?.map(d=><button type="button"
+            className="maDataRowBtn" key={d.domain} onClick={()=>setDetail({label:d.domain,value:d.status,direct:d})}>
+            <strong>{d.domain}</strong><span>{statusText(d.status)}</span>
+            <small>HTTP {d.http_status ?? "N/A"} · {d.latency_ms ?? "N/A"} ms · {dateWib(d.checked_at)}</small>
+          </button>)}</div>:<div className="maEmpty">Data Direct Checker belum tersedia.</div>}
+        </section>}
+
         {page === "alerts" && <section className="maPanel"><h2>Notifikasi Merchant</h2><p>Hanya kejadian domain merchant ini, tanpa notifikasi pelanggan lain.</p>
           <div className="maList">{data.alerts.map(item => <div className="maListRow" key={item.id}><div><strong>{item.domain}</strong><small>{dateWib(item.created_at)}</small></div>
             <span className={"maStatus status-" + item.new_status}>{statusText(item.new_status)}</span></div>)}
