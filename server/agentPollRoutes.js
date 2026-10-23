@@ -1,6 +1,7 @@
 const express = require("express");
 const { randomUUID } = require("crypto");
 const { pool } = require("./db");
+const { validNodeScope, authorizeNewTask, canCompleteTask, SQL: migrationSQL } = require("./migrationSafety");
 const { ensureNodeTable } = require("./nodeRoutes");
 const { sendTelegram } = require("./telegram");
 
@@ -25,6 +26,12 @@ async function ensureTaskTable() {
   `);
   await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS task_type TEXT DEFAULT 'domain_check'");
   await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS payload JSONB");
+  // Old imported tasks default to disabled. Only new authorized enqueue turns this on.
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS execution_allowed BOOLEAN NOT NULL DEFAULT false");
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS dispatch_token UUID");
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS domain_id INTEGER");
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS tenant TEXT");
+  await pool.query("ALTER TABLE provider_node_tasks ADD COLUMN IF NOT EXISTS fleet TEXT");
   await pool.query("CREATE INDEX IF NOT EXISTS idx_provider_node_tasks_node_status ON provider_node_tasks(node_id, status, created_at)");
   await pool.query("CREATE INDEX IF NOT EXISTS idx_provider_node_tasks_type_status ON provider_node_tasks(task_type, status, created_at)");
 
@@ -202,35 +209,30 @@ function normalizeDomainStatus(status) {
 }
 
 async function syncDomainStatusFromTask(taskId, node, result) {
-  const { rows } = await pool.query(
-    "SELECT domain FROM provider_node_tasks WHERE id=$1 AND node_id=$2 LIMIT 1",
-    [taskId, node.id]
-  );
-  const domain = rows[0]?.domain;
-  if (!domain) return;
-
+  // Domain names can repeat between fleets. Never update by domain name.
+  if (!validNodeScope(node)) return false;
+  const { rows } = await pool.query(migrationSQL.taskForDomainStatus, [taskId, node.id]);
+  const task = rows[0];
+  if (!task || !Number.isSafeInteger(task.domain_id) || task.domain_id < 1 ||
+      task.tenant !== node.tenant || task.fleet !== node.fleet) return false;
   const status = normalizeDomainStatus(result?.status);
   const reason = String(result?.reason || result?.final_url || status || "checked").slice(0, 500);
-  const lastStatus = `${node.name}: ${reason}`.slice(0, 700);
-
-  await pool.query(
-    `UPDATE domains
-     SET global_status=$1,
-         last_status=$2,
-         last_checked_at=NOW()
-     WHERE domain=$3`,
-    [status, lastStatus, domain]
-  );
+  const lastStatus = (node.name + ": " + reason).slice(0, 700);
+  const updated = await pool.query(migrationSQL.domainStatusFromTask,
+    [status, lastStatus, task.domain_id, task.tenant, task.fleet]);
+  return updated.rowCount === 1;
 }
 
 async function enqueueNodeTask(node, domain, options = {}) {
   await ensureTaskTable();
-  const id = randomUUID();
   const taskType = String(options.task_type || "domain_check").trim() || "domain_check";
+  const domainId = authorizeNewTask(node, taskType, options);
+  const id = randomUUID(), token = randomUUID();
   const payload = options.payload && typeof options.payload === "object" ? options.payload : null;
   await pool.query(
-    "INSERT INTO provider_node_tasks (id, node_id, domain, status, task_type, payload) VALUES ($1,$2,$3,'queued',$4,$5::jsonb)",
-    [id, node.id, domain, taskType, payload ? JSON.stringify(payload) : null]
+    "INSERT INTO provider_node_tasks (id, node_id, domain, status, task_type, payload, tenant, fleet, domain_id, dispatch_token, execution_allowed) VALUES ($1,$2,$3,'queued',$4,$5::jsonb,$6,$7,$8,$9,true)",
+    [id, node.id, domain, taskType, payload ? JSON.stringify(payload) : null,
+      node.tenant, node.fleet, domainId, token]
   );
   return id;
 }
@@ -245,7 +247,7 @@ async function waitForNodeTask(taskId, timeoutMs = 45000) {
     if (task.status === "error") return { status: "warning", reason: task.error || "Polling task error", __polling_state: "error" };
     await new Promise((resolve) => setTimeout(resolve, 1000));
   }
-  await pool.query("UPDATE provider_node_tasks SET status='error', error='Node polling timeout' WHERE id=$1 AND status <> 'done'", [taskId]);
+  await pool.query("UPDATE provider_node_tasks SET status='error', error='Node polling timeout' WHERE id=$1 AND status <> 'done' AND execution_allowed IS TRUE AND dispatch_token IS NOT NULL", [taskId]);
   return { status: "warning", reason: "Node polling timeout / no response from device", __polling_state: "timeout" };
 }
 
@@ -353,18 +355,11 @@ router.post("/poll", async (req, res, next) => {
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason=$1, last_ping_at=NOW() WHERE id=$2", [req.body.network_reason || "network matched", node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);
 
-    const { rows } = await pool.query(
-      `UPDATE provider_node_tasks
-       SET status='claimed', claimed_at=NOW()
-       WHERE id = (
-         SELECT id FROM provider_node_tasks
-         WHERE node_id=$1 AND status='queued'
-         ORDER BY created_at ASC
-         LIMIT 1
-       )
-       RETURNING id, domain, COALESCE(task_type,'domain_check') AS task_type, payload`,
-      [node.id]
-    );
+    if (!validNodeScope(node)) {
+      return res.status(503).json({ error: "Node tenant/fleet identity not verified" });
+    }
+    const { rows } = await pool.query(migrationSQL.taskClaim,
+      [node.id, node.tenant, node.fleet]);
 
     if (!rows[0]) return res.json({ ok: true, task: null });
     res.json({ ok: true, task: rows[0] });
@@ -382,11 +377,11 @@ router.post("/result", async (req, res, next) => {
     if (!taskId) return res.status(400).json({ error: "task_id required" });
 
     const result = req.body.result || {};
-    const { rows: taskRows } = await pool.query(
-      "SELECT COALESCE(task_type,'domain_check') AS task_type FROM provider_node_tasks WHERE id=$1 AND node_id=$2 LIMIT 1",
-      [taskId, node.id]
-    );
-    const taskType = taskRows[0]?.task_type || "domain_check";
+    const { rows: taskRows } = await pool.query(migrationSQL.taskLookup, [taskId, node.id]);
+    if (!canCompleteTask(taskRows[0], node)) {
+      return res.status(409).json({ error: "Task is not an authorized claimed live dispatch" });
+    }
+    const taskType = taskRows[0].task_type;
 
     const { rows: healthRows } = await pool.query(
       "SELECT last_health_status, last_health_reason FROM provider_nodes WHERE id=$1 LIMIT 1",
@@ -399,10 +394,11 @@ router.post("/result", async (req, res, next) => {
       (healthReason.includes("wrong network") || healthReason.includes("network check failed"));
 
     if (waitingBecauseNetwork) {
-      await pool.query(
-        "UPDATE provider_node_tasks SET status='error', error=$1, completed_at=NOW() WHERE id=$2 AND node_id=$3",
-        [health.last_health_reason || "wrong network", taskId, node.id]
-      );
+      const denied = await pool.query(migrationSQL.taskNetworkError,
+        [health.last_health_reason || "wrong network", taskId, node.id, node.tenant, node.fleet]);
+      if (denied.rowCount !== 1) {
+        return res.status(409).json({ error: "Task no longer claimable" });
+      }
       await pool.query(
         "UPDATE provider_nodes SET last_health_status='waiting', last_ping_at=NOW() WHERE id=$1",
         [node.id]
@@ -410,12 +406,11 @@ router.post("/result", async (req, res, next) => {
       return res.json({ ok: false, ignored: true, reason: health.last_health_reason || "wrong network" });
     }
 
-    await pool.query(
-      `UPDATE provider_node_tasks
-       SET status='done', result=$1::jsonb, completed_at=NOW()
-       WHERE id=$2 AND node_id=$3`,
-      [JSON.stringify(result), taskId, node.id]
-    );
+    const completed = await pool.query(migrationSQL.taskComplete,
+      [JSON.stringify(result), taskId, node.id, node.tenant, node.fleet]);
+    if (completed.rowCount !== 1) {
+      return res.status(409).json({ error: "Task was not completed: claim no longer valid" });
+    }
     if (taskType === "domain_check") {
       await syncDomainStatusFromTask(taskId, node, result);
     }
