@@ -92,7 +92,7 @@ async function ensureTables(db = pool) {
       "interval_minutes INTEGER NOT NULL DEFAULT 60,",
       "digest_enabled BOOLEAN NOT NULL DEFAULT TRUE,",
       "immediate_alert BOOLEAN NOT NULL DEFAULT TRUE, recovery_alert BOOLEAN NOT NULL DEFAULT TRUE,",
-      "node_warning BOOLEAN NOT NULL DEFAULT TRUE, rank_report BOOLEAN NOT NULL DEFAULT FALSE,",
+      "node_warning BOOLEAN NOT NULL DEFAULT TRUE, rank_report BOOLEAN NOT NULL DEFAULT TRUE,",
       "next_report_at TIMESTAMPTZ NOT NULL DEFAULT NOW()+INTERVAL '60 minutes',",
       "connected_at TIMESTAMPTZ, last_report_at TIMESTAMPTZ, last_delivery_at TIMESTAMPTZ,",
       "last_delivery_status TEXT NOT NULL DEFAULT 'not_tested',",
@@ -249,7 +249,7 @@ function createMerchantTelegramHubRouter(db = pool) {
         immediate_alert:c?.immediate_alert??true,
         recovery_alert:c?.recovery_alert??true,
         node_warning:c?.node_warning??true,
-        rank_report:c?.rank_report??false,
+        rank_report:c?.rank_report??true,
         interval_minutes:c?.interval_minutes||60
       }
     });
