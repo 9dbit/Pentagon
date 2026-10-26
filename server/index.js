@@ -26,6 +26,7 @@ const { verifyTestUser } = require("./testAccountAuth");
 const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall, isStaleMerchantDemoSession } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
+const { createMerchantTelegramHubRouter, telegramHubWebhookRouter, verifyWebhookSecret } = require("./telegramHub");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -209,6 +210,9 @@ app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.cle
 // Dedicated customer routes are read-only and resolve the tenant from the
 // active server-side session and env grant, never from a request parameter.
 app.use("/api/customer", createCustomerViewerRouter());
+// Both routes rely on the existing session tenant firewall or signed Telegram webhook.
+app.use("/api/merchant/telegram-hub", createMerchantTelegramHubRouter());
+app.use("/api/telegram/hub/webhook", telegramHubWebhookRouter());
 app.use("/api/merchant", createMerchantAdminRouter());
 
 app.get("/api/auth/users", requireAdmin, requireNotDemo, async (req, res, next) => {
@@ -257,6 +261,8 @@ app.use("/api/project-telegram", requireAdmin, requireNotDemoWrite, projectTeleg
 app.use("/api", requireAdmin, requireNotDemoWrite, attachTenant, trustpositifRoutes);
 
 app.post("/api/telegram/webhook", async (req, res) => {
+  // Legacy entrypoint is no longer trusted to receive unauthenticated callbacks.
+  if (process.env.TELEGRAM_HUB_ENABLED === "true") return res.status(410).json({ error: "WEBHOOK_MOVED" });
   try {
     const callback = req.body && req.body.callback_query;
     if (!callback || !callback.data) return res.json({ ok: true });

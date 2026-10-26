@@ -141,6 +141,25 @@ async function outboxRecipient(entry, db = pool, defaults = getTelegramConfig())
   );
   if (!rows.length) return { outcome:"cancelled", code:"DOMAIN_NOT_ACTIVE" };
   const row=rows[0];
+  // Verified Hub recipient takes precedence over legacy Chat ID configuration.
+  // A paused/disconnected Hub connection fails closed, never leaks into a
+  // platform-wide Telegram room. Synthetic legacy routing tests remain intact.
+  if (db === pool && process.env.TELEGRAM_HUB_ENABLED === "true") {
+    const hub = await db.query(
+      "SELECT chat_id,enabled,status,immediate_alert,recovery_alert " +
+      "FROM telegram_hub_connections WHERE tenant=$1 LIMIT 1", [row.tenant]
+    );
+    const verified = hub.rows[0];
+    if (verified) {
+      if (verified.enabled !== true || verified.status !== "connected" || !verified.chat_id)
+        return { outcome:"cancelled", code:"MERCHANT_HUB_NOT_CONNECTED" };
+      if (entry.event_type === "BLOCKED" && verified.immediate_alert !== true)
+        return { outcome:"cancelled", code:"MERCHANT_BLOCK_ALERT_DISABLED" };
+      if (entry.event_type === "REGISTRY_DELISTED" && verified.recovery_alert !== true)
+        return { outcome:"cancelled", code:"MERCHANT_RECOVERY_ALERT_DISABLED" };
+      return { token:defaults.token,chatId:verified.chat_id,outcome:null };
+    }
+  }
   if (row.value === null || row.value === undefined || row.value === "") {
     return { ...defaults, outcome:null };
   }

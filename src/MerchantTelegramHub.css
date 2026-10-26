@@ -1,0 +1,66 @@
+.maTgHub{margin-top:16px;display:flex;flex-direction:column;gap:18px;max-width:100%;min-width:0}
+.maTgHub *{box-sizing:border-box}
+.maTgHeader{display:flex;justify-content:space-between;align-items:flex-start;gap:24px;flex-wrap:wrap}
+.maTgEyebrow{font-size:10px;letter-spacing:.18em;font-weight:800;color:#fb871f;margin-bottom:10px}
+.maTgHeader h2{font-size:25px;line-height:1.2;margin:0 0 10px;letter-spacing:-.04em;color:#f9fafb}
+.maTgHeader p,.maTgSection>p{font-size:13px;line-height:1.6;color:#9da7b4;margin:0;max-width:690px}
+.maTgStatus{display:inline-flex;align-items:center;gap:7px;border-radius:40px;background:#1c222b;color:#a9b3be;padding:9px 13px;white-space:nowrap;font-weight:700;font-size:12px}
+.maTgStatus.online{color:#fff;background:#183927}.maTgStatus.paused{color:#ffc37b;background:#382a16}
+.maTgDot{height:7px;width:7px;border-radius:50%;background:#8d98a6;display:inline-block}
+.maTgStatus.online .maTgDot{background:#67df95}.maTgStatus.paused .maTgDot{background:#ffb968}
+.maTgStats{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.maTgStats>div{border-radius:17px;background:#151a21;padding:18px 16px;min-width:0}
+.maTgStats span{display:block;font-size:11px;color:#8997a5;margin-bottom:13px}
+.maTgStats strong{font-size:14px;color:#f0f2f6;display:block;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.maTgSection{padding:24px 22px;border-radius:19px;background:#151a20;display:flex;flex-direction:column;gap:17px;min-width:0}
+.maTgSection h3{margin:0;display:flex;align-items:center;gap:9px;font-weight:750;font-size:16px;color:#f3f4f5}
+.maTgSection h3 svg{color:#fd8321}
+.maTgChoices,.maTgControls{display:flex;align-items:center;flex-wrap:wrap;gap:9px;min-width:0}
+.maTgChoices button,.maTgPill,.maTgPrimary{border-radius:100px;display:inline-flex;align-items:center;justify-content:center;gap:9px;padding:11px 16px;font-weight:700;font-size:12px;min-height:40px;white-space:nowrap;text-decoration:none;max-width:100%;transition:background .15s,color .15s,transform .15s}
+.maTgChoices button,.maTgPill{background:#252b33;color:#c8d0da;border:0}
+.maTgChoices button:hover,.maTgPill:hover{background:#333d48}
+.maTgChoices button.selected{background:#3b2413;color:#ffad69;box-shadow:inset 0 0 0 1px #c76b24}
+.maTgPrimary{border:0;background:#ff801f;color:#161616}
+.maTgPrimary:hover{background:#ff9a43;color:#101010}
+.maTgPill.danger{color:#ffb0a9}
+.maTgHub button:disabled{opacity:.46;cursor:not-allowed}
+.maTgHub button:active,.maTgHub a:active{transform:scale(.98)}
+.maTgActivate{display:grid;grid-template-columns:224px minmax(0,1fr);gap:22px;align-items:center;background:#10151b;padding:20px;border-radius:17px}
+.maTgQr{background:#fff;border-radius:13px;display:flex;justify-content:center;align-items:center;padding:16px;max-width:224px;aspect-ratio:1}
+.maTgQr svg{max-width:100%;height:auto}
+.maTgActivateText{min-width:0;overflow-wrap:anywhere}
+.maTgActivateText strong{font-size:15px;color:#f5f6fa}
+.maTgActivateText p{font-size:12px;color:#96a2b1;line-height:1.6;margin:12px 0 18px}
+.maTgClaim{display:flex;align-items:center;flex-wrap:wrap;gap:12px;padding:13px 16px;border-radius:14px;background:#211c17;color:#fbd1a5;font-size:12px}
+.maTgClaim svg{color:#ff8b32}.maTgClaim>span{flex:1;min-width:150px}
+.maTgLink{align-self:start;color:#ff993d;background:none;border:0;padding:6px 0;font-size:12px;font-weight:700}
+.maTgIdentity{display:flex;align-items:center;gap:14px;min-width:0}
+.maTgAvatar{background:#39291d;color:#ff9641;border-radius:17px;width:56px;height:56px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.maTgIdentity>div:last-child{display:flex;flex-direction:column;gap:4px;min-width:0}
+.maTgIdentity strong{font-size:16px;overflow-wrap:anywhere}
+.maTgIdentity span,.maTgIdentity small{color:#9ba7b5;font-size:12px}
+.maTgControls input{flex:1 1 200px;min-width:120px;height:42px}
+.maTgVideo{display:block;max-height:300px;width:min(100%,520px);object-fit:cover;border-radius:15px;background:#000}
+.maTgFeedback{padding:12px 15px;display:flex;align-items:center;gap:9px;border-radius:12px;background:#1b3528;color:#b9e8cf;line-height:1.5;font-size:12px}
+.maTgFeedback.error{color:#ffc0b5;background:#3a2322}
+.maTgOptions{display:flex;flex-direction:column;gap:0}
+.maTgOption{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:14px 0;border-bottom:1px solid #262c34}
+.maTgOption>span{display:flex;flex-direction:column;gap:5px;min-width:0}
+.maTgOption strong{font-size:13px;color:#e8ebf0}
+.maTgOption small{font-size:11px;color:#97a2ae;line-height:1.5}
+.maTgOption input[type="checkbox"]{flex:0 0 auto;min-width:0;accent-color:#ff801f;width:20px;height:20px;cursor:pointer}
+.maTgInterval{display:flex;align-items:center;gap:12px;justify-content:space-between;color:#cdd4df;font-weight:700;font-size:13px}
+.maTgInterval select{border-radius:99px;min-width:130px;max-width:190px}
+.maTgPrivacy{display:flex;align-items:flex-start;gap:10px;color:#8290a0;font-size:11px;line-height:1.7;padding:6px 0}
+.maTgPrivacy svg{flex-shrink:0;color:#ff861f}
+@media(max-width:980px){.maTgStats{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:640px){
+ .maTgStats{grid-template-columns:repeat(2,minmax(0,1fr))}
+ .maTgSection{padding:19px 15px}
+ .maTgActivate{grid-template-columns:minmax(0,1fr);justify-items:center;padding:15px;text-align:center}
+ .maTgActivateText{width:100%}.maTgActivateText .maTgControls{justify-content:center}
+ .maTgQr{width:min(100%,224px)}
+ .maTgControls button,.maTgControls a{white-space:normal;text-align:center}
+ .maTgHeader h2{font-size:22px}
+ .maTgOptions .maTgOption{gap:12px}
+}

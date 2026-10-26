@@ -35,6 +35,10 @@ function createMerchantOperationsRouter(db = pool) {
     res.json({enabled:x.enabled,chat_id:x.chat_id,bot_configured:Boolean(getTelegramConfig().token)});
   }));
   router.patch("/telegram",safe(async(req,res)=>{
+    // Reject arbitrary Chat IDs in the verified Hub. A Telegram /start claim
+    // plus dashboard confirmation is required to select a recipient.
+    if(process.env.TELEGRAM_HUB_ENABLED === "true")
+      return res.status(410).json({error:"USE_VERIFIED_TELEGRAM_HUB"});
     const enabled=req.body?.enabled;
     const chat_id=String(req.body?.chat_id||"").trim();
     if(typeof enabled!=="boolean" || (chat_id && !/^-?[0-9]{5,20}$/.test(chat_id)) ||
@@ -48,6 +52,8 @@ function createMerchantOperationsRouter(db = pool) {
     return res.json({ok:true,enabled,chat_id});
   }));
   router.post("/telegram/test",safe(async(req,res)=>{
+    if(process.env.TELEGRAM_HUB_ENABLED === "true")
+      return res.status(410).json({error:"USE_VERIFIED_TELEGRAM_HUB"});
     const cfg=await getTelegram(req), {token}=getTelegramConfig();
     if(!cfg.enabled||!cfg.chat_id) return res.status(409).json({error:"MERCHANT_TELEGRAM_DISABLED"});
     if(!token) return res.status(503).json({error:"TELEGRAM_BOT_NOT_CONFIGURED"});
