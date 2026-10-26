@@ -27,6 +27,7 @@ const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, cust
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
 const { createMerchantTelegramHubRouter, telegramHubWebhookRouter, verifyWebhookSecret } = require("./telegramHub");
+const { createPermanentGroupAdminRouter, createPermanentGroupMerchantRouter } = require("./telegramPermanentGroups");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -212,6 +213,11 @@ app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.cle
 app.use("/api/customer", createCustomerViewerRouter());
 // Both routes rely on the existing session tenant firewall or signed Telegram webhook.
 app.use("/api/merchant/telegram-hub", createMerchantTelegramHubRouter());
+app.use("/api/merchant/telegram-groups", createPermanentGroupMerchantRouter(undefined,{
+  tg: require("./telegramHub").tg,
+  opsChatId:process.env.TELEGRAM_OPS_MAIN_CHAT_ID||require("./telegram").getTelegramConfig().chatId
+}));
+app.use("/api/admin/telegram-groups", requireAdmin, requireNotDemo, createPermanentGroupAdminRouter());
 app.use("/api/telegram/hub/webhook", telegramHubWebhookRouter());
 app.use("/api/merchant", createMerchantAdminRouter());
 
