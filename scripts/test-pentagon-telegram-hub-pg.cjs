@@ -27,6 +27,7 @@ const groupMap=new Map([
   ["-100700001",{title:"PENTAGON | MERCHANT_A | REPORTS",type:"supergroup"}],
   ["-100700002",{title:"PENTAGON | MERCHANT_B | REPORTS",type:"supergroup"}],
   ["-100700003",{title:"PENTAGON | MERCHANT_C | REPORTS",type:"supergroup"}],
+  ["-100700004",{title:"PENTAGON | MERCHANT_D | REPORTS",type:"supergroup"}],
   ["-100999999",{title:"Domain Radar Staff Operations",type:"supergroup",is_forum:true}]
 ]);
 const calls=[];
@@ -450,6 +451,40 @@ async function main(){
     assert.ok(!history.data.deliveries.some(d=>String(d).includes("merchant_a")));
     assert.equal((await call(path+"/identity-hint","POST",
       {identity:"@other_user"},"merchant_c")).status,409);
+  });
+  await test("Partial MTProto failure retries securing the same group, never creating another",async()=>{
+    await activation.prepareMerchantTenant("merchant_d","merchant-d@example.test",pool);
+    const operations=[];let failOnce=true;
+    const adapter=async(action,payload)=>{
+      operations.push(action+":"+payload.tenant);
+      if(action==="create")return {chat_id:"-100700004"};
+      if(action==="secure"){
+        if(failOnce){failOnce=false;throw Object.assign(new Error("Temporary error"),{code:"TEMPORARY_FAILURE"});}
+        return {ok:true};
+      }
+      throw Error("unexpected operation");
+    };
+    const first=await autoGroups.runProvisioning(pool,{
+      adapter,tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+    });
+    assert.equal(first.status,"retry");
+    const saved=(await pool.query(
+      "SELECT created_group_chat_id,group_state FROM telegram_merchant_activations WHERE tenant='merchant_d'")).rows[0];
+    assert.equal(saved.created_group_chat_id,"-100700004");
+    assert.equal(saved.group_state,"retry");
+    await pool.query("UPDATE telegram_merchant_activations SET next_provision_at=NOW() WHERE tenant='merchant_d'");
+    const second=await autoGroups.runProvisioning(pool,{
+      adapter,tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+    });
+    assert.equal(second.status,"created");
+    assert.equal(operations.filter(x=>x==="create:merchant_d").length,1);
+    assert.equal(operations.filter(x=>x==="secure:merchant_d").length,2);
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::int n FROM telegram_merchant_groups WHERE tenant='merchant_d'")).rows[0].n,1);
+    const connection=(await pool.query(
+      "SELECT enabled,status FROM telegram_hub_connections WHERE tenant='merchant_d'")).rows[0];
+    assert.equal(connection.enabled,false);
+    assert.equal(connection.status,"disconnected");
   });
   console.log("PENTAGON_PERMANENT_TELEGRAM_E2E_PASS="+passed);
 }
