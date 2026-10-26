@@ -183,7 +183,7 @@ function createMerchantTelegramHubRouter(db = pool) {
   router.get("/status",guard(async(req,res) => {
     const t=tenant(req);
     if (!permittedTenant(t)) return res.status(403).json({error:"INVALID_TENANT"});
-    const [connections,pending,count,ops]=await Promise.all([
+    const [connections,pending,count,ops,hint]=await Promise.all([
       db.query("SELECT tenant,telegram_username,chat_type,chat_id,enabled,status,interval_minutes,"+
         "digest_enabled,immediate_alert,recovery_alert,node_warning,rank_report,"+
         "connected_at,last_report_at,last_delivery_at,last_delivery_status "+
@@ -195,7 +195,8 @@ function createMerchantTelegramHubRouter(db = pool) {
         "FROM rank_keyword_domains k JOIN rank_keyword_groups g ON g.id=k.group_id "+
         "JOIN domains d ON LOWER(TRIM(d.domain))=LOWER(TRIM(k.domain)) AND d.tenant=g.tenant "+
         "WHERE g.tenant=$1 AND g.is_active=TRUE AND k.is_whitelisted=TRUE AND d.is_active=TRUE",[t]),
-      db.query("SELECT status FROM telegram_hub_ops_topics WHERE tenant=$1",[t])
+      db.query("SELECT status FROM telegram_hub_ops_topics WHERE tenant=$1",[t]),
+      db.query("SELECT value FROM app_settings WHERE key=$1 LIMIT 1",["merchant_telegram_username_hint_"+t])
     ]);
     const c=connections.rows[0] || null;
     if (opsChatId && !ops.rows[0]) {
@@ -210,6 +211,7 @@ function createMerchantTelegramHubRouter(db = pool) {
       last_delivery_at:c?.last_delivery_at||null,
       last_delivery_status:c?.last_delivery_status||"not_tested",
       whitelist_count:count.rows[0]?.total||0,
+      identity_hint:hint.rows[0]?.value||"",
       ops_topic_status:ops.rows[0]?.status || (opsChatId ? "provisioning" : "not_configured"),
       pending:pending.rows[0]||null,
       preferences:{
@@ -221,6 +223,14 @@ function createMerchantTelegramHubRouter(db = pool) {
         interval_minutes:c?.interval_minutes||60
       }
     });
+  }));
+  router.patch("/identity-hint",guard(async(req,res)=>{
+    const username=safeUsername(req.body?.username);
+    if(!username)return res.status(400).json({error:"INVALID_TELEGRAM_USERNAME"});
+    await db.query("INSERT INTO app_settings(key,value,updated_at) VALUES($1,$2,NOW()) "+
+      "ON CONFLICT(key) DO UPDATE SET value=EXCLUDED.value,updated_at=NOW()",
+      ["merchant_telegram_username_hint_"+tenant(req),username]);
+    return res.json({ok:true,identity_hint:username,verified:false});
   }));
   router.post("/activate",guard(async(req,res)=>{
     const t=tenant(req),email=owner(req);
