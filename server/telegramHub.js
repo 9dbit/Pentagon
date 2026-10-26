@@ -133,8 +133,13 @@ async function getOpsForum() {
   if (!numericChatId(configured)) return "";
   try {
     const chat = await tg("getChat", { chat_id: configured });
-    return chat?.type === "supergroup" && chat?.is_forum === true ? String(configured) : "";
-  } catch (_) { return ""; }
+    const ready=chat?.type === "supergroup" && chat?.is_forum === true;
+    console.log("[Telegram Hub] ops getChat result:", ready?"forum_ready":"not_forum", "type="+String(chat?.type||"unknown").slice(0,20), "is_forum="+String(chat?.is_forum===true));
+    return ready ? String(configured) : "";
+  } catch (e) {
+    console.warn("[Telegram Hub] ops getChat unavailable:",String(e.code||"UNKNOWN").slice(0,35));
+    return "";
+  }
 }
 async function ensureOpsTopic(tenant, db = pool) {
   if (!opsChatId || !permittedTenant(tenant)) return "not_configured";
@@ -459,6 +464,7 @@ async function startTelegramHub() {
   try{
     await ensureTables();
     await botName();
+    console.log("[Telegram Hub] bot identity:",botUsername);
     const url=String(process.env.TELEGRAM_HUB_WEBHOOK_BASE_URL||BASE_URL).replace(/\/+$/,"")+HUB_PATH;
     if(!/^https:\/\/[A-Za-z0-9.-]+\/api\/telegram\/hub\/webhook$/.test(url))
       throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{code:"WEBHOOK_URL_INVALID"});
