@@ -8,6 +8,7 @@ import {
 import "./MerchantAdminPage.css";
 import MerchantNodeCardV2 from "./MerchantNodeCardV2";
 import MerchantTelegramHub from "./MerchantTelegramHub";
+import MerchantTelegramGroupSettings from "./MerchantTelegramGroupSettings";
 
 const dateWib = value => value && Number.isFinite(new Date(value).getTime())
   ? new Date(value).toLocaleString("id-ID", { timeZone: "Asia/Jakarta",
@@ -37,6 +38,7 @@ const NAV = [
   { key: "direct", text: "Direct Checker", icon: Activity },
   { key: "alerts", text: "Notifikasi", icon: Bell },
   { key: "telegram", text: "Telegram Reports", icon: Bell },
+  { key: "telegram-settings", text: "Telegram Settings", icon: Settings2 },
   { key: "settings", text: "Merchant Settings", icon: Settings2 }
 ];
 const statusText = value => ({
@@ -315,7 +317,12 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
             {!data.alerts.length && <div className="maEmpty">Belum ada alert tercatat. Ini bukan konfirmasi semua domain sehat.</div>}</div>
         </section>}
 
-        {page === "telegram" && <section className="maPanel maTelegramHubPanel"><MerchantTelegramHub/></section>}
+        {page === "telegram" && <section className="maPanel maTelegramHubPanel">
+          <MerchantTelegramHub onOpenGroupSettings={()=>setPage("telegram-settings")}/>
+        </section>}
+        {page === "telegram-settings" && <section className="maPanel maTelegramHubPanel">
+          <MerchantTelegramGroupSettings onBackToReports={()=>setPage("telegram")}/>
+        </section>}
         {page === "settings" && <section className="maPanel"><h2>Profil Merchant</h2><p>Hak akses yang berlaku untuk akun saat ini.</p>
           <div className="maAccountDetails"><div><small>Merchant</small><strong>{data.profile.tenant || "—"}</strong></div>
             <div><small>Role</small><strong>Merchant Administrator</strong></div>
@@ -324,6 +331,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           <div className="maTelegramShortcut">
             <span>Telegram Reports kini memakai koneksi terverifikasi dan hanya memuat domain merchant Anda.</span>
             <button className="maPrimary" type="button" onClick={()=>setPage("telegram")}><Bell size={15}/> Open Telegram Reports</button>
+            <button className="maPill" type="button" onClick={()=>setPage("telegram-settings")}><Settings2 size={15}/> Telegram Group Settings</button>
           </div>
           <div className="maInfo"><LockKeyhole size={18}/><span>Pengaturan Super Admin, node fisik, Telegram global, serta data merchant lain tetap dilindungi.</span></div>
         </section>}
