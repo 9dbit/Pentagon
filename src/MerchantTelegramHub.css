@@ -64,3 +64,21 @@
  .maTgHeader h2{font-size:22px}
  .maTgOptions .maTgOption{gap:12px}
 }
+/* Report settings stay accessible while the permanent group is pending. */
+.maTgSettingsSection{gap:14px}
+.maTgSettingsHeading{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex-wrap:wrap}
+.maTgSettingsHeading>div{flex:1 1 280px;min-width:0}
+.maTgSettingsHeading h3{margin:0 0 8px}
+.maTgSettingsHeading p{font-size:12px;line-height:1.6;color:#9da7b4;margin:0}
+.maTgSettingsState{display:inline-flex;align-items:center;white-space:nowrap;border-radius:100px;padding:8px 12px;background:#252b33;color:#b5c0cb;font-size:11px;font-weight:700}
+.maTgSettingsNotice{margin:0;color:#d0a879;font-size:12px;line-height:1.55;max-width:740px}
+.maTgSettingsFooter{margin:0;font-size:11px;line-height:1.55;color:#8795a4}
+.maTgSettingsSection .maTgOptions{max-width:100%}
+.maTgSettingsSection .maTgInterval{max-width:100%;flex-wrap:wrap}
+@media(max-width:640px){
+ .maTgSettingsHeading{gap:10px}
+ .maTgSettingsState{white-space:normal}
+ .maTgSettingsSection .maTgOption{align-items:center}
+ .maTgSettingsSection .maTgInterval{align-items:flex-start}
+ .maTgSettingsSection .maTgInterval select{margin-left:auto}
+}
