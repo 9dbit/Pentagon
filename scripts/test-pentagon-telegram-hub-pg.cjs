@@ -183,12 +183,27 @@ async function main(){
     assert.equal((await call(adminRoute+"/setup","POST",{tenant:"demo"},"admin")).status,400);
   });
   let codeA="",codeB="";
-  await test("One-time admin token binds only a verified private group",async()=>{
-    const setup=await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"admin");
+  await test("Merchant Telegram setup is available only for the authenticated tenant",async()=>{
+    const own="/api/merchant/telegram-groups/setup";
+    assert.equal((await call(own,"POST",{},"anon")).status,403);
+    assert.equal((await call(own,"POST",{},"admin")).status,403);
+    assert.equal((await call(own,"POST",{tenant:"merchant_b"},"merchant_a")).data.error,
+      "CROSS_TENANT_SETUP_DENIED");
+    const setup=await call(own,"POST",{},"merchant_a");
     assert.equal(setup.status,201);
+    assert.equal(setup.data.tenant,"merchant_a");
     assert.equal(setup.data.title,permanent.expectedTitle("merchant_a"));
+    assert.equal(setup.data.expires_in_seconds,600);
     codeA=setup.data.command;
     assert.ok(/^\/bindreport merchant_a [A-Za-z0-9_-]+$/.test(codeA));
+    const rows=(await pool.query(
+      "SELECT tenant,requester_email FROM telegram_merchant_group_setup WHERE tenant='merchant_a'")).rows;
+    assert.equal(rows.length,1);
+    assert.equal(rows[0].requester_email,"merchant-a@example.test");
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::int n FROM telegram_merchant_groups")).rows[0].n,0);
+  });
+  await test("One-time merchant token binds only the verified private group",async()=>{
     const wrong=await sendBind(codeA,"-100700002",1);
     assert.equal(wrong.status,200);
     assert.equal((await pool.query("SELECT COUNT(*)::int n FROM telegram_merchant_groups")).rows[0].n,0);
@@ -200,6 +215,9 @@ async function main(){
     const row=(await pool.query("SELECT tenant,chat_title,chat_id FROM telegram_merchant_groups")).rows[0];
     assert.equal(row.tenant,"merchant_a");assert.equal(row.chat_id,"-100700001");
     assert.equal(row.chat_title,permanent.expectedTitle("merchant_a"));
+    assert.equal((await call("/api/merchant/telegram-groups/setup","POST",{},"merchant_a")).status,409);
+    assert.equal((await call("/api/merchant/telegram-groups/setup","POST",
+      {tenant:"merchant_a"},"merchant_b")).status,403);
     const c=(await pool.query(
       "SELECT enabled,status,chat_id,interval_minutes,immediate_alert,recovery_alert,node_warning,rank_report,next_report_at "+
       "FROM telegram_hub_connections WHERE tenant='merchant_a'")).rows[0];
