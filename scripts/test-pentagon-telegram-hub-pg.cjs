@@ -79,20 +79,38 @@ async function main(){
   process.env.DATABASE_URL=parsed.toString();
   const {pool:db}=require("../server/db");pool=db;
   await pool.query("CREATE TABLE app_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TIMESTAMP DEFAULT NOW())");
-  await pool.query("CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE NOT NULL,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMP)");
-  await pool.query("CREATE TABLE rank_keyword_groups(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE)");
-  await pool.query("CREATE TABLE rank_keyword_domains(id SERIAL PRIMARY KEY,group_id INT NOT NULL,domain TEXT NOT NULL,is_whitelisted BOOLEAN DEFAULT FALSE)");
-  await pool.query("INSERT INTO domains(domain,tenant,global_status,last_checked_at) VALUES "+
-    "('merchant-a.example.test','merchant_a','working',NOW()),"+
-    "('merchant-b.example.test','merchant_b','warning',NOW())");
-  await pool.query("INSERT INTO rank_keyword_groups(tenant) VALUES('merchant_a'),('merchant_b')");
-  await pool.query("INSERT INTO rank_keyword_domains(group_id,domain,is_whitelisted) VALUES "+
-    "(1,'merchant-a.example.test',TRUE),(2,'merchant-b.example.test',TRUE)");
+  await pool.query("CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE NOT NULL,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMP,project_name TEXT DEFAULT '',label TEXT DEFAULT '')");
+  await pool.query("CREATE TABLE alerts(id SERIAL PRIMARY KEY,domain_id INT,old_status TEXT,new_status TEXT,message TEXT,sent_to_telegram BOOLEAN DEFAULT FALSE)");
+  await pool.query("CREATE TABLE rank_keyword_groups(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,keyword TEXT NOT NULL DEFAULT '',project_name TEXT DEFAULT '')");
+  await pool.query("CREATE TABLE rank_keyword_domains(id SERIAL PRIMARY KEY,group_id INT NOT NULL,domain TEXT NOT NULL,is_whitelisted BOOLEAN DEFAULT FALSE,last_position INTEGER,last_page INTEGER,last_status TEXT DEFAULT 'pending',last_checked_at TIMESTAMP)");
+  await pool.query("CREATE TABLE rank_scan_results(id SERIAL PRIMARY KEY,group_id INT NOT NULL,keyword TEXT,position INTEGER,page INTEGER,host TEXT,classification TEXT,checked_at TIMESTAMP DEFAULT NOW(),node_id INTEGER)");
+  await pool.query("CREATE TABLE provider_nodes(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL DEFAULT 'admin',provider_name TEXT,last_health_status TEXT,last_ping_at TIMESTAMP,is_active BOOLEAN DEFAULT TRUE)");
+  await pool.query("CREATE TABLE check_results(id SERIAL PRIMARY KEY,domain_id INTEGER,checker_type TEXT,provider_name TEXT,status TEXT,checked_at TIMESTAMP DEFAULT NOW())");
+  await pool.query("INSERT INTO domains(domain,tenant,global_status,last_checked_at,project_name,label) VALUES "+
+    "('merchant-a.example.test','merchant_a','working',NOW(),'Merchant A','landing_page'),"+
+    "('merchant-b.example.test','merchant_b','warning',NOW(),'Merchant B','ms')");
+  await pool.query("INSERT INTO rank_keyword_groups(tenant,keyword,project_name) VALUES "+
+    "('merchant_a','Merchant A Official','Merchant A'),('merchant_b','Merchant B Secret','Merchant B')");
+  await pool.query("INSERT INTO rank_keyword_domains(group_id,domain,is_whitelisted,last_position,last_page,last_status,last_checked_at) VALUES "+
+    "(1,'merchant-a.example.test',TRUE,3,1,'found',NOW()),"+
+    "(2,'merchant-b.example.test',TRUE,8,1,'found',NOW())");
+  await pool.query("INSERT INTO provider_nodes(tenant,provider_name,last_health_status,last_ping_at) VALUES "+
+    "('admin','Telkomsel','online',NOW()),('admin','XL','online',NOW()),"+
+    "('admin','Indosat','online',NOW())");
+  await pool.query("INSERT INTO check_results(domain_id,checker_type,provider_name,status) VALUES "+
+    "(1,'node','Telkomsel','working'),(2,'node','XL','warning')");
+  await pool.query("INSERT INTO rank_scan_results(group_id,keyword,position,page,host,classification,checked_at,node_id) VALUES "+
+    "(1,'Merchant A Official',5,1,'merchant-a.example.test','whitelisted',NOW()-INTERVAL '1 day',NULL),"+
+    "(1,'Merchant A Official',3,1,'merchant-a.example.test','whitelisted',NOW()-INTERVAL '2 minutes',NULL),"+
+    "(1,'Merchant A Official',4,1,'merchant-a.example.test','whitelisted',NOW()-INTERVAL '2 minutes',1),"+
+    "(1,'Merchant A Official',3,1,'merchant-a.example.test','whitelisted',NOW()-INTERVAL '2 minutes',2),"+
+    "(2,'Merchant B Secret',8,1,'merchant-b.example.test','whitelisted',NOW()-INTERVAL '2 minutes',NULL)");
   const hub=require("../server/telegramHub");
   const permanent=require("../server/telegramPermanentGroups");
   const reports=require("../server/telegramHubReports");
-  const {deliverTelegram}=require("../server/trustpositifAlertOutbox");
+  const {deliverTelegram,ensureOutboxTables}=require("../server/trustpositifAlertOutbox");
   await hub.ensureTables();
+  await ensureOutboxTables();
   await permanent.ensurePermanentGroupTables();
   const app=express();app.use(express.json());
   app.use((req,_res,next)=>{
@@ -214,19 +232,35 @@ async function main(){
     assert.ok(sent.at(-1).body.expire_date>Math.floor(Date.now()/1000));
     assert.equal((await call(invite,"POST",{},"merchant_b")).status,409);
   });
-  await test("Tenant A digest and Telegram test never send to B or shared ops",async()=>{
+  await test("Independent merchant TrustPositif and Google Rank reports stay isolated",async()=>{
     const queued=await call(route+"/report/send-now","POST",{});
     assert.equal(queued.status,202);
-    const {rows}=await pool.query("SELECT tenant,chat_id,message FROM telegram_hub_report_outbox");
-    assert.equal(rows.length,1);assert.equal(rows[0].tenant,"merchant_a");
-    assert.equal(rows[0].chat_id,"-100700001");
+    assert.equal(queued.data.pages,2);
+    const {rows}=await pool.query(
+      "SELECT tenant,chat_id,kind,message FROM telegram_hub_report_outbox ORDER BY id");
+    assert.equal(rows.length,2);
+    assert.deepEqual(rows.map(r=>r.kind),["trustpositif_summary","google_rank"]);
+    assert.ok(rows.every(r=>r.tenant==="merchant_a"&&r.chat_id==="-100700001"));
+    assert.ok(rows.every(r=>!r.message.includes("merchant-b.example.test")));
+    assert.ok(rows.every(r=>!r.message.includes("Merchant B Secret")));
+    assert.match(rows[0].message,/TRUST POSITIF REPORT/);
     assert.match(rows[0].message,/merchant-a\.example\.test/);
-    assert.doesNotMatch(rows[0].message,/merchant-b\.example\.test/);
-    const result=await reports.drainReportOutbox(pool);
-    assert.equal(result.claimed,1);
-    const sent=calls.find(c=>c.method==="sendMessage" &&
-      c.body.text?.includes("merchant-a.example.test"));
-    assert.equal(String(sent?.body?.chat_id),"-100700001");
+    assert.match(rows[0].message,/CHECKER COVERAGE/);
+    assert.match(rows[1].message,/GOOGLE RANK REPORT/);
+    assert.match(rows[1].message,/Merchant A Official/);
+    assert.match(rows[1].message,/#3/);
+    assert.match(rows[1].message,/↑2/);
+    assert.match(rows[1].message,/TSEL: #4/);
+    assert.ok(rows.every(r=>r.message.length<4096));
+    const again=await call(route+"/report/send-now","POST",{});
+    assert.equal(again.status,409,"manual duplicate within one minute rejected");
+    const result=await reports.drainReportOutbox(pool,4);
+    assert.equal(result.claimed,2);
+    const sent=calls.filter(c=>c.method==="sendMessage" &&
+      /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(c.body.text||""));
+    assert.equal(sent.length,2);
+    assert.ok(sent.every(c=>String(c.body.chat_id)==="-100700001"));
+    assert.ok(sent.every(c=>c.body.reply_markup?.inline_keyboard?.[0]?.[0]?.url==="https://pentagon.quest"));
     const testResult=await call(route+"/test","POST",{});
     assert.equal(testResult.status,200);
     assert.equal(String(calls.at(-1).body.chat_id),"-100700001");
@@ -247,6 +281,23 @@ async function main(){
       permanent.expectedTitle("merchant_b"));
     assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"admin")).status,409);
   });
+  await test("Rank-only delivery respects toggles and isolated merchant destination",async()=>{
+    assert.equal((await call(route+"/preferences","PATCH",
+      {digest_enabled:false,rank_report:true},"merchant_b")).status,200);
+    const queued=await call(route+"/report/send-now","POST",{},"merchant_b");
+    assert.equal(queued.status,202);
+    assert.equal(queued.data.pages,1);
+    const data=(await pool.query("SELECT tenant,chat_id,kind,message FROM telegram_hub_report_outbox "+
+      "WHERE tenant='merchant_b'")).rows;
+    assert.equal(data.length,1);
+    assert.equal(data[0].kind,"google_rank");
+    assert.equal(data[0].chat_id,"-100700002");
+    assert.match(data[0].message,/Merchant B Secret/);
+    assert.doesNotMatch(data[0].message,/Merchant A Official/);
+    assert.doesNotMatch(data[0].message,/merchant-a\.example\.test/);
+    assert.equal((await reports.drainReportOutbox(pool,4)).claimed,1);
+  });
+
   await test("Merchant preferences retain pause and resume without reassigning group",async()=>{
     assert.equal((await call(route+"/pause","POST",{})).status,200);
     assert.equal((await call(route+"/test","POST",{})).status,409);
