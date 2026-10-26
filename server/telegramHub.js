@@ -109,9 +109,10 @@ async function ensureTables(db = pool) {
       "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
       "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
     ].join(" "));
+    await db.query("CREATE TABLE IF NOT EXISTS telegram_hub_webhook_updates (update_id BIGINT PRIMARY KEY, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_links_tenant ON telegram_hub_links(tenant,requester_email,created_at DESC)");
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_report_due ON telegram_hub_report_outbox(status,next_attempt_at)");
-    for (const table of ["telegram_hub_links","telegram_hub_connections","telegram_hub_ops_topics","telegram_hub_report_outbox"]) {
+    for (const table of ["telegram_hub_links","telegram_hub_connections","telegram_hub_ops_topics","telegram_hub_report_outbox","telegram_hub_webhook_updates"]) {
       await db.query("ALTER TABLE " + table + " ENABLE ROW LEVEL SECURITY");
       await db.query("REVOKE ALL ON TABLE " + table + " FROM PUBLIC, anon, authenticated");
     }
@@ -451,10 +452,6 @@ async function startTelegramHub() {
   initialized=true;
   try{
     await ensureTables();
-    // Webhook updates table is private and de-duplicates Telegram retries.
-    await pool.query("CREATE TABLE IF NOT EXISTS telegram_hub_webhook_updates (update_id BIGINT PRIMARY KEY, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
-    await pool.query("ALTER TABLE telegram_hub_webhook_updates ENABLE ROW LEVEL SECURITY");
-    await pool.query("REVOKE ALL ON TABLE telegram_hub_webhook_updates FROM PUBLIC, anon, authenticated");
     await botName();
     const url=String(process.env.TELEGRAM_HUB_WEBHOOK_BASE_URL||BASE_URL).replace(/\/+$/,"")+HUB_PATH;
     if(!/^https:\/\/[A-Za-z0-9.-]+\/api\/telegram\/hub\/webhook$/.test(url))
@@ -477,6 +474,8 @@ async function startTelegramHub() {
   }catch(e){
     initialized=false;
     console.warn("[Telegram Hub] initialization pending",String(e.code||"UNAVAILABLE").slice(0,40));
+    const retry=setTimeout(()=>startTelegramHub().catch(()=>{}),60000);
+    retry.unref?.();
   }
 }
 module.exports={
