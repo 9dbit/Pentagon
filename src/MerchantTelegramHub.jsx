@@ -23,8 +23,8 @@ const options=[
   ["immediate_alert","Blocked alert","Only after independent provider and registry confirmation"],
   ["recovery_alert","Registry delisted","Official delisting, not a blanket guarantee of connectivity"],
   ["digest_enabled","Whitelist report","Only active domains belonging to this merchant"],
-  ["node_warning","Node coverage alert","When independent provider coverage degrades"],
-  ["rank_report","Google Rank report","Optional keyword ranking report"]
+  ["node_warning","Node coverage alert","Preference saved; dedicated delivery integration is pending"],
+  ["rank_report","Google Rank report","Preference saved; dedicated delivery integration is pending"]
 ];
 
 export default function MerchantTelegramHub(){
@@ -65,7 +65,7 @@ export default function MerchantTelegramHub(){
   const paused=ready&&state?.status==="paused";
   const title=state?.permanent_group_title||("PENTAGON | "+String(state?.tenant||"MERCHANT").toUpperCase()+" | REPORTS");
   const prefs=state?.preferences||{};
-  const updatePref=(key,value)=>action("/preferences","PATCH",{[key]:value},"Preference updated.");
+  const updatePref=(key,value)=>action("/preferences","PATCH",{[key]:value},"Report setting saved for this merchant.");
   return <div className="maTgHub">
     <div className="maTgHeader">
       <div>
@@ -84,6 +84,34 @@ export default function MerchantTelegramHub(){
       <div><span>Report destination</span><strong>{ready?title:"Awaiting dedicated group"}</strong></div>
       <div><span>Last report</span><strong>{dateWib(state?.last_report_at)}</strong></div>
       <div><span>Delivery</span><strong>{state?.last_delivery_status||"Not tested"}</strong></div>
+    </div>
+    <div className="maTgSection maTgSettingsSection" aria-label="Telegram report settings">
+      <div className="maTgSettingsHeading">
+        <div>
+          <h3><Bell size={18}/> Report Settings</h3>
+          <p>Configure report types and delivery frequency for {String(state?.tenant||"your merchant").toUpperCase()}.</p>
+        </div>
+        <span className="maTgSettingsState">{state?.preferences_saved?"Preferences saved":"Default preferences"}</span>
+      </div>
+      {!ready&&<p className="maTgSettingsNotice">
+        Settings can be saved now. Delivery remains disabled until Super Admin verifies your permanent report group.
+      </p>}
+      <div className="maTgOptions">{options.map(([key,name,description])=>
+        <label key={key} className="maTgOption">
+          <span><strong>{name}</strong><small>{description}</small></span>
+          <input type="checkbox" disabled={working||!state}
+            checked={Boolean(prefs[key])} onChange={e=>updatePref(key,e.target.checked)}/>
+        </label>)}
+      </div>
+      <label className="maTgInterval">Digest frequency
+        <select disabled={working||!state} value={prefs.interval_minutes||60}
+          onChange={e=>updatePref("interval_minutes",Number(e.target.value))}>
+          {[10,30,60,180,1440].map(n=><option value={n} key={n}>
+            {n<60?n+" minutes":n===1440?"Daily":n/60+" hour"+(n>60?"s":"")}
+          </option>)}
+        </select>
+      </label>
+      <p className="maTgSettingsFooter">Changes are saved to this merchant account only. No Telegram message is sent while group setup is pending.</p>
     </div>
     {!ready?<div className="maTgSection">
       <h3><Users size={18}/> Preparing your permanent report group</h3>
@@ -134,24 +162,6 @@ export default function MerchantTelegramHub(){
           <Bell size={16}/> Send report now
         </button>
       </div>
-    </div>}
-    {ready&&<div className="maTgSection">
-      <h3>Report preferences</h3>
-      <div className="maTgOptions">{options.map(([key,name,description])=>
-        <label key={key} className="maTgOption">
-          <span><strong>{name}</strong><small>{description}</small></span>
-          <input type="checkbox" disabled={working||!connected}
-            checked={Boolean(prefs[key])} onChange={e=>updatePref(key,e.target.checked)}/>
-        </label>)}
-      </div>
-      <label className="maTgInterval">Digest frequency
-        <select disabled={working||!connected} value={prefs.interval_minutes||60}
-          onChange={e=>updatePref("interval_minutes",Number(e.target.value))}>
-          {[10,30,60,180,1440].map(n=><option value={n} key={n}>
-            {n<60?n+" minutes":n===1440?"Daily":n/60+" hour"+(n>60?"s":"")}
-          </option>)}
-        </select>
-      </label>
     </div>}
     <div className="maTgPrivacy"><LockKeyhole size={16}/>
       Each report destination is registered once by Super Admin, verified with Telegram and unique per merchant.
