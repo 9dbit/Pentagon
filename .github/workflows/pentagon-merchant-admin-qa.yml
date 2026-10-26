@@ -10,6 +10,9 @@ on:
       - "server/telegramMerchantRankScanner.js"
       - "server/rankRoutes.js"
       - "server/telegramPermanentGroups.js"
+      - "server/telegramMerchantActivation.js"
+      - "server/telegramMerchantAutoProvisioner.js"
+      - "telegram_mt_bridge/**"
       - "server/trustpositifAlertOutbox.js"
       - "src/TelegramPermanentGroupsAdmin.*"
       - "server/railway-entry.js"
@@ -84,6 +87,9 @@ jobs:
           node --check server/merchantNodeTelemetry.js
           node --check server/trustpositifAlertOutbox.js
           node --check server/telegramPermanentGroups.js
+          node --check server/telegramMerchantActivation.js
+          node --check server/telegramMerchantAutoProvisioner.js
+          python -m py_compile telegram_mt_bridge/app.py
           node --check server/telegramHub.js
           node --check server/telegramHubReports.js
           node --check server/telegramMerchantReportFormats.js
