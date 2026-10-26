@@ -8,7 +8,7 @@ on:
       - "server/telegramHub*.js"
       - "server/railway-entry.js"
       - "src/MerchantTelegramHub.*"
-      - "scripts/test-pentagon-telegram-hub.cjs"
+      - "scripts/test-pentagon-telegram-hub*.cjs"
       - "server/trustpositifAlertOutbox.js"
       - "android-node-app/**"
       - "server/merchantDirectChecker.js"
@@ -98,6 +98,7 @@ jobs:
         run: |
           node scripts/test-pentagon-customer-viewer-pg.cjs
           node scripts/test-pentagon-merchant-admin-pg.cjs
+          node scripts/test-pentagon-telegram-hub-pg.cjs
       - name: Compile merchant dashboard and existing production UI
         run: |
           node scripts/test-pentagon-node-health-ui.cjs
