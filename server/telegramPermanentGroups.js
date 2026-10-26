@@ -65,8 +65,8 @@ function createPermanentGroupAdminRouter(db=pool){
         "UNION SELECT DISTINCT tenant FROM rank_keyword_groups WHERE is_active=TRUE) "+
         "SELECT t.tenant,g.chat_title,g.verified_at FROM tenants t "+
         "LEFT JOIN telegram_merchant_groups g ON g.tenant=t.tenant "+
-        "WHERE t.tenant ~ '^[a-z][a-z0-9_-]{0,63});
-      res.json({groups:rows});
+        "ORDER BY t.tenant LIMIT 500");
+      res.json({groups:rows.filter(row=>isProductionTenant(row.tenant))});
     }catch(e){res.status(503).json({error:"REPORT_GROUP_DIRECTORY_UNAVAILABLE"});}
   });
   router.post("/setup",async(req,res)=>{
