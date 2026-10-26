@@ -7,6 +7,8 @@ on:
       - "server/merchantOperationsRoutes.js"
       - "server/telegramHub*.js"
       - "server/telegramMerchantReport*.js"
+      - "server/telegramMerchantRankScanner.js"
+      - "server/rankRoutes.js"
       - "server/telegramPermanentGroups.js"
       - "server/trustpositifAlertOutbox.js"
       - "src/TelegramPermanentGroupsAdmin.*"
@@ -84,6 +86,8 @@ jobs:
           node --check server/telegramHubReports.js
           node --check server/telegramMerchantReportFormats.js
           node --check server/telegramMerchantReportData.js
+          node --check server/telegramMerchantRankScanner.js
+          node --check server/rankRoutes.js
           node --check scripts/test-pentagon-telegram-report-formats.cjs
           node scripts/test-pentagon-telegram-report-formats.cjs
           node --check server/railway-entry.js
