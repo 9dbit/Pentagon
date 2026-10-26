@@ -27,6 +27,7 @@ axios.post=async (url,body)=>{
   if(method==="getChatMember")return {status:200,data:{ok:true,result:{status:body.user_id===22222?"administrator":"member"}}};
   if(method==="sendMessage")return {status:200,data:{ok:true,result:{message_id:telegramCalls.length}}};
   if(method==="setWebhook")return {status:200,data:{ok:true,result:true}};
+  if(method==="getChat")return {status:200,data:{ok:true,result:{id:body.chat_id,type:"supergroup",title:"Verified Merchant Reports",is_forum:false}}};
   throw Error("unexpected Telegram API "+method);
 };
 let pass=0;
@@ -164,6 +165,12 @@ async function main(){
     const s=await call("/api/merchant/telegram-hub/status","GET",undefined,"merchant-b@example.test");
     assert.equal(s.data.chat_type,"supergroup");
     assert.equal(s.data.connected,true);
+    assert.equal(s.data.chat_title,""); // Synthetic webhook fixture does not include group title.
+    assert.equal((await call("/api/merchant/telegram-hub/activate","POST",{},"merchant-b@example.test")).data.mode,"group");
+    const duplicate=await call("/api/merchant/telegram-hub/activate","POST",{mode:"group"});
+    const dk=new URL(duplicate.data.url).searchParams.get("startgroup").slice(3);
+    assert.equal((await claim(dk,5,{id:-10077777,type:"supergroup",title:"Merchant B Group"},{id:22222,username:"groupAdmin"},tokenSecret)).status,200);
+    assert.equal((await call("/api/merchant/telegram-hub/confirm","POST",{request_id:duplicate.data.request_id})).data.error,"GROUP_ALREADY_LINKED");
   });
   console.log("PENTAGON_TELEGRAM_HUB_POSTGRES_E2E_PASS="+pass);
 }
