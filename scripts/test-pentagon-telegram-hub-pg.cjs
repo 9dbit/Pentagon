@@ -350,7 +350,9 @@ main().catch(e=>{console.error(e.stack||e);process.exitCode=1;}).finally(async()
   if(server)await new Promise(r=>server.close(r));
   if(pool)await pool.end();
   if(admin){
-    try{await admin.query('DROP DATABASE IF EXISTS "'+fixture+'" WITH (FORCE)');}catch(_){}
+    // CI runs an ephemeral PostgreSQL service. Never FORCE drop a test database
+    // while a connection may still be closing: pg-pool emits an unhandled
+    // 57P01 event when the forced termination hits an idle client.
     await admin.end();
   }
 });
