@@ -157,7 +157,7 @@ async function confirmBotIdentity(message,db=pool,{tg,opsChatId}={}){
     const row=rows[0];
     if(!row){
       await tx.query("ROLLBACK");
-      await tg?.("sendMessage",{chat_id:telegramId,text:"Pentagon: activation QR expired. Generate a new QR from your merchant dashboard."}).catch(()=>{});
+      if(tg)await tg("sendMessage",{chat_id:telegramId,text:"Pentagon: activation QR expired. Generate a new QR from your merchant dashboard."}).catch(()=>{});
       return true;
     }
     const realUsername=safeName(message.from?.username).toLowerCase();
@@ -166,7 +166,7 @@ async function confirmBotIdentity(message,db=pool,{tg,opsChatId}={}){
       (row.identity_hint_kind==="username" && row.identity_hint!==realUsername)
     )){
       await tx.query("ROLLBACK");
-      await tg?.("sendMessage",{chat_id:telegramId,text:"Pentagon: Telegram identity does not match the one provided on the merchant dashboard."}).catch(()=>{});
+      if(tg)await tg("sendMessage",{chat_id:telegramId,text:"Pentagon: Telegram identity does not match the one provided on the merchant dashboard."}).catch(()=>{});
       return true;
     }
     if(row.verified_at && row.telegram_user_id!==telegramId){
@@ -192,7 +192,7 @@ async function confirmBotIdentity(message,db=pool,{tg,opsChatId}={}){
     let msg="Pentagon: Telegram identity verified for "+tenant.toUpperCase()+
       ". Your private report group is assigned automatically by Pentagon.";
     if(!bridgeAvailable())msg+=" Group creation is pending service-account configuration.";
-    await tg?.("sendMessage",{chat_id:telegramId,text:msg}).catch(()=>{});
+    if(tg)await tg("sendMessage",{chat_id:telegramId,text:msg}).catch(()=>{});
     // The worker checks the verified Telegram identity when preparing the
     // direct invite. No user can select a group or tenant via a bot command.
   }
