@@ -12,7 +12,8 @@
   \`prepareMerchantTenant(tenant, merchantEmail)\` from
   \`server/telegramMerchantActivation.js\` after the transaction commits.
 - As of October 27, 2026, Pentagon does **not** expose a public merchant signup
-  endpoint. The code seeds jobs on first verified merchant login and when
+  endpoint. The code seeds jobs from configured verified merchant grants on
+  server startup, on first merchant login, and when
   \`/api/merchant/telegram-onboarding/status\` is visited. Integrate the exported
   hook when a merchant registration service is added.
 - UI: Merchant Admin → Telegram Settings → **Activate Telegram Report**.
