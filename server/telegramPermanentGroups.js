@@ -151,7 +151,7 @@ async function handlePermanentGroupBind(msg,db=pool,{tg,opsChatId}={}){
         "VALUES($1,$2,$3,'',$4,$5,TRUE,'connected',NOW(),NOW()+INTERVAL '60 minutes') "+
         "ON CONFLICT(tenant) DO UPDATE SET chat_id=EXCLUDED.chat_id,telegram_user_id=EXCLUDED.telegram_user_id,"+
         "chat_type=EXCLUDED.chat_type,chat_title=EXCLUDED.chat_title,enabled=TRUE,status='connected',"+
-        "connected_at=NOW(),next_report_at=NOW()+INTERVAL '60 minutes',updated_at=NOW()",
+        "connected_at=NOW(),next_report_at=NOW()+(telegram_hub_connections.interval_minutes*INTERVAL '1 minute'),updated_at=NOW()",
         [tenant,chatId,String(msg.from.id),chat.type,expectedTitle(tenant)]);
       await tx.query("UPDATE telegram_merchant_group_setup SET used_at=NOW() WHERE tenant=$1 AND token_hash=$2",
         [tenant,hash(secret)]);
