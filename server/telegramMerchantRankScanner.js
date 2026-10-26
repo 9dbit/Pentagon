@@ -21,6 +21,8 @@ async function runMerchantRankScans(db=pool,options={}) {
   if(running)return {status:"already_running",scanned:0};
   if(String(process.env.MERCHANT_RANK_AUTO_SCAN_ENABLED||"true").toLowerCase()==="false")
     return {status:"disabled",scanned:0};
+  if(String(process.env.SCHEDULER_ENABLED||"false").toLowerCase()==="true")
+    return {status:"legacy_scheduler_active",scanned:0};
   if(!options.checkGroup&&!available())return {status:"search_provider_missing",scanned:0};
   running=true;
   let client=null,locked=false;
