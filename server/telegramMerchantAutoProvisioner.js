@@ -3,7 +3,8 @@
 // Telegram USER service account via MTProto, never by the Bot API.
 // The bridge is disabled until dedicated account credentials are provided.
 const {pool}=require("./db");
-const {ensureTables:activationTables,bridgeAvailable}=require("./telegramMerchantActivation");
+const {ensureTables:activationTables,bridgeAvailable,prepareMerchantTenant}=require("./telegramMerchantActivation");
+const {readCustomerViewers}=require("./customerViewerAuth");
 const {ensurePermanentGroupTables,expectedTitle,groupForTenant}=require("./telegramPermanentGroups");
 const {isProductionTenant}=require("./customerWhitelistSync");
 const LOCK_ID=80826344;
@@ -191,6 +192,19 @@ async function runProvisioning(db=pool,{tg,opsChatId,adapter=bridge}={}){
 }
 function startProvisioning({tg,opsChatId}={}){
   if(timer)return;
+  // Existing Pentagon accounts are assigned to tenants through an explicit
+  // authenticated allowlist, not a public signup table. Seed the durable
+  // queue from verified merchant grants at startup as well as first login.
+  // Future signup code must call prepareMerchantTenant after creating a grant.
+  const seed=async()=>{
+    for(const grant of readCustomerViewers()){
+      if(grant.role!=="merchant_admin"||!isProductionTenant(grant.tenant))continue;
+      await prepareMerchantTenant(grant.tenant,grant.email).catch(e=>{
+        console.warn("[Telegram auto groups] tenant seed unavailable",safeCode(e));
+      });
+    }
+  };
+  seed().catch(e=>console.warn("[Telegram auto groups] seed unavailable",safeCode(e)));
   const run=()=>runProvisioning(pool,{tg,opsChatId}).catch(e=>{
     console.warn("[Telegram auto groups] worker unavailable",safeCode(e));
   });
