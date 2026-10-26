@@ -555,6 +555,13 @@ async function startTelegramHub() {
       const run=()=>tickTelegramHub().catch(e=>console.warn("[Telegram Hub] report tick unavailable",String(e.code||"DB_UNAVAILABLE").slice(0,30)));
       const first=setTimeout(run,15000);first.unref?.();
       const timer=setInterval(run,60000);timer.unref?.();
+      // Independent bounded merchant VPS rank scanner. The full legacy
+      // scheduler remains off; scans run only for tenant-verified report groups.
+      const {runMerchantRankScans}=require("./telegramMerchantRankScanner");
+      const runRanks=()=>runMerchantRankScans().catch(e=>
+        console.warn("[Merchant Rank Auto] unavailable",String(e.code||"SCAN_UNAVAILABLE").slice(0,36)));
+      const firstRanks=setTimeout(runRanks,45000);firstRanks.unref?.();
+      const rankTimer=setInterval(runRanks,300000);rankTimer.unref?.();
     }
   }catch(e){
     initialized=false;
