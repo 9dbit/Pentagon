@@ -81,7 +81,7 @@ async function main(){
   await pool.query("CREATE TABLE app_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TIMESTAMP DEFAULT NOW())");
   await pool.query("CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE NOT NULL,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMP,project_name TEXT DEFAULT '',label TEXT DEFAULT '')");
   await pool.query("CREATE TABLE alerts(id SERIAL PRIMARY KEY,domain_id INT,old_status TEXT,new_status TEXT,message TEXT,sent_to_telegram BOOLEAN DEFAULT FALSE)");
-  await pool.query("CREATE TABLE rank_keyword_groups(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,keyword TEXT NOT NULL DEFAULT '',project_name TEXT DEFAULT '')");
+  await pool.query("CREATE TABLE rank_keyword_groups(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,keyword TEXT NOT NULL DEFAULT '',project_name TEXT DEFAULT '',last_checked_at TIMESTAMP)");
   await pool.query("CREATE TABLE rank_keyword_domains(id SERIAL PRIMARY KEY,group_id INT NOT NULL,domain TEXT NOT NULL,is_whitelisted BOOLEAN DEFAULT FALSE,last_position INTEGER,last_page INTEGER,last_status TEXT DEFAULT 'pending',last_checked_at TIMESTAMP)");
   await pool.query("CREATE TABLE rank_scan_results(id SERIAL PRIMARY KEY,group_id INT NOT NULL,keyword TEXT,position INTEGER,page INTEGER,host TEXT,classification TEXT,checked_at TIMESTAMP DEFAULT NOW(),node_id INTEGER)");
   await pool.query("CREATE TABLE provider_nodes(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL DEFAULT 'admin',provider_name TEXT,last_health_status TEXT,last_ping_at TIMESTAMP,is_active BOOLEAN DEFAULT TRUE)");
@@ -233,6 +233,22 @@ async function main(){
     assert.ok(sent.at(-1).body.expire_date>Math.floor(Date.now()/1000));
     assert.equal((await call(invite,"POST",{},"merchant_b")).status,409);
   });
+  await test("Rank auto-scanner checks only verified merchant group using bounded VPS pages",async()=>{
+    const {runMerchantRankScans}=require("../server/telegramMerchantRankScanner");
+    const scanned=[];
+    const result=await runMerchantRankScans(pool,{checkGroup:async(group,nodeId,nodeName,opts)=>{
+      scanned.push({tenant:group.tenant,group:group.id,nodeId,pages:opts.maxPages});
+      await pool.query("UPDATE rank_keyword_groups SET last_checked_at=NOW() WHERE id=$1",[group.id]);
+    }});
+    assert.equal(result.status,"complete");
+    assert.equal(result.scanned,1);
+    assert.deepEqual(scanned.map(x=>x.tenant),["merchant_a"]);
+    assert.equal(scanned[0].nodeId,null);
+    assert.equal(scanned[0].pages,2);
+    assert.equal((await pool.query("SELECT last_checked_at FROM rank_keyword_groups WHERE id=2")).rows[0].last_checked_at,null);
+    const again=await runMerchantRankScans(pool,{checkGroup:async()=>{throw Error("must not rescan");}});
+    assert.equal(again.scanned,0);
+  });
   await test("Independent merchant TrustPositif and Google Rank reports stay isolated",async()=>{
     const queued=await call(route+"/report/send-now","POST",{});
     assert.equal(queued.status,202);
@@ -281,6 +297,16 @@ async function main(){
     assert.equal((await call(invite,"POST",{},"merchant_b")).data.group_title,
       permanent.expectedTitle("merchant_b"));
     assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"admin")).status,409);
+  });
+  await test("Rank auto-scanner now selects other merchant only after permanent binding",async()=>{
+    const {runMerchantRankScans}=require("../server/telegramMerchantRankScanner");
+    const seen=[];
+    const result=await runMerchantRankScans(pool,{checkGroup:async(group)=>{
+      seen.push(group.tenant);
+      await pool.query("UPDATE rank_keyword_groups SET last_checked_at=NOW() WHERE id=$1",[group.id]);
+    }});
+    assert.equal(result.scanned,1);
+    assert.deepEqual(seen,["merchant_b"]);
   });
   await test("Rank-only delivery respects toggles and isolated merchant destination",async()=>{
     assert.equal((await call(route+"/preferences","PATCH",
