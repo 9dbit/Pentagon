@@ -243,6 +243,7 @@ function createMerchantTelegramHubRouter(db = pool) {
       identity_hint:hint.rows[0]?.value||"",
       ops_topic_status:ops.rows[0]?.status || (opsChatId ? "provisioning" : "not_configured"),
       pending:pending.rows[0]||null,
+      preferences_saved:Boolean(c),
       preferences:{
         digest_enabled:c?.digest_enabled??true,
         immediate_alert:c?.immediate_alert??true,
@@ -352,25 +353,38 @@ function createMerchantTelegramHubRouter(db = pool) {
     finally{tx.release();}
   }));
   router.patch("/preferences",guard(async(req,res)=>{
+    const t=tenant(req);
+    if(!permittedTenant(t))return res.status(403).json({error:"INVALID_TENANT"});
+    const body=req.body||{};
     const allowed=["digest_enabled","immediate_alert","recovery_alert","node_warning","rank_report"];
-    const values=[];
-    const fields=[];
-    for(const key of allowed) if(Object.prototype.hasOwnProperty.call(req.body||{},key)){
-      if(typeof req.body[key]!=="boolean")return res.status(400).json({error:"INVALID_PREFERENCES"});
-      values.push(req.body[key]);fields.push(key+"=$"+values.length);
+    const keys=["tenant"],values=[t],updates=[];
+    for(const key of allowed){
+      if(!Object.prototype.hasOwnProperty.call(body,key))continue;
+      if(typeof body[key]!=="boolean")return res.status(400).json({error:"INVALID_PREFERENCES"});
+      keys.push(key);values.push(body[key]);updates.push(key+"=EXCLUDED."+key);
     }
-    if(Object.prototype.hasOwnProperty.call(req.body||{},"interval_minutes")){
-      if(!VALID_INTERVALS.has(Number(req.body.interval_minutes)))return res.status(400).json({error:"INVALID_INTERVAL"});
-      values.push(Number(req.body.interval_minutes));fields.push("interval_minutes=$"+values.length);
-      fields.push("next_report_at=NOW()+($"+values.length+"::int*INTERVAL '1 minute')");
+    if(Object.prototype.hasOwnProperty.call(body,"interval_minutes")){
+      const minutes=Number(body.interval_minutes);
+      if(!Number.isInteger(minutes)||!VALID_INTERVALS.has(minutes))
+        return res.status(400).json({error:"INVALID_INTERVAL"});
+      keys.push("interval_minutes");values.push(minutes);
+      updates.push("interval_minutes=EXCLUDED.interval_minutes");
+      updates.push("next_report_at=NOW()+(EXCLUDED.interval_minutes*INTERVAL '1 minute')");
     }
-    if(!fields.length)return res.status(400).json({error:"EMPTY_PREFERENCES"});
-    values.push(tenant(req));
+    if(!updates.length)return res.status(400).json({error:"EMPTY_PREFERENCES"});
+    // Save preferences before a group is provisioned. The new row remains
+    // disconnected, disabled, and without a chat_id; it cannot send messages.
+    // A later verified permanent group binding preserves all preferences.
+    const placeholders=values.map((_,i)=>"$"+(i+1));
     const {rows}=await db.query(
-      "UPDATE telegram_hub_connections SET "+fields.join(",")+",updated_at=NOW() "+
-      "WHERE tenant=$"+values.length+" AND status<>'disconnected' RETURNING tenant",[...values]
+      "INSERT INTO telegram_hub_connections("+keys.join(",")+",enabled,status) "+
+      "VALUES("+placeholders.join(",")+",FALSE,'disconnected') "+
+      "ON CONFLICT(tenant) DO UPDATE SET "+updates.join(",")+",updated_at=NOW() "+
+      "RETURNING tenant,status,chat_id,enabled",values
     );
-    return rows.length?res.json({ok:true}):res.status(409).json({error:"TELEGRAM_NOT_CONNECTED"});
+    const record=rows[0];
+    return res.json({ok:true,saved:true,
+      delivery_active:record?.status==="connected"&&record?.enabled===true&&Boolean(record?.chat_id)});
   }));
   router.post("/pause",guard(async(req,res)=>{
     const {rows}=await db.query("UPDATE telegram_hub_connections SET enabled=FALSE,status='paused',updated_at=NOW() "+
