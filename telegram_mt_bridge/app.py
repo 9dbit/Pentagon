@@ -50,6 +50,10 @@ async def get_client():
             await client.disconnect()
             client = None
             raise HTTPException(503, "telegram_user_account_required")
+    elif not client.is_connected():
+        await client.connect()
+        if not await client.is_user_authorized():
+            raise HTTPException(503, "telegram_user_session_not_authorized")
     return client
 
 class CreateRequest(BaseModel):
@@ -61,7 +65,7 @@ class SecureRequest(CreateRequest):
 
 async def owned_group(c, title):
     """Recover after a lost HTTP response to prevent accidental duplicates."""
-    async for dialog in c.iter_dialogs(limit=500):
+    async for dialog in c.iter_dialogs():
         e = dialog.entity
         if (getattr(e, "megagroup", False) and
             getattr(e, "creator", False) and
