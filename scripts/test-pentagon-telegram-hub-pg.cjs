@@ -125,6 +125,39 @@ async function main(){
     assert.equal(r.outcome,"cancelled");
     assert.equal(r.code,"MERCHANT_PERMANENT_GROUP_NOT_READY");
   });
+  await test("Merchant can save report settings before permanent group activation",async()=>{
+    const before=await call(route+"/status");
+    assert.equal(before.status,200);
+    assert.equal(before.data.permanent_group_ready,false);
+    assert.equal(before.data.connected,false);
+    assert.equal(before.data.preferences_saved,false);
+    const payload={digest_enabled:true,immediate_alert:false,
+      recovery_alert:false,node_warning:false,rank_report:true,interval_minutes:30};
+    const saved=await call(route+"/preferences","PATCH",payload);
+    assert.equal(saved.status,200);
+    assert.equal(saved.data.saved,true);
+    assert.equal(saved.data.delivery_active,false);
+    const after=await call(route+"/status");
+    assert.equal(after.data.connected,false);
+    assert.equal(after.data.preferences_saved,true);
+    for(const [key,value] of Object.entries(payload))
+      assert.equal(after.data.preferences[key],value,"saved preference "+key);
+    const row=(await pool.query(
+      "SELECT tenant,chat_id,enabled,status,interval_minutes FROM telegram_hub_connections WHERE tenant='merchant_a'")).rows[0];
+    assert.equal(row.tenant,"merchant_a");
+    assert.equal(row.chat_id,null);
+    assert.equal(row.enabled,false);
+    assert.equal(row.status,"disconnected");
+    assert.equal(row.interval_minutes,30);
+    assert.equal((await call(route+"/test","POST",{})).status,409);
+    assert.equal((await call(route+"/preferences","PATCH",{rank_report:"yes"})).status,400);
+    assert.equal((await call(route+"/preferences","PATCH",{interval_minutes:11})).status,400);
+    assert.equal((await call(route+"/preferences","PATCH",{})).status,400);
+    const other=await call(route+"/status","GET",undefined,"merchant_b");
+    assert.equal(other.data.preferences_saved,false);
+    assert.equal(other.data.preferences.interval_minutes,60);
+    assert.equal(other.data.preferences.immediate_alert,true);
+  });
   await test("Only authenticated Super Admin can generate group setup token",async()=>{
     assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"})).status,403);
     assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"merchant_b")).status,403);
@@ -148,6 +181,21 @@ async function main(){
     const row=(await pool.query("SELECT tenant,chat_title,chat_id FROM telegram_merchant_groups")).rows[0];
     assert.equal(row.tenant,"merchant_a");assert.equal(row.chat_id,"-100700001");
     assert.equal(row.chat_title,permanent.expectedTitle("merchant_a"));
+    const c=(await pool.query(
+      "SELECT enabled,status,chat_id,interval_minutes,immediate_alert,recovery_alert,node_warning,rank_report,next_report_at "+
+      "FROM telegram_hub_connections WHERE tenant='merchant_a'")).rows[0];
+    assert.equal(c.status,"connected");
+    assert.equal(c.enabled,true);
+    assert.equal(c.chat_id,"-100700001");
+    assert.equal(c.interval_minutes,30);
+    assert.equal(c.immediate_alert,false);
+    assert.equal(c.recovery_alert,false);
+    assert.equal(c.node_warning,false);
+    assert.equal(c.rank_report,true);
+    const minutesUntilReport=(new Date(c.next_report_at).getTime()-Date.now())/60000;
+    assert.ok(minutesUntilReport>=28&&minutesUntilReport<=31,
+      "pre-binding digest interval preserved: "+minutesUntilReport);
+
   });
   await test("A merchant QR opens only its pre-bound group, no Telegram group picker",async()=>{
     const status=await call(route+"/status");
@@ -206,6 +254,16 @@ async function main(){
     const a=(await pool.query("SELECT chat_id FROM telegram_hub_connections WHERE tenant='merchant_a'")).rows[0];
     assert.equal(a.chat_id,"-100700001");
     assert.equal((await call(route+"/status")).data.permanent_group_ready,true);
+    const changed=await call(route+"/preferences","PATCH",
+      {immediate_alert:true,interval_minutes:180});
+    assert.equal(changed.status,200);
+    assert.equal(changed.data.delivery_active,true);
+    const current=(await pool.query(
+      "SELECT chat_id,interval_minutes,immediate_alert FROM telegram_hub_connections WHERE tenant='merchant_a'")).rows[0];
+    assert.equal(current.chat_id,"-100700001");
+    assert.equal(current.interval_minutes,180);
+    assert.equal(current.immediate_alert,true);
+
   });
   console.log("PENTAGON_PERMANENT_TELEGRAM_E2E_PASS="+passed);
 }
