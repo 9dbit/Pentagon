@@ -82,3 +82,24 @@
  .maTgSettingsSection .maTgInterval{align-items:flex-start}
  .maTgSettingsSection .maTgInterval select{margin-left:auto}
 }
+
+/* Tenant-scoped read-only Telegram report delivery timeline. */
+.maTgDeliveryHeader{display:flex;align-items:flex-start;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.maTgDeliveryHeader>div{min-width:0}
+.maTgDeliveryHeader h3{margin:0 0 8px}
+.maTgDeliveryHeader p{font-size:12px;color:#9babb8;line-height:1.5;margin:0}
+.maTgDeliveryList{width:100%;display:flex;flex-direction:column;border-top:1px solid #2a3038}
+.maTgDeliveryRow{display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;padding:14px 0;border-bottom:1px solid #2a3038}
+.maTgDeliveryType{display:flex;align-items:center;gap:11px;min-width:0}
+.maTgDeliveryType>svg{color:#fa8825;flex-shrink:0}
+.maTgDeliveryType>div{display:flex;flex-direction:column;gap:6px;min-width:0}
+.maTgDeliveryType strong{font-size:12px;overflow-wrap:anywhere}
+.maTgDeliveryType small{font-size:11px;color:#929eac}
+.maTgDeliveryState{display:flex;align-items:center;gap:8px;color:#c3d0db;font-size:11px;flex-wrap:wrap}
+.maTgDeliveryState>svg{color:#77d5a1}
+.maTgDeliveryState small{color:#8f9baa}
+.maTgDeliveryEmpty{padding:36px 18px;display:flex;flex-direction:column;align-items:center;text-align:center;gap:10px}
+.maTgDeliveryEmpty>svg{color:#f18b3f}
+.maTgDeliveryEmpty strong{font-size:13px}
+.maTgDeliveryEmpty span{font-size:12px;color:#9faab6;max-width:460px;line-height:1.6}
+@media(max-width:680px){.maTgDeliveryRow{align-items:flex-start}.maTgDeliveryState{width:100%;padding-left:28px}}
