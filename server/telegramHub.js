@@ -114,7 +114,13 @@ async function ensureTables(db = pool) {
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_report_due ON telegram_hub_report_outbox(status,next_attempt_at)");
     for (const table of ["telegram_hub_links","telegram_hub_connections","telegram_hub_ops_topics","telegram_hub_report_outbox","telegram_hub_webhook_updates"]) {
       await db.query("ALTER TABLE " + table + " ENABLE ROW LEVEL SECURITY");
-      await db.query("REVOKE ALL ON TABLE " + table + " FROM PUBLIC, anon, authenticated");
+      await db.query("REVOKE ALL ON TABLE " + table + " FROM PUBLIC");
+      // Supabase roles exist in production, but vanilla PostgreSQL test
+      // fixtures do not define them.
+      for (const role of ["anon","authenticated"]) {
+        const present=await db.query("SELECT 1 FROM pg_roles WHERE rolname=$1",[role]);
+        if (present.rows.length) await db.query("REVOKE ALL ON TABLE " + table + " FROM " + role);
+      }
     }
   };
   if (db !== pool) return run();
