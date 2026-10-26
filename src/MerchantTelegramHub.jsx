@@ -64,7 +64,7 @@ export default function MerchantTelegramHub({onOpenGroupSettings}){
     <div className="maTgStats">
       <div><span>Merchant</span><strong>{String(hub?.tenant||"—").toUpperCase()}</strong></div>
       <div><span>Assigned group</span><strong>{status?.group_title||"Not assigned"}</strong></div>
-      <div><span>Messages delivered</span><strong>{sent}</strong></div>
+      <div><span>Delivered (last 30 events)</span><strong>{sent}</strong></div>
       <div><span>Last successful delivery</span><strong>{dateWib(latest?.sent_at)}</strong></div>
     </div>
     {!connected&&<section className="maTgSection">
