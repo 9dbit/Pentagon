@@ -12,6 +12,8 @@ const { requireMerchantAdmin } = require("./customerViewerAuth");
 const { markAcknowledged } = require("./noticeState");
 const { clearRecurringAlert } = require("./scheduler");
 const permanentGroups = require("./telegramPermanentGroups");
+const merchantActivation = require("./telegramMerchantActivation");
+const merchantAutoGroups = require("./telegramMerchantAutoProvisioner");
 
 const BASE_URL = "https://pentagon-web-production.up.railway.app";
 const HUB_PATH = "/api/telegram/hub/webhook";
@@ -503,10 +505,22 @@ function telegramHubWebhookRouter(db = pool) {
       );
       if(!inserted.rowCount)return res.json({ok:true,duplicate:true});
       if(update.message){
-         const handled=await permanentGroups.handlePermanentGroupBind(update.message,db,
-           {tg,opsChatId:configuredOpsChatId()});
-         if(!handled)await handleTelegramUpdate(update,db);
-       }
+        const enrolled=await merchantActivation.confirmBotIdentity(update.message,db,{tg});
+        if(enrolled){
+          // Group may have been provisioned before the merchant verified their
+          // identity. If so, enable its connection and send a direct invitation.
+          const userId=String(update.message.from?.id||"");
+          const {rows}=await db.query(
+            "SELECT tenant FROM telegram_merchant_activations WHERE telegram_user_id=$1 AND verified_at IS NOT NULL",
+            [userId]
+          );
+          if(rows[0])await merchantAutoGroups.activateAfterIdentity(rows[0].tenant,db,{tg});
+        }else{
+          const handled=await permanentGroups.handlePermanentGroupBind(update.message,db,
+            {tg,opsChatId:configuredOpsChatId()});
+          if(!handled)await handleTelegramUpdate(update,db);
+        }
+      }
       else if(update.callback_query){
         const cb=update.callback_query;
         const parts=String(cb.data||"").split(":");
@@ -562,6 +576,7 @@ async function startTelegramHub() {
         console.warn("[Merchant Rank Auto] unavailable",String(e.code||"SCAN_UNAVAILABLE").slice(0,36)));
       const firstRanks=setTimeout(runRanks,45000);firstRanks.unref?.();
       const rankTimer=setInterval(runRanks,300000);rankTimer.unref?.();
+      merchantAutoGroups.startProvisioning({tg,opsChatId:configuredOpsChatId()});
     }
   }catch(e){
     initialized=false;
