@@ -17,7 +17,7 @@ check("Merchant Admin sidebar exposes Telegram Settings on desktop and mobile",(
   assert.match(app,/<MerchantTelegramGroupSettings onBackToReports=/);
 });
 check("Merchant Reports provides a direct action to group setup",()=>{
-  assert.match(reports,/<MerchantTelegramHub/);
+  assert.match(reports,/export default function MerchantTelegramHub/);
   assert.match(reports,/onOpenGroupSettings/);
   assert.match(reports,/Open Telegram Group Settings/);
   assert.match(reports,/Telegram Group Settings/);
@@ -41,7 +41,7 @@ check("Backend requires merchant session and rejects cross-tenant setup",()=>{
 check("Existing permanent binding and direct invite protections retained",()=>{
   assert.match(backend,/expectedTitle\(tenant\)/);
   assert.match(backend,/chat_id TEXT NOT NULL UNIQUE/);
-  assert.match(backend,/chat\.title/);
+  assert.match(backend,/chat\?\.title/);
   assert.match(backend,/can_invite_users/);
   assert.match(backend,/configuredOpsChatId|opsChatId/);
   assert.match(backend,/createChatInviteLink/);
