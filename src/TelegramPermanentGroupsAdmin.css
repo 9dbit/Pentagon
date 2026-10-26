@@ -1,0 +1,26 @@
+.tgPerm{margin:18px 0 8px;padding:14px 0;color:inherit}
+.tgPermHeading{display:flex;align-items:flex-start;justify-content:space-between;gap:14px}
+.tgPermHeading h3{font-size:20px;letter-spacing:-.025em;margin:5px 0 6px}
+.tgPermHeading p,.tgPermSetup>p,.tgPermCommand p{font-size:13px;line-height:1.6;opacity:.72;max-width:720px;margin:0 0 14px}
+.tgPermEyebrow{font-size:10px;font-weight:750;letter-spacing:.13em;color:#d98b46}
+.tgPermButton{display:inline-flex;align-items:center;justify-content:center;gap:7px;border:1px solid #bb7239;background:#da873f;color:#18120d;border-radius:30px;cursor:pointer;white-space:nowrap;font:inherit;font-size:12px;font-weight:700;padding:10px 15px}
+.tgPermButton.ghost{background:transparent;color:inherit;border-color:rgba(140,140,140,.3)}
+.tgPermButton:disabled{opacity:.35;cursor:not-allowed}
+.tgPermTable{margin:18px 0;border-top:1px solid rgba(140,140,140,.16)}
+.tgPermRow{display:grid;grid-template-columns:minmax(100px,.8fr) minmax(150px,2fr) minmax(130px,1fr);align-items:center;gap:12px;padding:12px 0;border-bottom:1px solid rgba(140,140,140,.13);font-size:12px}
+.tgPermRow>span:first-child,.tgPermReady{display:inline-flex;align-items:center;gap:8px}
+.tgPermRow>span:nth-child(2){overflow-wrap:anywhere;opacity:.77}
+.tgPermReady{color:#41b58f}.tgPermWaiting{opacity:.6}
+.tgPermSetup{padding:5px 0 15px}
+.tgPermSetup h4{display:flex;align-items:center;gap:8px;font-size:14px;margin:14px 0 8px}
+.tgPermControls{display:flex;align-items:center;flex-wrap:wrap;gap:10px}
+.tgPermControls select{min-width:190px;max-width:100%;font:inherit;color:inherit;background:transparent;border:1px solid rgba(140,140,140,.3);border-radius:30px;padding:10px 14px}
+.tgPermControls option{background:#202020;color:#fff}
+.tgPermCommand{padding:17px 0 4px;display:grid;gap:16px}
+.tgPermCommand>div{display:flex;align-items:center;gap:12px;flex-wrap:wrap}
+.tgPermCommand span{min-width:190px;font-size:12px;opacity:.65}
+.tgPermCommand strong,.tgPermCommand code{font-size:12px;overflow-wrap:anywhere}
+.tgPermCommand code{padding:9px 12px;background:rgba(140,140,140,.1);border-radius:10px;max-width:100%}
+.tgPermError{font-size:12px;color:#f87171}
+.tgPermMuted{font-size:12px;opacity:.6}
+@media(max-width:720px){.tgPermHeading{flex-direction:column}.tgPermRow{grid-template-columns:1fr;gap:5px}.tgPermCommand>div{flex-direction:column;align-items:flex-start;gap:7px}.tgPermControls select,.tgPermControls .tgPermButton{width:100%}}
