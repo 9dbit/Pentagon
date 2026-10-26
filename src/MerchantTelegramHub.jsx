@@ -36,7 +36,7 @@ export default function MerchantTelegramHub(){
   const [state,setState]=useState(null);
   const [link,setLink]=useState(null);
   const [claim,setClaim]=useState(null);
-  const [mode,setMode]=useState("private");
+  const [mode,setMode]=useState("group");
   const [username,setUsername]=useState("");
   const [working,setWorking]=useState(false);
   const [busyType,setBusyType]=useState("");
@@ -142,6 +142,7 @@ export default function MerchantTelegramHub(){
     }catch(e){stopCamera();setScanError("Camera permission denied or device unavailable.");}
   }
   const connected=state?.connected&&state?.status==="connected";
+  const groupTitle=state?.chat_title||("Merchant "+String(state?.tenant||"").toUpperCase()+" Reports");
   const paused=state?.status==="paused";
   const prefs=state?.preferences||{};
   const updatePref=async(key,value)=>action("/preferences","PATCH",{[key]:value},"Preferences updated.");
@@ -159,19 +160,19 @@ export default function MerchantTelegramHub(){
     {message&&<div className="maTgFeedback" role="status"><CheckCircle2 size={15}/>{message}</div>}
     <div className="maTgStats">
       <div><span>Whitelisted domains</span><strong>{state?.whitelist_count??"—"}</strong></div>
-      <div><span>Destination</span><strong>{state?.chat_type==="private"?"Private DM":state?.chat_type?"Merchant group":"Not linked"}</strong></div>
+      <div><span>Destination</span><strong>{state?.chat_type==="private"?"Private DM":state?.chat_type?(state?.chat_title||"Merchant report group"):"Not linked"}</strong></div>
       <div><span>Last report</span><strong>{dateWib(state?.last_report_at)}</strong></div>
       <div><span>Delivery</span><strong>{state?.last_delivery_status||"Not tested"}</strong></div>
     </div>
     {!connected&&!paused&&<>
       <div className="maTgSection">
         <h3>Connect your Telegram</h3>
-        <p>Choose your own DM or a merchant-owned group. Only an authenticated confirmation here can activate delivery.</p>
+        <p>Connect a dedicated merchant report group. Private DM is optional. Each merchant only receives their own whitelist reports.</p>
         <div className="maTgChoices" role="group" aria-label="Telegram report destination">
           <button type="button" className={mode==="private"?"selected":""}
-            onClick={()=>{setMode("private");setLink(null);setClaim(null);}}><Smartphone size={17}/> Private DM</button>
+            onClick={()=>{setMode("private");setLink(null);setClaim(null);}}><Smartphone size={17}/> Private DM (optional)</button>
           <button type="button" className={mode==="group"?"selected":""}
-            onClick={()=>{setMode("group");setLink(null);setClaim(null);}}><Bell size={17}/> Merchant Group</button>
+            onClick={()=>{setMode("group");setLink(null);setClaim(null);}}><Bell size={17}/> Merchant Report Group (recommended)</button>
         </div>
         {!link?<button type="button" className="maTgPrimary" disabled={working||!state?.bot_configured}
           onClick={activate}><ShieldCheck size={17}/> Activate Telegram Report</button>:<>
@@ -180,8 +181,8 @@ export default function MerchantTelegramHub(){
               <QRCodeSVG value={link.url} size={190} marginSize={0} level="M" />
             </div>
             <div className="maTgActivateText">
-              <strong>Scan the code, then press Start in Telegram</strong>
-              <p>One-time link, expires after 10 minutes. {mode==="group"?"Add the bot to your group as an administrator.":"Use your own Telegram account."}</p>
+              <strong>{mode==="group"?"Select the merchant report group in Telegram":"Open the bot private chat"}</strong>
+              <p>One-time link, expires after 10 minutes. {mode==="group"?"Telegram will show the Pentagon bot identity first. Choose your dedicated merchant group (create it in Telegram if needed), add the bot, and send the activation command inside that group. Do not select the shared Domain Radar operations forum.":"Use your own Telegram account."}</p>
               <div className="maTgControls">
                 <a className="maTgPrimary" href={link.url} target="_blank" rel="noreferrer"><ExternalLink size={15}/> Open Telegram</a>
                 <button type="button" onClick={()=>navigator.clipboard?.writeText(link.url)} className="maTgPill"><Copy size={15}/> Copy link</button>
@@ -190,7 +191,7 @@ export default function MerchantTelegramHub(){
           </div>
           <div className="maTgClaim">
             {claim?.claimed?<><CheckCircle2 size={19}/>
-              <span>Telegram {claim.claimed_username?"@"+claim.claimed_username:"account/group"} received. Verify it is yours, then confirm here.</span>
+              <span>{mode==="group"?"Group: "+(claim.claimed_chat_title||"Unnamed merchant group"):"Account: "+(claim.claimed_username?"@"+claim.claimed_username:"Telegram user")} received. Verify this is your intended {mode==="group"?"merchant report group":"private account"} before confirming.</span>
               <button className="maTgPrimary" type="button" disabled={working} onClick={confirm}>Confirm &amp; Connect</button></>
               :<><RefreshCw size={16}/><span>Waiting for Telegram /start. This page checks the link every few seconds.</span></>}
           </div>
@@ -202,7 +203,7 @@ export default function MerchantTelegramHub(){
       <div className="maTgIdentity">
         <div className="maTgAvatar"><ShieldCheck size={24}/></div>
         <div><strong>{state?.telegram_username?"@"+state.telegram_username:"Verified Telegram"}</strong>
-          <span>{state.chat_type==="private"?"Private DM":"Merchant-managed group"} · {state.chat_masked}</span>
+          <span>{state.chat_type==="private"?"Private DM":groupTitle} · {state.chat_masked}</span>
           <small>Connected {dateWib(state.connected_at)}</small></div>
       </div>
       <div className="maTgControls">
