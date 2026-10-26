@@ -1,91 +1,47 @@
-import React, { useCallback, useEffect, useRef, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { QRCodeSVG } from "qrcode.react";
-import { Bell, Camera, CheckCircle2, CircleAlert, Copy, ExternalLink,
-  LockKeyhole, Pause, Play, RefreshCw, Send, ShieldCheck, Smartphone,
-  SlidersHorizontal, Unplug, X } from "lucide-react";
+import { Bell, CheckCircle2, CircleAlert, Copy, ExternalLink, LockKeyhole,
+  Pause, Play, RefreshCw, Send, ShieldCheck, Users } from "lucide-react";
 import "./MerchantTelegramHub.css";
 
-async function api(path,method="GET",body) {
-  const result=await fetch("/api/merchant/telegram-hub"+path,{
+async function request(url,method="GET",body){
+  const result=await fetch(url,{
     method,credentials:"include",cache:"no-store",
     headers:body===undefined?{}:{"Content-Type":"application/json"},
     ...(body===undefined?{}:{body:JSON.stringify(body)})
   });
   const data=await result.json().catch(()=>({}));
-  if(!result.ok)throw new Error(data.error||"Telegram Hub unavailable");
+  if(!result.ok)throw new Error(data.error||"Telegram report unavailable");
   return data;
 }
-const dateWib = value => value
-  ? new Date(value).toLocaleString("id-ID",{timeZone:"Asia/Jakarta",
-      dateStyle:"medium",timeStyle:"short"})+" WIB" : "Not available";
+const api=(path,method="GET",body)=>
+  request("/api/merchant/telegram-hub"+path,method,body);
+const dateWib=value=>value
+  ?new Date(value).toLocaleString("id-ID",{timeZone:"Asia/Jakarta",
+      dateStyle:"medium",timeStyle:"short"})+" WIB":"Not available";
 const options=[
-  ["immediate_alert","Immediate blocked alert","After independent provider + official registry confirmation"],
-  ["recovery_alert","Registry delisted / recovery","Do not imply all providers are healthy"],
-  ["digest_enabled","Whitelist summary","Every active whitelisted domain belonging to your merchant"],
-  ["node_warning","Monitoring coverage","Notify when independent node coverage is degraded"],
-  ["rank_report","Google Rank report","Optional keyword position report"]
+  ["immediate_alert","Blocked alert","Only after independent provider and registry confirmation"],
+  ["recovery_alert","Registry delisted","Official delisting, not a blanket guarantee of connectivity"],
+  ["digest_enabled","Whitelist report","Only active domains belonging to this merchant"],
+  ["node_warning","Node coverage alert","When independent provider coverage degrades"],
+  ["rank_report","Google Rank report","Optional keyword ranking report"]
 ];
-const usernameFromQR = raw => {
-  const str=String(raw||"").trim();
-  const match=str.match(/^(?:https?:\/\/)?(?:www\.)?(?:t\.me|telegram\.me)\/([A-Za-z0-9_]{5,32})(?:\/|\?|$)/i);
-  if(match)return match[1];
-  const handle=str.replace(/^@/,"");
-  return /^[A-Za-z0-9_]{5,32}$/.test(handle)?handle:"";
-};
+
 export default function MerchantTelegramHub(){
   const [state,setState]=useState(null);
-  const [link,setLink]=useState(null);
-  const [claim,setClaim]=useState(null);
-  const [mode,setMode]=useState("group");
-  const [username,setUsername]=useState("");
+  const [invite,setInvite]=useState(null);
   const [working,setWorking]=useState(false);
-  const [busyType,setBusyType]=useState("");
   const [message,setMessage]=useState("");
   const [error,setError]=useState("");
-  const [camera,setCamera]=useState(false);
-  const [scanError,setScanError]=useState("");
-  const cameraRef=useRef(null);
-  const streamRef=useRef(null);
-  const intervalRef=useRef(null);
-  const lockRef=useRef(false);
-  const stopCamera=useCallback(()=>{
-    if(intervalRef.current)clearInterval(intervalRef.current);
-    intervalRef.current=null;
-    if(streamRef.current)streamRef.current.getTracks().forEach(track=>track.stop());
-    streamRef.current=null;
-    if(cameraRef.current)cameraRef.current.srcObject=null;
-    setCamera(false);
-  },[]);
   const reload=useCallback(async()=>{
-    try{
-      const status=await api("/status");
-      setState(status);
-      setError("");
-      return status;
-    }catch(e){setError(e.message);return null;}
+    try{const data=await api("/status");setState(data);return data;}
+    catch(e){setError(e.message);return null;}
   },[]);
   useEffect(()=>{
     reload();
     const timer=setInterval(reload,30000);
     return ()=>clearInterval(timer);
   },[reload]);
-  useEffect(()=>{
-    if(!link?.request_id)return;
-    let live=true;
-    const check=async()=>{
-      try{
-        const data=await api("/activate/"+encodeURIComponent(link.request_id));
-        if(live)setClaim(data);
-      }catch(e){if(live&&e.message==="ACTIVATION_EXPIRED"){setLink(null);setClaim(null);setError("QR expired. Activate again.");}}
-    };
-    check();
-    const timer=setInterval(check,3000);
-    return ()=>{live=false;clearInterval(timer);};
-  },[link?.request_id]);
-  useEffect(()=>{
-    if(state?.identity_hint)setUsername(value=>value||"@"+state.identity_hint);
-  },[state?.identity_hint]);
-  useEffect(()=>()=>stopCamera(),[stopCamera]);
   async function action(path,method,body,success){
     setWorking(true);setError("");setMessage("");
     try{
@@ -96,168 +52,110 @@ export default function MerchantTelegramHub(){
     }catch(e){setError(e.message);return null;}
     finally{setWorking(false);}
   }
-  async function activate(){
-    setWorking(true);setError("");setMessage("");setClaim(null);
+  async function openDirectInvite(){
+    setWorking(true);setError("");setMessage("");setInvite(null);
     try{
-      const data=await api("/activate","POST",{mode});
-      setLink(data);
+      const result=await request("/api/merchant/telegram-groups/invite","POST",{});
+      setInvite(result);
     }catch(e){setError(e.message);}
     finally{setWorking(false);}
   }
-  async function confirm(){
-    if(!link?.request_id)return;
-    const result=await action("/confirm","POST",{request_id:link.request_id},
-      "Telegram identity verified. Merchant reports connected.");
-    if(result?.connected){setLink(null);setClaim(null);stopCamera();}
-  }
-  async function startCamera(){
-    setScanError("");
-    if(!navigator.mediaDevices?.getUserMedia){setScanError("Camera is not supported by this browser.");return;}
-    if(!("BarcodeDetector" in window)){setScanError("QR scanner unsupported. Use Open Telegram or enter @username.");return;}
-    try{
-      const stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:"environment"}});
-      streamRef.current=stream;
-      setCamera(true);
-      setTimeout(async()=>{
-        if(!cameraRef.current||!streamRef.current)return;
-        cameraRef.current.srcObject=stream;
-        await cameraRef.current.play().catch(()=>{});
-        const detector=new window.BarcodeDetector({formats:["qr_code"]});
-        intervalRef.current=setInterval(async()=>{
-          if(lockRef.current||!cameraRef.current)return;
-          lockRef.current=true;
-          try{
-            const codes=await detector.detect(cameraRef.current);
-            const scanned=codes[0]?.rawValue;
-            if(scanned){
-              const handle=usernameFromQR(scanned);
-              if(handle){setUsername("@"+handle);setMessage("Telegram profile scanned. Press Save Username; connect via bot to verify.");}
-              else setScanError("Not a Telegram profile QR. Scan a t.me username QR.");
-              stopCamera();
-            }
-          }catch(_){/* Retry next frame. */}
-          finally{lockRef.current=false;}
-        },550);
-      },160);
-    }catch(e){stopCamera();setScanError("Camera permission denied or device unavailable.");}
-  }
-  const connected=state?.connected&&state?.status==="connected";
-  const groupTitle=state?.chat_title||("Merchant "+String(state?.tenant||"").toUpperCase()+" Reports");
-  const paused=state?.status==="paused";
+  const ready=state?.permanent_group_ready===true;
+  const connected=ready&&state?.connected===true&&state?.status==="connected";
+  const paused=ready&&state?.status==="paused";
+  const title=state?.permanent_group_title||("PENTAGON | "+String(state?.tenant||"MERCHANT").toUpperCase()+" | REPORTS");
   const prefs=state?.preferences||{};
-  const updatePref=async(key,value)=>action("/preferences","PATCH",{[key]:value},"Preferences updated.");
+  const updatePref=(key,value)=>action("/preferences","PATCH",{[key]:value},"Preference updated.");
   return <div className="maTgHub">
     <div className="maTgHeader">
-      <div><div className="maTgEyebrow">PENTAGON / TELEGRAM HUB</div>
+      <div>
+        <div className="maTgEyebrow">PENTAGON / DEDICATED TELEGRAM REPORT</div>
         <h2>Telegram Reports</h2>
-        <p>Private status reports for your own whitelisted domains, powered by independently validated provider nodes.</p>
+        <p>One merchant, one permanent private report group. QR always opens your own group directly, without selecting any Telegram group.</p>
       </div>
       <span className={"maTgStatus "+(connected?"online":paused?"paused":"offline")}>
-        <span className="maTgDot"/> {connected?"Connected":paused?"Paused":"Not connected"}
+        <span className="maTgDot"/> {connected?"Group connected":paused?"Reports paused":"Group setup pending"}
       </span>
     </div>
     {error&&<div className="maTgFeedback error" role="alert"><CircleAlert size={15}/>{error}</div>}
     {message&&<div className="maTgFeedback" role="status"><CheckCircle2 size={15}/>{message}</div>}
     <div className="maTgStats">
       <div><span>Whitelisted domains</span><strong>{state?.whitelist_count??"—"}</strong></div>
-      <div><span>Destination</span><strong>{state?.chat_type==="private"?"Private DM":state?.chat_type?(state?.chat_title||"Merchant report group"):"Not linked"}</strong></div>
+      <div><span>Report destination</span><strong>{ready?title:"Awaiting dedicated group"}</strong></div>
       <div><span>Last report</span><strong>{dateWib(state?.last_report_at)}</strong></div>
       <div><span>Delivery</span><strong>{state?.last_delivery_status||"Not tested"}</strong></div>
     </div>
-    {!connected&&!paused&&<>
-      <div className="maTgSection">
-        <h3>Connect your Telegram</h3>
-        <p>Connect a dedicated merchant report group. Private DM is optional. Each merchant only receives their own whitelist reports.</p>
-        <div className="maTgChoices" role="group" aria-label="Telegram report destination">
-          <button type="button" className={mode==="private"?"selected":""}
-            onClick={()=>{setMode("private");setLink(null);setClaim(null);}}><Smartphone size={17}/> Private DM (optional)</button>
-          <button type="button" className={mode==="group"?"selected":""}
-            onClick={()=>{setMode("group");setLink(null);setClaim(null);}}><Bell size={17}/> Merchant Report Group (recommended)</button>
-        </div>
-        {!link?<button type="button" className="maTgPrimary" disabled={working||!state?.bot_configured}
-          onClick={activate}><ShieldCheck size={17}/> Activate Telegram Report</button>:<>
-          <div className="maTgActivate">
-            <div className="maTgQr" aria-label="One-time Telegram activation QR">
-              <QRCodeSVG value={link.url} size={190} marginSize={0} level="M" />
-            </div>
-            <div className="maTgActivateText">
-              <strong>{mode==="group"?"Select the merchant report group in Telegram":"Open the bot private chat"}</strong>
-              <p>One-time link, expires after 10 minutes. {mode==="group"?"Telegram will show the Pentagon bot identity first. Choose your dedicated merchant group (create it in Telegram if needed), add the bot, and send the activation command inside that group. Do not select the shared Domain Radar operations forum.":"Use your own Telegram account."}</p>
-              <div className="maTgControls">
-                <a className="maTgPrimary" href={link.url} target="_blank" rel="noreferrer"><ExternalLink size={15}/> Open Telegram</a>
-                <button type="button" onClick={()=>navigator.clipboard?.writeText(link.url)} className="maTgPill"><Copy size={15}/> Copy link</button>
-              </div>
-            </div>
-          </div>
-          <div className="maTgClaim">
-            {claim?.claimed?<><CheckCircle2 size={19}/>
-              <span>{mode==="group"?"Group: "+(claim.claimed_chat_title||"Unnamed merchant group"):"Account: "+(claim.claimed_username?"@"+claim.claimed_username:"Telegram user")} received. Verify this is your intended {mode==="group"?"merchant report group":"private account"} before confirming.</span>
-              <button className="maTgPrimary" type="button" disabled={working} onClick={confirm}>Confirm &amp; Connect</button></>
-              :<><RefreshCw size={16}/><span>Waiting for Telegram /start. This page checks the link every few seconds.</span></>}
-          </div>
-          <button type="button" className="maTgLink" onClick={()=>{setLink(null);setClaim(null);}}>Generate new link</button>
-        </>}
+    {!ready?<div className="maTgSection">
+      <h3><Users size={18}/> Preparing your permanent report group</h3>
+      <p>Super Admin must provision your dedicated Telegram group once. Until verified, Pentagon will not generate a QR or send any merchant data to another group or Domain Radar.</p>
+      <div className="maTgControls">
+        <button type="button" className="maTgPill" disabled={working} onClick={reload}>
+          <RefreshCw size={16}/> Refresh group status
+        </button>
       </div>
-    </>}
-    {(connected||paused)&&<div className="maTgSection">
+    </div>:<div className="maTgSection">
+      <h3><ShieldCheck size={19}/> {title}</h3>
+      <p>This group is permanently assigned to your merchant. Scanning the invite QR goes straight to this exact private group; there is no Telegram group picker.</p>
+      <div className="maTgControls">
+        <button className="maTgPrimary" type="button" disabled={working} onClick={openDirectInvite}>
+          <Users size={16}/> {invite?"Generate new invite QR":"Open my report group QR"}
+        </button>
+      </div>
+      {invite&&<div className="maTgActivate">
+        <div className="maTgQr" aria-label={"Direct private invite QR for "+invite.group_title}>
+          <QRCodeSVG value={invite.url} size={190} marginSize={0} level="M"/>
+        </div>
+        <div className="maTgActivateText">
+          <strong>Direct invite: {invite.group_title}</strong>
+          <p>Scan and tap Join in Telegram. No group selection. This link expires after 10 minutes and admits one member.</p>
+          <div className="maTgControls">
+            <a href={invite.url} target="_blank" rel="noreferrer" className="maTgPrimary">
+              <ExternalLink size={15}/> Open report group
+            </a>
+            <button type="button" className="maTgPill"
+              onClick={()=>navigator.clipboard?.writeText(invite.url)}><Copy size={15}/> Copy invite</button>
+          </div>
+        </div>
+      </div>}
       <div className="maTgIdentity">
-        <div className="maTgAvatar"><ShieldCheck size={24}/></div>
-        <div><strong>{state?.telegram_username?"@"+state.telegram_username:"Verified Telegram"}</strong>
-          <span>{state.chat_type==="private"?"Private DM":groupTitle} · {state.chat_masked}</span>
-          <small>Connected {dateWib(state.connected_at)}</small></div>
+        <div className="maTgAvatar"><Bell size={24}/></div>
+        <div><strong>{title}</strong><span>Tenant: {state?.tenant||"—"}</span>
+          <small>Group verified {dateWib(state?.permanent_group_verified_at)}</small></div>
       </div>
       <div className="maTgControls">
         {paused?<button type="button" className="maTgPrimary" disabled={working}
-          onClick={()=>action("/resume","POST",{},"Telegram reports resumed.")}><Play size={16}/> Resume</button>
-          :<button type="button" className="maTgPill" disabled={working}
-            onClick={()=>action("/pause","POST",{},"Telegram reports paused.")}><Pause size={16}/> Pause</button>}
+          onClick={()=>action("/resume","POST",{},"Merchant reports resumed.")}><Play size={16}/> Resume</button>
+          :<button type="button" className="maTgPill" disabled={working||!connected}
+          onClick={()=>action("/pause","POST",{},"Merchant reports paused.")}><Pause size={16}/> Pause</button>}
         <button type="button" className="maTgPill" disabled={working||!connected}
-          onClick={()=>action("/test","POST",{},"Test delivered to verified Telegram destination.")}><Send size={16}/> Send Test</button>
+          onClick={()=>action("/test","POST",{},"Test sent to your permanent group.")}><Send size={16}/> Send Test</button>
         <button type="button" className="maTgPill" disabled={working||!connected}
-          onClick={()=>action("/report/send-now","POST",{},"Whitelist report queued for delivery.")}><Bell size={16}/> Send report now</button>
-        <button type="button" className="maTgPill danger" disabled={working}
-          onClick={()=>{if(window.confirm("Disconnect Telegram reports for this merchant?"))action("/disconnect","POST",{},"Telegram disconnected.");}}>
-          <Unplug size={16}/> Disconnect</button>
+          onClick={()=>action("/report/send-now","POST",{},"Whitelist report queued for your permanent group.")}>
+          <Bell size={16}/> Send report now
+        </button>
       </div>
     </div>}
-    <div className="maTgSection">
-      <h3><Camera size={18}/> Telegram identity helper</h3>
-      <p>You may enter @username or scan a Telegram profile QR to label the intended account. Username alone does not authorize delivery.</p>
-      <div className="maTgControls">
-        <input aria-label="Telegram username" placeholder="@telegram_username"
-          value={username} onChange={e=>setUsername(e.target.value)} maxLength={33}/>
-        <button type="button" className="maTgPill" onClick={camera?stopCamera:startCamera}>
-          {camera?<X size={15}/>:<Camera size={15}/>} {camera?"Stop camera":"Scan profile QR"}
-        </button>
-        <button type="button" className="maTgPill" disabled={working} onClick={async()=>{
-          const handle=username.replace(/^@/,"");
-          if(!/^[A-Za-z0-9_]{5,32}$/.test(handle)){setError("Invalid Telegram username");return;}
-          await action("/identity-hint","PATCH",{username:handle},"Username saved as a label, not as a verified destination.");
-        }}>Save username</button>
-      </div>
-      {camera&&<video className="maTgVideo" ref={cameraRef} muted playsInline autoPlay/>}
-      {scanError&&<div className="maTgFeedback error">{scanError}</div>}
-    </div>
-    {(connected||paused)&&<div className="maTgSection">
-      <h3><SlidersHorizontal size={18}/> Report Preferences</h3>
-      <div className="maTgOptions">
-        {options.map(([key,title,caption])=><label key={key} className="maTgOption">
-          <span><strong>{title}</strong><small>{caption}</small></span>
-          <input type="checkbox" disabled={working} checked={Boolean(prefs[key])}
-            onChange={e=>updatePref(key,e.target.checked)}/>
+    {ready&&<div className="maTgSection">
+      <h3>Report preferences</h3>
+      <div className="maTgOptions">{options.map(([key,name,description])=>
+        <label key={key} className="maTgOption">
+          <span><strong>{name}</strong><small>{description}</small></span>
+          <input type="checkbox" disabled={working||!connected}
+            checked={Boolean(prefs[key])} onChange={e=>updatePref(key,e.target.checked)}/>
         </label>)}
       </div>
       <label className="maTgInterval">Digest frequency
-        <select disabled={working} value={prefs.interval_minutes||60}
+        <select disabled={working||!connected} value={prefs.interval_minutes||60}
           onChange={e=>updatePref("interval_minutes",Number(e.target.value))}>
-          {[10,30,60,180,1440].map(x=><option key={x} value={x}>
-            {x<60?x+" minutes":x===1440?"Daily":x/60+" hour"+(x>60?"s":"")}
+          {[10,30,60,180,1440].map(n=><option value={n} key={n}>
+            {n<60?n+" minutes":n===1440?"Daily":n/60+" hour"+(n>60?"s":"")}
           </option>)}
         </select>
       </label>
     </div>}
     <div className="maTgPrivacy"><LockKeyhole size={16}/>
-      Reports use verified Telegram chats and tenant-scoped whitelist data. Telegram profile QR is only a convenience; it never activates notifications by itself.
-      Official blocking evidence requires two independent providers plus exact registry verification.</div>
+      Each report destination is registered once by Super Admin, verified with Telegram and unique per merchant.
+      A shared operations forum is never a merchant destination. A pending setup never falls back to Domain Radar.
+    </div>
   </div>;
 }
