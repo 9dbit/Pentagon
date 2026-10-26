@@ -124,9 +124,14 @@ function createActivationRouter(db=pool,{botName,tg}={}){
   }));
   router.get("/deliveries",guarded(async(req,res,tenant)=>{
     const {rows}=await db.query(
+      "SELECT kind,status,attempts,created_at,sent_at,last_error_code FROM ("+
       "SELECT kind,status,attempts,created_at,sent_at,last_error_code "+
       "FROM telegram_hub_report_outbox WHERE tenant=$1 "+
-      "ORDER BY id DESC LIMIT 30",[tenant]
+      "UNION ALL "+
+      "SELECT 'tp_'||o.event_type AS kind,o.status,o.attempts,o.created_at,"+
+      "o.sent_at,o.last_error_code FROM trustpositif_notification_outbox o "+
+      "JOIN domains d ON d.id=o.domain_id WHERE d.tenant=$1"+
+      ") events ORDER BY created_at DESC LIMIT 30",[tenant]
     );
     res.json({tenant,deliveries:rows});
   }));
