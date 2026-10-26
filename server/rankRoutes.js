@@ -92,10 +92,12 @@ function normalizeSerpItem(item, position, keyword) {
   return { title: item.title || "", link: item.link || "", snippet: item.snippet || "", position, page: Math.ceil(position / 10), keyword };
 }
 
-async function fetchSerperResults(keyword) {
+async function fetchSerperResults(keyword,maxPagesOverride=null) {
   const key = process.env.SERPER_API_KEY;
   if (!key) throw new Error("SERPER_API_KEY is missing");
-  const maxPages = Math.min(10, Math.max(1, Number(process.env.RANK_MAX_PAGES || 10)));
+  const configured = Math.min(10, Math.max(1, Number(process.env.RANK_MAX_PAGES || 10)));
+  const maxPages = maxPagesOverride==null ? configured :
+    Math.min(configured,Math.max(1,Math.min(10,Number(maxPagesOverride)||1)));
   const all = [];
   for (let page = 1; page <= maxPages; page += 1) {
     const { data } = await axios.post("https://google.serper.dev/search", {
@@ -115,11 +117,13 @@ async function fetchSerperResults(keyword) {
   return all.slice(0, 100);
 }
 
-async function fetchCustomSearchResults(keyword) {
+async function fetchCustomSearchResults(keyword,maxPagesOverride=null) {
   const key = process.env.GOOGLE_SEARCH_API_KEY;
   const cx = process.env.GOOGLE_SEARCH_CX;
   if (!key || !cx) throw new Error("Missing GOOGLE_SEARCH_API_KEY or GOOGLE_SEARCH_CX");
-  const maxPages = Math.min(10, Math.max(1, Number(process.env.RANK_MAX_PAGES || 10)));
+  const configured = Math.min(10, Math.max(1, Number(process.env.RANK_MAX_PAGES || 10)));
+  const maxPages = maxPagesOverride==null ? configured :
+    Math.min(configured,Math.max(1,Math.min(10,Number(maxPagesOverride)||1)));
   const all = [];
   for (let page = 0; page < maxPages; page += 1) {
     const start = page * 10 + 1;
@@ -131,9 +135,9 @@ async function fetchCustomSearchResults(keyword) {
   return all.slice(0, 100);
 }
 
-async function fetchGoogleResults(keyword) {
-  if (process.env.SERPER_API_KEY) return fetchSerperResults(keyword);
-  return fetchCustomSearchResults(keyword);
+async function fetchGoogleResults(keyword,maxPagesOverride=null) {
+  if (process.env.SERPER_API_KEY) return fetchSerperResults(keyword,maxPagesOverride);
+  return fetchCustomSearchResults(keyword,maxPagesOverride);
 }
 
 async function lookupDomainIntel(domain) {
@@ -171,10 +175,10 @@ async function lookupDomainIntel(domain) {
   return (await pool.query(`INSERT INTO domain_intel_cache (domain, ip, nameservers, registrar, abuse_email, network_name, asn, report_url, raw, checked_at) VALUES ($1,$2,$3::jsonb,$4,$5,$6,$7,$8,$9::jsonb,NOW()) ON CONFLICT (domain) DO UPDATE SET ip=EXCLUDED.ip, nameservers=EXCLUDED.nameservers, registrar=EXCLUDED.registrar, abuse_email=EXCLUDED.abuse_email, network_name=EXCLUDED.network_name, asn=EXCLUDED.asn, report_url=EXCLUDED.report_url, raw=EXCLUDED.raw, checked_at=NOW() RETURNING *`, [clean, ip, JSON.stringify(nameservers), registrar, abuseEmail, networkName, asn, reportUrl, JSON.stringify(raw)])).rows[0];
 }
 
-async function checkGroup(group, nodeId = null, nodeName = null) {
+async function checkGroup(group, nodeId = null, nodeName = null, options = {}) {
   const domains = (await pool.query("SELECT * FROM rank_keyword_domains WHERE group_id=$1 AND is_whitelisted=true ORDER BY id ASC", [group.id])).rows;
   const whitelistDomains = domains.map((d) => d.domain);
-  const items = await fetchGoogleResults(group.keyword);
+  const items = await fetchGoogleResults(group.keyword,options.maxPages);
   const now = new Date();
   const suspicious = [];
   const checkerLabel = nodeName || "VPS Central";
@@ -253,11 +257,14 @@ async function checkGroup(group, nodeId = null, nodeName = null) {
           }
         }
 
-        sendTelegramToProject(group.project_name, msg).catch(() => false);
+        // Merchant rank moves are reported only through the verified group
+        // outbox, never the legacy project/global Telegram routing.
+        if (String(group.tenant||"admin")==="admin")
+          sendTelegramToProject(group.project_name, msg).catch(() => false);
       }
     }
   }
-  if (!nodeId) {
+  if (!nodeId && String(group.tenant||"admin")==="admin") {
     for (const s of suspicious.slice(0, 25)) {
       const seen = await pool.query(`INSERT INTO rank_suspicious_seen (group_id, host, last_position, last_page) VALUES ($1,$2,$3,$4) ON CONFLICT (group_id, host) DO UPDATE SET last_seen_at=NOW(), last_position=EXCLUDED.last_position, last_page=EXCLUDED.last_page RETURNING (xmax = 0) AS is_new`, [group.id, s.host, s.position, s.page]);
       s.intel = await lookupDomainIntel(s.host).catch((err) => ({ domain: s.host, error: err.message }));
