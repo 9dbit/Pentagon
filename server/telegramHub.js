@@ -408,7 +408,9 @@ function createMerchantTelegramHubRouter(db = pool) {
   }));
   router.post("/test",guard(async(req,res)=>{
     const {rows}=await db.query(
-      "SELECT chat_id FROM telegram_hub_connections WHERE tenant=$1 AND enabled=TRUE AND status='connected'",
+      "SELECT c.chat_id FROM telegram_hub_connections c "+
+      "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
+      "WHERE c.tenant=$1 AND c.enabled=TRUE AND c.status='connected'",
       [tenant(req)]
     );
     if(!rows.length)return res.status(409).json({error:"TELEGRAM_NOT_CONNECTED"});
