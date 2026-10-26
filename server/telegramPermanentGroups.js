@@ -50,6 +50,32 @@ async function groupForTenant(tenant,db=pool){
 function safeError(e){
   return String(e?.code||e?.message||"UNKNOWN").replace(/[^A-Za-z0-9_]/g,"").slice(0,60);
 }
+// One setup workflow for Super Admin and the authenticated owner of a
+// merchant tenant. The browser never supplies the tenant for merchant setup.
+// This creates a short-lived token, NOT a Telegram group or a chat binding.
+async function issueGroupSetup(tenant,requesterEmail,db=pool){
+  if(!isProductionTenant(tenant))return {status:400,body:{error:"INVALID_MERCHANT"}};
+  await ensurePermanentGroupTables(db);
+  const existing=await groupForTenant(tenant,db);
+  if(existing)return {status:409,body:{error:"MERCHANT_GROUP_PERMANENTLY_BOUND",chat_title:existing.chat_title}};
+  const found=await db.query(
+    "SELECT EXISTS (SELECT 1 FROM domains WHERE tenant=$1 AND is_active=TRUE) OR "+
+    "EXISTS (SELECT 1 FROM rank_keyword_groups WHERE tenant=$1 AND is_active=TRUE) AS exists",[tenant]);
+  if(found.rows[0]?.exists!==true)return {status:404,body:{error:"MERCHANT_NOT_FOUND"}};
+  const secret=crypto.randomBytes(24).toString("base64url");
+  const tx=await db.connect();
+  try{
+    await tx.query("BEGIN");
+    await tx.query("DELETE FROM telegram_merchant_group_setup WHERE tenant=$1 AND used_at IS NULL",[tenant]);
+    await tx.query("INSERT INTO telegram_merchant_group_setup(token_hash,tenant,requester_email,expires_at) "+
+      "VALUES($1,$2,$3,NOW()+INTERVAL '10 minutes')",
+      [hash(secret),tenant,String(requesterEmail||"unknown").slice(0,255)]);
+    await tx.query("COMMIT");
+  }catch(e){await tx.query("ROLLBACK").catch(()=>{});throw e;}finally{tx.release();}
+  // Never log a plaintext setup command or write it to app_settings.
+  return {status:201,body:{tenant,expires_in_seconds:SETUP_TTL_MIN*60,
+    title:expectedTitle(tenant),command:"/bindreport "+tenant+" "+secret}};
+}
 function createPermanentGroupAdminRouter(db=pool){
   const router=express.Router();
   router.use((req,res,next)=>{
@@ -71,29 +97,10 @@ function createPermanentGroupAdminRouter(db=pool){
   });
   router.post("/setup",async(req,res)=>{
     const tenant=String(req.body?.tenant||"").trim().toLowerCase();
-    if(!isProductionTenant(tenant))return res.status(400).json({error:"INVALID_MERCHANT"});
     try{
-      await ensurePermanentGroupTables(db);
-      const existing=await groupForTenant(tenant,db);
-      if(existing)return res.status(409).json({error:"MERCHANT_GROUP_PERMANENTLY_BOUND",chat_title:existing.chat_title});
-      const found=await db.query(
-        "SELECT EXISTS (SELECT 1 FROM domains WHERE tenant=$1 AND is_active=TRUE) OR "+
-        "EXISTS (SELECT 1 FROM rank_keyword_groups WHERE tenant=$1 AND is_active=TRUE) AS exists",[tenant]);
-      if(found.rows[0]?.exists!==true)return res.status(404).json({error:"MERCHANT_NOT_FOUND"});
-      const secret=crypto.randomBytes(24).toString("base64url");
-      const tx=await db.connect();
-      try{
-        await tx.query("BEGIN");
-        await tx.query("DELETE FROM telegram_merchant_group_setup WHERE tenant=$1 AND used_at IS NULL",[tenant]);
-        await tx.query("INSERT INTO telegram_merchant_group_setup(token_hash,tenant,requester_email,expires_at) "+
-          "VALUES($1,$2,$3,NOW()+INTERVAL '10 minutes')",
-          [hash(secret),tenant,String(req.session.adminEmail||"admin").slice(0,255)]);
-        await tx.query("COMMIT");
-      }catch(e){await tx.query("ROLLBACK").catch(()=>{});throw e;}finally{tx.release();}
-      // This secret is available only to super admin; never log or store plaintext.
-      res.status(201).json({tenant,expires_in_seconds:SETUP_TTL_MIN*60,
-        title:expectedTitle(tenant),command:"/bindreport "+tenant+" "+secret});
-    }catch(e){res.status(503).json({error:"REPORT_GROUP_SETUP_UNAVAILABLE"});}
+      const result=await issueGroupSetup(tenant,req.session.adminEmail,db);
+      return res.status(result.status).json(result.body);
+    }catch(e){return res.status(503).json({error:"REPORT_GROUP_SETUP_UNAVAILABLE"});}
   });
   return router;
 }
@@ -168,6 +175,20 @@ function createPermanentGroupMerchantRouter(db=pool,{tg,opsChatId}={}){
   const router=express.Router();
   router.use(requireMerchantAdmin);
   router.use((_req,res,next)=>{res.set("Cache-Control","private, no-store");next();});
+  router.post("/setup",async(req,res)=>{
+    // Session-bound merchant admins may provision ONLY their own tenant.
+    // Explicitly reject a body that attempts to select another tenant.
+    const tenant=req.merchantTenant;
+    if(!isProductionTenant(tenant))
+      return res.status(403).json({error:"INVALID_MERCHANT"});
+    if(req.body?.tenant!==undefined &&
+        (typeof req.body.tenant!=="string"||req.body.tenant.trim().toLowerCase()!==tenant))
+      return res.status(403).json({error:"CROSS_TENANT_SETUP_DENIED"});
+    try{
+      const result=await issueGroupSetup(tenant,req.session.adminEmail,db);
+      return res.status(result.status).json(result.body);
+    }catch(e){return res.status(503).json({error:"REPORT_GROUP_SETUP_UNAVAILABLE"});}
+  });
   router.post("/invite",async(req,res)=>{
     try{
       const tenant=req.merchantTenant;

@@ -27,7 +27,7 @@ const options=[
   ["rank_report","Google Rank report","Keyword positions, changes and checker snapshots from stored scans"]
 ];
 
-export default function MerchantTelegramHub(){
+export default function MerchantTelegramHub({onOpenGroupSettings}){
   const [state,setState]=useState(null);
   const [invite,setInvite]=useState(null);
   const [working,setWorking]=useState(false);
@@ -94,7 +94,7 @@ export default function MerchantTelegramHub(){
         <span className="maTgSettingsState">{state?.preferences_saved?"Preferences saved":"Default preferences"}</span>
       </div>
       {!ready&&<p className="maTgSettingsNotice">
-        Settings can be saved now. Delivery remains disabled until Super Admin verifies your permanent report group.
+        Settings can be saved now. Delivery starts only after your merchant’s permanent group is verified.
       </p>}
       <div className="maTgOptions">{options.map(([key,name,description])=>
         <label key={key} className="maTgOption">
@@ -115,8 +115,11 @@ export default function MerchantTelegramHub(){
     </div>
     {!ready?<div className="maTgSection">
       <h3><Users size={18}/> Preparing your permanent report group</h3>
-      <p>Super Admin must provision your dedicated Telegram group once. Until verified, Pentagon will not generate a QR or send any merchant data to another group or Domain Radar.</p>
+      <p>Open Telegram Settings to register your dedicated private group once. You will never need to select a group again when scanning a report QR.</p>
       <div className="maTgControls">
+        <button type="button" className="maTgPrimary" onClick={onOpenGroupSettings}>
+          <Users size={16}/> Open Telegram Group Settings
+        </button>
         <button type="button" className="maTgPill" disabled={working} onClick={reload}>
           <RefreshCw size={16}/> Refresh group status
         </button>
@@ -151,6 +154,9 @@ export default function MerchantTelegramHub(){
           <small>Group verified {dateWib(state?.permanent_group_verified_at)}</small></div>
       </div>
       <div className="maTgControls">
+        <button type="button" className="maTgPill" onClick={onOpenGroupSettings}>
+          <ShieldCheck size={16}/> Telegram Group Settings
+        </button>
         {paused?<button type="button" className="maTgPrimary" disabled={working}
           onClick={()=>action("/resume","POST",{},"Merchant reports resumed.")}><Play size={16}/> Resume</button>
           :<button type="button" className="maTgPill" disabled={working||!connected}
@@ -164,7 +170,7 @@ export default function MerchantTelegramHub(){
       </div>
     </div>}
     <div className="maTgPrivacy"><LockKeyhole size={16}/>
-      Each report destination is registered once by Super Admin, verified with Telegram and unique per merchant.
+      Each report destination is registered once by an authenticated merchant admin or Super Admin, verified with Telegram and unique per merchant.
       A shared operations forum is never a merchant destination. A pending setup never falls back to Domain Radar.
     </div>
   </div>;
