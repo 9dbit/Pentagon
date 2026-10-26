@@ -88,7 +88,7 @@ async function queueMerchantReport(tenant, db=pool, options={}) {
   try {
     await tx.query("BEGIN");
     const {rows}=await tx.query(
-      "SELECT tenant,chat_id,interval_minutes,next_report_at "+
+      "SELECT c.tenant,c.chat_id,c.interval_minutes,c.next_report_at "+
       "FROM telegram_hub_connections c "+
       "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
       "WHERE c.tenant=$1 AND c.enabled=TRUE "+
