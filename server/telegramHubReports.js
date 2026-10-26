@@ -88,9 +88,11 @@ async function queueMerchantReport(tenant, db=pool, options={}) {
   try {
     await tx.query("BEGIN");
     const {rows}=await tx.query(
-      "SELECT tenant,chat_id,interval_minutes,next_report_at "+
-      "FROM telegram_hub_connections WHERE tenant=$1 AND enabled=TRUE "+
-      "AND status='connected' AND digest_enabled=TRUE AND chat_id IS NOT NULL FOR UPDATE",
+      "SELECT c.tenant,c.chat_id,c.interval_minutes,c.next_report_at "+
+      "FROM telegram_hub_connections c "+
+      "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
+      "WHERE c.tenant=$1 AND c.enabled=TRUE "+
+      "AND c.status='connected' AND c.digest_enabled=TRUE AND c.chat_id IS NOT NULL FOR UPDATE OF c",
       [tenant]
     );
     const conn=rows[0];
@@ -145,8 +147,10 @@ async function drainReportOutbox(db=pool,limit=3) {
   for(const row of rows) {
     let result={status:"cancelled",code:"DESTINATION_NOT_CONNECTED"};
     const {rows:connections}=await db.query(
-      "SELECT chat_id FROM telegram_hub_connections WHERE tenant=$1 "+
-      "AND enabled=TRUE AND status='connected' AND chat_id=$2 LIMIT 1",
+      "SELECT c.chat_id FROM telegram_hub_connections c "+
+      "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
+      "WHERE c.tenant=$1 AND c.enabled=TRUE AND c.status='connected' "+
+      "AND c.chat_id=$2 LIMIT 1",
       [row.tenant,row.chat_id]
     );
     if(connections.length){
@@ -192,9 +196,10 @@ async function tickTelegramHub(db=pool) {
   try{
     await ensureTables(db);
     const {rows}=await db.query(
-      "SELECT tenant FROM telegram_hub_connections WHERE enabled=TRUE AND "+
-      "status='connected' AND digest_enabled=TRUE AND next_report_at<=NOW() "+
-      "ORDER BY next_report_at LIMIT 5"
+      "SELECT c.tenant FROM telegram_hub_connections c "+
+      "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
+      "WHERE c.enabled=TRUE AND c.status='connected' AND c.digest_enabled=TRUE "+
+      "AND c.next_report_at<=NOW() ORDER BY c.next_report_at LIMIT 5"
     );
     let queued=0;
     for(const row of rows){

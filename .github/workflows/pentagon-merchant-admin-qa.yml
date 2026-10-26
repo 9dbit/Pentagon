@@ -6,6 +6,9 @@ on:
       - "server/merchantAdminRoutes.js"
       - "server/merchantOperationsRoutes.js"
       - "server/telegramHub*.js"
+      - "server/telegramPermanentGroups.js"
+      - "server/trustpositifAlertOutbox.js"
+      - "src/TelegramPermanentGroupsAdmin.*"
       - "server/railway-entry.js"
       - "src/MerchantTelegramHub.*"
       - "scripts/test-pentagon-telegram-hub*.cjs"
@@ -73,10 +76,12 @@ jobs:
           node --check server/merchantDirectChecker.js
           node --check server/merchantNodeTelemetry.js
           node --check server/trustpositifAlertOutbox.js
+          node --check server/telegramPermanentGroups.js
           node --check server/telegramHub.js
           node --check server/telegramHubReports.js
           node --check server/railway-entry.js
           node --check scripts/test-pentagon-telegram-hub.cjs
+          node --check scripts/test-pentagon-telegram-hub-pg.cjs
           node scripts/test-pentagon-telegram-hub.cjs
           node --check scripts/test-pentagon-merchant-telegram-routing.cjs
           node --check scripts/test-pentagon-android-heartbeat-recovery.cjs

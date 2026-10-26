@@ -1,178 +1,220 @@
 #!/usr/bin/env node
 "use strict";
-// Real HTTP + PostgreSQL end-to-end test with synthetic Telegram transport.
-// No production domain, bot credential, merchant or Telegram destination used.
+// End-to-end Express + local PostgreSQL + mocked Telegram Bot API.
+// NEVER runs against production or sends real Telegram messages.
 const assert=require("node:assert/strict");
-const { Client }=require("pg");
+const crypto=require("node:crypto");
+const {Client}=require("pg");
 const express=require("express");
 const axios=require("axios");
 
 process.env.TELEGRAM_HUB_ENABLED="true";
-process.env.TELEGRAM_BOT_TOKEN="synthetic-telegram-token-for-ci";
+process.env.TELEGRAM_BOT_TOKEN="synthetic-telegram-token-for-local-ci";
+process.env.TELEGRAM_CHAT_ID="-100999999";
 process.env.PENTAGON_CUSTOMER_VIEWERS_JSON=JSON.stringify([
   {email:"merchant-a@example.test",tenant:"merchant_a",role:"merchant_admin"},
   {email:"merchant-b@example.test",tenant:"merchant_b",role:"merchant_admin"}
 ]);
-const raw=process.env.DATABASE_URL||"";
-if(!/127\.0\.0\.1|localhost/.test(raw))throw Error("CI-local database required");
-const local=raw.replace("127.0.0.1","localhost");
-const name="pentagon_tghub_"+process.pid;
-let base="",admin=null,pool=null,http=null;
-const telegramCalls=[];
+const original=process.env.DATABASE_URL||"";
+if(process.env.CI!=="true"||
+   !/^postgres(?:ql)?:\/\/[^@]*@(?:127\.0\.0\.1|localhost):5432\//.test(original))
+  throw Error("LOCAL_CI_POSTGRES_REQUIRED");
+const parsed=new URL(original.replace("127.0.0.1","localhost"));
+const fixture="pentagon_tgperm_"+process.pid;
+let admin=null,pool=null,server=null,base="";
+const groupMap=new Map([
+  ["-100700001",{title:"PENTAGON | MERCHANT_A | REPORTS",type:"supergroup"}],
+  ["-100700002",{title:"PENTAGON | MERCHANT_B | REPORTS",type:"supergroup"}],
+  ["-100999999",{title:"Domain Radar Staff Operations",type:"supergroup",is_forum:true}]
+]);
+const calls=[];
 const realPost=axios.post;
-axios.post=async (url,body)=>{
+axios.post=async(url,body)=>{
   const method=String(url).split("/").pop();
-  telegramCalls.push({method,body});
-  if(method==="getMe")return {status:200,data:{ok:true,result:{id:10001,is_bot:true,username:"PentagonReportTestBot"}}};
-  if(method==="getChatMember")return {status:200,data:{ok:true,result:{status:body.user_id===22222?"administrator":"member"}}};
-  if(method==="sendMessage")return {status:200,data:{ok:true,result:{message_id:telegramCalls.length}}};
-  if(method==="setWebhook")return {status:200,data:{ok:true,result:true}};
-  throw Error("unexpected Telegram API "+method);
+  calls.push({method,body});
+  if(method==="getMe")return{status:200,data:{ok:true,result:{id:9001,is_bot:true,username:"PentagonReportTestBot"}}};
+  if(method==="getChat")return{status:200,data:{ok:true,result:{id:body.chat_id,
+    ...groupMap.get(String(body.chat_id))}}};
+  if(method==="getChatMember"){
+    const isBot=String(body.user_id)==="9001";
+    const isOperator=String(body.user_id)==="22222";
+    return{status:200,data:{ok:true,result:isBot?
+      {status:"administrator",can_invite_users:true}:
+      {status:isOperator?"administrator":"member"}}};
+  }
+  if(method==="createChatInviteLink")
+    return{status:200,data:{ok:true,result:{invite_link:"https://t.me/+FixtureInvite"+calls.length}}};
+  if(method==="sendMessage")
+    return{status:200,data:{ok:true,result:{message_id:calls.length}}};
+  if(method==="setWebhook")return{status:200,data:{ok:true,result:true}};
+  throw Error("Unexpected Telegram method: "+method);
 };
-let pass=0;
-async function test(name,fn){
-  await fn();pass++;console.log("PASS "+name);
+const secret=crypto.createHmac("sha256",process.env.TELEGRAM_BOT_TOKEN)
+  .update("pentagon-hub-v1-webhook").digest("hex");
+let passed=0;
+async function test(label,fn){await fn();passed++;console.log("PASS "+label);}
+async function call(path,method="GET",body,persona="merchant_a"){
+  const headers={"x-ci-persona":persona};
+  if(body!==undefined)headers["content-type"]="application/json";
+  if(path==="/api/telegram/hub/webhook")headers["X-Telegram-Bot-Api-Secret-Token"]=secret;
+  const response=await fetch(base+path,{method,headers,
+    body:body===undefined?undefined:JSON.stringify(body)});
+  return{status:response.status,data:await response.json().catch(()=>({}))};
 }
-async function setup(){
-  const parsed=new URL(local);
-  const dbName=parsed.pathname.slice(1);
-  assert.ok(dbName&&!dbName.includes("?"));
-  admin=new Client({connectionString:local,ssl:false});
+const route="/api/merchant/telegram-hub";
+const invite="/api/merchant/telegram-groups/invite";
+const adminRoute="/api/admin/telegram-groups";
+async function sendBind(command,id,updateId=1,fromId=22222){
+  return call("/api/telegram/hub/webhook","POST",{update_id:updateId,message:{
+    chat:{id:Number(id),type:"supergroup",title:groupMap.get(id)?.title},
+    from:{id:fromId,is_bot:false,username:"operator"},
+    text:command
+  }},"anon");
+}
+async function main(){
+  parsed.pathname="/"+fixture;
+  admin=new Client({connectionString:original.replace("127.0.0.1","localhost"),ssl:false});
   await admin.connect();
-  await admin.query('CREATE DATABASE "'+name+'"');
-  parsed.pathname="/"+name;
+  await admin.query('CREATE DATABASE "'+fixture+'"');
   process.env.DATABASE_URL=parsed.toString();
-  const {pool:db}=require("../server/db");
-  pool=db;
+  const {pool:db}=require("../server/db");pool=db;
   await pool.query("CREATE TABLE app_settings(key TEXT PRIMARY KEY,value TEXT NOT NULL,updated_at TIMESTAMP DEFAULT NOW())");
   await pool.query("CREATE TABLE domains(id SERIAL PRIMARY KEY,domain TEXT UNIQUE NOT NULL,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMP)");
   await pool.query("CREATE TABLE rank_keyword_groups(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE)");
   await pool.query("CREATE TABLE rank_keyword_domains(id SERIAL PRIMARY KEY,group_id INT NOT NULL,domain TEXT NOT NULL,is_whitelisted BOOLEAN DEFAULT FALSE)");
   await pool.query("INSERT INTO domains(domain,tenant,global_status,last_checked_at) VALUES "+
-    "('one.example.test','merchant_a','working',NOW()),"+
-    "('two.example.test','merchant_b','blocked',NOW())");
+    "('merchant-a.example.test','merchant_a','working',NOW()),"+
+    "('merchant-b.example.test','merchant_b','warning',NOW())");
   await pool.query("INSERT INTO rank_keyword_groups(tenant) VALUES('merchant_a'),('merchant_b')");
   await pool.query("INSERT INTO rank_keyword_domains(group_id,domain,is_whitelisted) VALUES "+
-    "(1,'one.example.test',TRUE),(2,'two.example.test',TRUE)");
+    "(1,'merchant-a.example.test',TRUE),(2,'merchant-b.example.test',TRUE)");
   const hub=require("../server/telegramHub");
+  const permanent=require("../server/telegramPermanentGroups");
+  const reports=require("../server/telegramHubReports");
+  const {deliverTelegram}=require("../server/trustpositifAlertOutbox");
   await hub.ensureTables();
-  const app=express();
-  app.use(express.json());
-  app.use((req,res,next)=>{
-    const email=String(req.headers["x-ci-merchant"]||"");
-    if(email){
-      const tenant=email==="merchant-a@example.test"?"merchant_a":"merchant_b";
-      req.session={isCustomerViewer:true,isAdmin:false,isDemo:false,adminEmail:email,tenant};
-    }
+  await permanent.ensurePermanentGroupTables();
+  const app=express();app.use(express.json());
+  app.use((req,_res,next)=>{
+    const persona=req.headers["x-ci-persona"];
+    if(persona==="admin")req.session={isAdmin:true,isDemo:false,
+      isCustomerViewer:false,tenant:"admin",adminEmail:"superadmin@example.test"};
+    else if(["merchant_a","merchant_b"].includes(persona))
+      req.session={isAdmin:false,isDemo:false,isCustomerViewer:true,tenant:persona,
+        adminEmail:persona==="merchant_a"?"merchant-a@example.test":"merchant-b@example.test"};
     next();
   });
-  app.use("/api/merchant/telegram-hub",hub.createMerchantTelegramHubRouter());
+  app.use(adminRoute,permanent.createPermanentGroupAdminRouter());
+  app.use("/api/merchant/telegram-groups",permanent.createPermanentGroupMerchantRouter(pool,{
+    tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+  }));
+  app.use(route,hub.createMerchantTelegramHubRouter());
   app.use("/api/telegram/hub/webhook",hub.telegramHubWebhookRouter());
-  http=app.listen(0,"127.0.0.1");
-  await new Promise(resolve=>http.once("listening",resolve));
-  base="http://127.0.0.1:"+http.address().port;
-}
-async function call(path,method="GET",body,as="merchant-a@example.test",secret){
-  const headers={"x-ci-merchant":as};
-  if(body!==undefined)headers["Content-Type"]="application/json";
-  if(secret!==undefined)headers["X-Telegram-Bot-Api-Secret-Token"]=secret;
-  const res=await fetch(base+path,{method,headers,body:body===undefined?undefined:JSON.stringify(body)});
-  return {status:res.status,data:await res.json().catch(()=>({}))};
-}
-async function claim(token,update_id,chat,from,secret){
-  return call("/api/telegram/hub/webhook","POST",{
-    update_id,message:{chat,from,text:"/start pt_"+token}
-  },"",secret);
-}
-async function main(){
-  await setup();
-  const hub=require("../server/telegramHub");
-  const reports=require("../server/telegramHubReports");
-  const tokenSecret=require("node:crypto").createHmac("sha256",process.env.TELEGRAM_BOT_TOKEN)
-    .update("pentagon-hub-v1-webhook").digest("hex");
-  let id="",key="";
-  await test("Merchant cannot activate webhook using unverified request",async()=>{
-    const created=await call("/api/merchant/telegram-hub/activate","POST",{mode:"private"});
-    assert.equal(created.status,201);
-    id=created.data.request_id;
-    key=new URL(created.data.url).searchParams.get("start").slice(3);
-    assert.equal((await call("/api/merchant/telegram-hub/confirm","POST",{request_id:id})).status,409);
-    assert.equal((await call("/api/merchant/telegram-hub/activate/"+id,"GET",undefined,"merchant-b@example.test")).status,404);
+  server=app.listen(0,"127.0.0.1");
+  await new Promise(resolve=>server.once("listening",resolve));
+  base="http://127.0.0.1:"+server.address().port;
+
+  await test("Unprovisioned merchant cannot receive a wrong-group QR or report",async()=>{
+    assert.equal((await call(invite,"POST",{})).status,409);
+    assert.equal((await call(route+"/activate","POST",{mode:"group"})).status,410);
+    assert.equal((await call(route+"/confirm","POST",{request_id:crypto.randomUUID()})).status,410);
+    assert.equal((await call(route+"/report/send-now","POST",{})).status,409);
+    const d=await pool.query("SELECT id FROM domains WHERE tenant='merchant_a'");
+    const r=await deliverTelegram("Sensitive merchant alert",{domain_id:d.rows[0].id,event_type:"BLOCKED"},
+      {botConfig:{token:process.env.TELEGRAM_BOT_TOKEN,chatId:process.env.TELEGRAM_CHAT_ID}});
+    assert.equal(r.outcome,"cancelled");
+    assert.equal(r.code,"MERCHANT_PERMANENT_GROUP_NOT_READY");
   });
-  await test("Webhook requires exact secret and accepts real /start claim",async()=>{
-    assert.equal((await claim(key,1,{id:11111,type:"private"},{id:11111,username:"realUser"}, "invalid")).status,403);
-    const accepted=await claim(key,2,{id:11111,type:"private"},{id:11111,username:"realUser"}, tokenSecret);
-    assert.equal(accepted.status,200);
-    const pending=await call("/api/merchant/telegram-hub/activate/"+id);
-    assert.equal(pending.data.claimed,true);
-    assert.equal((await claim(key,2,{id:11111,type:"private"},{id:11111},tokenSecret)).status,200);
+  await test("Only authenticated Super Admin can generate group setup token",async()=>{
+    assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"})).status,403);
+    assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"merchant_b")).status,403);
+    assert.equal((await call(adminRoute+"/setup","POST",{tenant:"demo"},"admin")).status,400);
   });
-  await test("Second authenticated confirmation binds only merchant A",async()=>{
-    assert.equal((await call("/api/merchant/telegram-hub/confirm","POST",{request_id:id},
-      "merchant-b@example.test")).status,409);
-    const confirmed=await call("/api/merchant/telegram-hub/confirm","POST",{request_id:id});
-    assert.equal(confirmed.status,200);
-    const a=await call("/api/merchant/telegram-hub/status");
-    const b=await call("/api/merchant/telegram-hub/status","GET",undefined,"merchant-b@example.test");
-    assert.equal(a.data.connected,true);
-    assert.equal(b.data.connected,false);
-    assert.equal(a.data.whitelist_count,1);
-    assert.equal(a.data.telegram_username,"realUser");
+  let codeA="",codeB="";
+  await test("One-time admin token binds only a verified private group",async()=>{
+    const setup=await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"admin");
+    assert.equal(setup.status,201);
+    assert.equal(setup.data.title,permanent.expectedTitle("merchant_a"));
+    codeA=setup.data.command;
+    assert.ok(/^\/bindreport merchant_a [A-Za-z0-9_-]+$/.test(codeA));
+    const wrong=await sendBind(codeA,"-100700002",1);
+    assert.equal(wrong.status,200);
+    assert.equal((await pool.query("SELECT COUNT(*)::int n FROM telegram_merchant_groups")).rows[0].n,0);
+    const rejectNonAdmin=await sendBind(codeA,"-100700001",2,33333);
+    assert.equal(rejectNonAdmin.status,200);
+    assert.equal((await pool.query("SELECT COUNT(*)::int n FROM telegram_merchant_groups")).rows[0].n,0);
+    const good=await sendBind(codeA,"-100700001",3);
+    assert.equal(good.status,200);
+    const row=(await pool.query("SELECT tenant,chat_title,chat_id FROM telegram_merchant_groups")).rows[0];
+    assert.equal(row.tenant,"merchant_a");assert.equal(row.chat_id,"-100700001");
+    assert.equal(row.chat_title,permanent.expectedTitle("merchant_a"));
   });
-  await test("Username hint cannot authorize a separate tenant or destination",async()=>{
-    const b=await call("/api/merchant/telegram-hub/identity-hint","PATCH",
-      {username:"otherPerson"},"merchant-b@example.test");
-    assert.equal(b.status,200);
-    assert.equal(b.data.verified,false);
-    const status=await call("/api/merchant/telegram-hub/status","GET",undefined,"merchant-b@example.test");
-    assert.equal(status.data.connected,false);
+  await test("A merchant QR opens only its pre-bound group, no Telegram group picker",async()=>{
+    const status=await call(route+"/status");
+    assert.equal(status.status,200);
+    assert.equal(status.data.permanent_group_ready,true);
+    assert.equal(status.data.permanent_group_title,permanent.expectedTitle("merchant_a"));
+    assert.equal(status.data.whitelist_count,1);
+    const qr=await call(invite,"POST",{});
+    assert.equal(qr.status,201);
+    assert.ok(qr.data.url.startsWith("https://t.me/+FixtureInvite"));
+    assert.ok(!qr.data.url.includes("startgroup"));
+    assert.equal(qr.data.group_title,permanent.expectedTitle("merchant_a"));
+    const sent=calls.filter(c=>c.method==="createChatInviteLink");
+    assert.equal(String(sent.at(-1).body.chat_id),"-100700001");
+    assert.equal(sent.at(-1).body.member_limit,1);
+    assert.ok(sent.at(-1).body.expire_date>Math.floor(Date.now()/1000));
+    assert.equal((await call(invite,"POST",{},"merchant_b")).status,409);
   });
-  await test("Whitelist digest queues only tenant A and sends only to verified chat",async()=>{
-    const queued=await call("/api/merchant/telegram-hub/report/send-now","POST",{});
+  await test("Tenant A digest and Telegram test never send to B or shared ops",async()=>{
+    const queued=await call(route+"/report/send-now","POST",{});
     assert.equal(queued.status,202);
     const {rows}=await pool.query("SELECT tenant,chat_id,message FROM telegram_hub_report_outbox");
-    assert.equal(rows.length,1);
-    assert.equal(rows[0].tenant,"merchant_a");
-    assert.equal(rows[0].chat_id,"11111");
-    assert.match(rows[0].message,/one\.example\.test/);
-    assert.doesNotMatch(rows[0].message,/two\.example\.test/);
+    assert.equal(rows.length,1);assert.equal(rows[0].tenant,"merchant_a");
+    assert.equal(rows[0].chat_id,"-100700001");
+    assert.match(rows[0].message,/merchant-a\.example\.test/);
+    assert.doesNotMatch(rows[0].message,/merchant-b\.example\.test/);
     const result=await reports.drainReportOutbox(pool);
     assert.equal(result.claimed,1);
-    const sent=telegramCalls.find(c=>c.method==="sendMessage"&&c.body.text.includes("one.example.test"));
-    assert.equal(String(sent.body.chat_id),"11111");
+    const sent=calls.find(c=>c.method==="sendMessage" &&
+      c.body.text?.includes("merchant-a.example.test"));
+    assert.equal(String(sent?.body?.chat_id),"-100700001");
+    const testResult=await call(route+"/test","POST",{});
+    assert.equal(testResult.status,200);
+    assert.equal(String(calls.at(-1).body.chat_id),"-100700001");
+    assert.equal((await call(route+"/disconnect","POST",{})).status,409);
   });
-  await test("Pause prevents test, disconnect cancels queued report",async()=>{
-    const paused=await call("/api/merchant/telegram-hub/pause","POST",{});
-    assert.equal(paused.status,200);
-    assert.equal((await call("/api/merchant/telegram-hub/test","POST",{})).status,409);
-    assert.equal((await call("/api/merchant/telegram-hub/resume","POST",{})).status,200);
-    assert.equal((await call("/api/merchant/telegram-hub/test","POST",{})).status,200);
-    assert.equal((await call("/api/merchant/telegram-hub/disconnect","POST",{})).status,200);
-    const status=await call("/api/merchant/telegram-hub/status");
-    assert.equal(status.data.connected,false);
+  await test("One group cannot become another merchant's report destination",async()=>{
+    const setup=await call(adminRoute+"/setup","POST",{tenant:"merchant_b"},"admin");
+    assert.equal(setup.status,201);codeB=setup.data.command;
+    assert.equal((await sendBind(codeB,"-100700001",4)).status,200);
+    assert.equal((await pool.query("SELECT COUNT(*)::int n FROM telegram_merchant_groups")).rows[0].n,1);
+    assert.equal((await sendBind(codeB,"-100999999",5)).status,200);
+    assert.equal((await pool.query("SELECT COUNT(*)::int n FROM telegram_merchant_groups")).rows[0].n,1);
+    assert.equal((await sendBind(codeB,"-100700002",6)).status,200);
+    const rows=(await pool.query("SELECT tenant,chat_id FROM telegram_merchant_groups ORDER BY tenant")).rows;
+    assert.deepEqual(rows.map(x=>x.tenant),["merchant_a","merchant_b"]);
+    assert.notEqual(rows[0].chat_id,rows[1].chat_id);
+    assert.equal((await call(invite,"POST",{},"merchant_b")).data.group_title,
+      permanent.expectedTitle("merchant_b"));
+    assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"},"admin")).status,409);
   });
-  await test("Group activation requires Telegram administrator and dashboard confirmation",async()=>{
-    const link=await call("/api/merchant/telegram-hub/activate","POST",{mode:"group"},"merchant-b@example.test");
-    assert.equal(link.status,201);
-    const t=new URL(link.data.url).searchParams.get("startgroup").slice(3);
-    assert.equal((await claim(t,3,{id:-10077777,type:"supergroup"},{id:33333},tokenSecret)).status,200);
-    const pending=await call("/api/merchant/telegram-hub/activate/"+link.data.request_id,"GET",undefined,"merchant-b@example.test");
-    assert.equal(pending.data.claimed,false);
-    assert.equal((await claim(t,4,{id:-10077777,type:"supergroup"},{id:22222,username:"groupAdmin"},tokenSecret)).status,200);
-    const confirmed=await call("/api/merchant/telegram-hub/confirm","POST",{request_id:link.data.request_id},"merchant-b@example.test");
-    assert.equal(confirmed.status,200);
-    const s=await call("/api/merchant/telegram-hub/status","GET",undefined,"merchant-b@example.test");
-    assert.equal(s.data.chat_type,"supergroup");
-    assert.equal(s.data.connected,true);
+  await test("Merchant preferences retain pause and resume without reassigning group",async()=>{
+    assert.equal((await call(route+"/pause","POST",{})).status,200);
+    assert.equal((await call(route+"/test","POST",{})).status,409);
+    assert.equal((await call(route+"/resume","POST",{})).status,200);
+    const a=(await pool.query("SELECT chat_id FROM telegram_hub_connections WHERE tenant='merchant_a'")).rows[0];
+    assert.equal(a.chat_id,"-100700001");
+    assert.equal((await call(route+"/status")).data.permanent_group_ready,true);
   });
-  console.log("PENTAGON_TELEGRAM_HUB_POSTGRES_E2E_PASS="+pass);
+  console.log("PENTAGON_PERMANENT_TELEGRAM_E2E_PASS="+passed);
 }
 main().catch(e=>{console.error(e.stack||e);process.exitCode=1;}).finally(async()=>{
   axios.post=realPost;
-  if(http)await new Promise(resolve=>http.close(resolve));
+  if(server)await new Promise(r=>server.close(r));
   if(pool)await pool.end();
   if(admin){
-    try{await admin.query('DROP DATABASE IF EXISTS "'+name+'" WITH (FORCE)');}catch(_){}
+    try{await admin.query('DROP DATABASE IF EXISTS "'+fixture+'" WITH (FORCE)');}catch(_){}
     await admin.end();
   }
 });

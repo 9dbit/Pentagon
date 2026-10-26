@@ -11,6 +11,7 @@ const { getTelegramConfig, answerCallbackQuery, editMessageReplyMarkup } = requi
 const { requireMerchantAdmin } = require("./customerViewerAuth");
 const { markAcknowledged } = require("./noticeState");
 const { clearRecurringAlert } = require("./scheduler");
+const permanentGroups = require("./telegramPermanentGroups");
 
 const BASE_URL = "https://pentagon-web-production.up.railway.app";
 const HUB_PATH = "/api/telegram/hub/webhook";
@@ -43,6 +44,13 @@ function safeUsername(s) {
   return /^[A-Za-z0-9_]{5,32}$/.test(v) ? v : "";
 }
 function numericChatId(value) { return /^-?[0-9]{5,20}$/.test(String(value || "")); }
+function configuredOpsChatId() {
+  const id = process.env.TELEGRAM_OPS_MAIN_CHAT_ID || getTelegramConfig().chatId;
+  return numericChatId(id) ? String(id) : "";
+}
+function safeGroupTitle(value) {
+  return String(value || "").replace(/[\x00-\x1F\x7F]/g," ").trim().slice(0,100);
+}
 function mask(s) {
   const x = String(s || "");
   return x ? x.slice(0, Math.min(3, x.length)) + "••••" + x.slice(-3) : "";
@@ -72,13 +80,13 @@ async function ensureTables(db = pool) {
       "tenant TEXT NOT NULL, requester_email TEXT NOT NULL, mode TEXT NOT NULL",
       "CHECK(mode IN ('private','group')), expires_at TIMESTAMPTZ NOT NULL,",
       "claimed_at TIMESTAMPTZ, claimed_chat_id TEXT, claimed_user_id TEXT,",
-      "claimed_username TEXT, claimed_chat_type TEXT, consumed_at TIMESTAMPTZ,",
+      "claimed_username TEXT, claimed_chat_type TEXT, claimed_chat_title TEXT, consumed_at TIMESTAMPTZ,",
       "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
     ].join(" "));
     await db.query([
       "CREATE TABLE IF NOT EXISTS telegram_hub_connections (",
       "tenant TEXT PRIMARY KEY, chat_id TEXT, telegram_user_id TEXT,",
-      "telegram_username TEXT, chat_type TEXT CHECK(chat_type IN ('private','group','supergroup')),",
+      "telegram_username TEXT, chat_type TEXT CHECK(chat_type IN ('private','group','supergroup')), chat_title TEXT,",
       "enabled BOOLEAN NOT NULL DEFAULT FALSE, status TEXT NOT NULL DEFAULT 'disconnected'",
       "CHECK(status IN ('connected','paused','disconnected')),",
       "interval_minutes INTEGER NOT NULL DEFAULT 60,",
@@ -109,6 +117,10 @@ async function ensureTables(db = pool) {
       "created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),",
       "updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW())"
     ].join(" "));
+    // Existing production tables predate group-name metadata. Additive only.
+    await db.query("ALTER TABLE telegram_hub_links ADD COLUMN IF NOT EXISTS claimed_chat_title TEXT");
+    await db.query("ALTER TABLE telegram_hub_connections ADD COLUMN IF NOT EXISTS chat_title TEXT");
+    await db.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_hub_unique_connected_group ON telegram_hub_connections(chat_id) WHERE enabled=TRUE AND status='connected' AND chat_type IN ('group','supergroup') AND chat_id IS NOT NULL");
     await db.query("CREATE TABLE IF NOT EXISTS telegram_hub_webhook_updates (update_id BIGINT PRIMARY KEY, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_links_tenant ON telegram_hub_links(tenant,requester_email,created_at DESC)");
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_report_due ON telegram_hub_report_outbox(status,next_attempt_at)");
@@ -129,8 +141,8 @@ async function ensureTables(db = pool) {
 }
 
 async function getOpsForum() {
-  const configured = process.env.TELEGRAM_OPS_MAIN_CHAT_ID || getTelegramConfig().chatId;
-  if (!numericChatId(configured)) return "";
+  const configured = configuredOpsChatId();
+  if (!configured) return "";
   try {
     const chat = await tg("getChat", { chat_id: configured });
     const ready=chat?.type === "supergroup" && chat?.is_forum === true;
@@ -195,12 +207,13 @@ function createMerchantTelegramHubRouter(db = pool) {
   router.get("/status",guard(async(req,res) => {
     const t=tenant(req);
     if (!permittedTenant(t)) return res.status(403).json({error:"INVALID_TENANT"});
-    const [connections,pending,count,ops,hint]=await Promise.all([
-      db.query("SELECT tenant,telegram_username,chat_type,chat_id,enabled,status,interval_minutes,"+
+    await permanentGroups.ensurePermanentGroupTables(db);
+    const [connections,pending,count,ops,hint,permanent]=await Promise.all([
+      db.query("SELECT tenant,telegram_username,chat_type,chat_title,chat_id,enabled,status,interval_minutes,"+
         "digest_enabled,immediate_alert,recovery_alert,node_warning,rank_report,"+
         "connected_at,last_report_at,last_delivery_at,last_delivery_status "+
         "FROM telegram_hub_connections WHERE tenant=$1",[t]),
-      db.query("SELECT request_id,mode,expires_at,claimed_at,claimed_username,claimed_chat_type "+
+      db.query("SELECT request_id,mode,expires_at,claimed_at,claimed_username,claimed_chat_type,claimed_chat_title "+
         "FROM telegram_hub_links WHERE tenant=$1 AND requester_email=$2 "+
         "AND consumed_at IS NULL AND expires_at>NOW() ORDER BY created_at DESC LIMIT 1",[t,owner(req)]),
       db.query("SELECT COUNT(DISTINCT LOWER(TRIM(k.domain)))::int AS total "+
@@ -208,7 +221,8 @@ function createMerchantTelegramHubRouter(db = pool) {
         "JOIN domains d ON LOWER(TRIM(d.domain))=LOWER(TRIM(k.domain)) AND d.tenant=g.tenant "+
         "WHERE g.tenant=$1 AND g.is_active=TRUE AND k.is_whitelisted=TRUE AND d.is_active=TRUE",[t]),
       db.query("SELECT status FROM telegram_hub_ops_topics WHERE tenant=$1",[t]),
-      db.query("SELECT value FROM app_settings WHERE key=$1 LIMIT 1",["merchant_telegram_username_hint_"+t])
+      db.query("SELECT value FROM app_settings WHERE key=$1 LIMIT 1",["merchant_telegram_username_hint_"+t]),
+      db.query("SELECT chat_title,verified_at FROM telegram_merchant_groups WHERE tenant=$1 LIMIT 1",[t])
     ]);
     const c=connections.rows[0] || null;
     if (opsChatId && !ops.rows[0]) {
@@ -216,8 +230,11 @@ function createMerchantTelegramHubRouter(db = pool) {
     }
     return res.json({
       ...configResult(), tenant:t,
+       permanent_group_ready:Boolean(permanent.rows[0]),
+       permanent_group_title:permanent.rows[0]?.chat_title||"",
+       permanent_group_verified_at:permanent.rows[0]?.verified_at||null,
       status:c?.status||"not_connected", connected:Boolean(c?.chat_id&&c?.enabled),
-      chat_type:c?.chat_type||null,telegram_username:c?.telegram_username||"",
+      chat_type:c?.chat_type||null,chat_title:c?.chat_title||"",telegram_username:c?.telegram_username||"",
       chat_masked:mask(c?.chat_id),connected_at:c?.connected_at||null,
       last_report_at:c?.last_report_at||null,
       last_delivery_at:c?.last_delivery_at||null,
@@ -245,8 +262,12 @@ function createMerchantTelegramHubRouter(db = pool) {
     return res.json({ok:true,identity_hint:username,verified:false});
   }));
   router.post("/activate",guard(async(req,res)=>{
+    // Legacy /startgroup links require the merchant to choose a group, creating
+    // cross-tenant delivery risk. The sole path is an admin-bound permanent group.
+    return res.status(410).json({error:"USE_PERMANENT_REPORT_GROUP_QR"});
     const t=tenant(req),email=owner(req);
-    const mode=req.body?.mode==="group"?"group":"private";
+    // Merchant reports default to a dedicated group; DM remains explicit opt-in.
+    const mode=req.body?.mode==="private"?"private":"group";
     if (!permittedTenant(t)||!email) return res.status(403).json({error:"INVALID_TENANT"});
     const username=await botName();
     if (!username) return res.status(503).json({error:"BOT_USERNAME_UNAVAILABLE"});
@@ -266,7 +287,7 @@ function createMerchantTelegramHubRouter(db = pool) {
     if(!/^[0-9a-f-]{36}$/i.test(req.params.requestId))
       return res.status(400).json({error:"INVALID_REQUEST"});
     const {rows}=await db.query(
-      "SELECT request_id,mode,expires_at,claimed_at,claimed_username,claimed_chat_type "+
+      "SELECT request_id,mode,expires_at,claimed_at,claimed_username,claimed_chat_type,claimed_chat_title "+
       "FROM telegram_hub_links WHERE request_id=$1 AND tenant=$2 AND requester_email=$3 "+
       "AND consumed_at IS NULL AND expires_at>NOW() LIMIT 1",
       [req.params.requestId,tenant(req),owner(req)]
@@ -275,6 +296,7 @@ function createMerchantTelegramHubRouter(db = pool) {
     return res.json({...rows[0],claimed:Boolean(rows[0].claimed_at)});
   }));
   router.post("/confirm",guard(async(req,res)=>{
+    return res.status(410).json({error:"USE_PERMANENT_REPORT_GROUP_QR"});
     const id=String(req.body?.request_id||"");
     if(!/^[0-9a-f-]{36}$/i.test(id)) return res.status(400).json({error:"INVALID_REQUEST"});
     const tx=await db.connect();
@@ -290,14 +312,30 @@ function createMerchantTelegramHubRouter(db = pool) {
       if(!numericChatId(link.claimed_chat_id)||!numericChatId(link.claimed_user_id)) {
         await tx.query("ROLLBACK");return res.status(409).json({error:"TELEGRAM_IDENTITY_INVALID"});
       }
+      const isGroup=["group","supergroup"].includes(link.claimed_chat_type);
+      if ((link.mode==="group"&&!isGroup) || (link.mode==="private"&&link.claimed_chat_type!=="private") ||
+          (isGroup&&String(link.claimed_chat_id)===configuredOpsChatId())) {
+        await tx.query("ROLLBACK");return res.status(409).json({error:"MERCHANT_GROUP_REQUIRED"});
+      }
+      if(isGroup){
+        const existing=await tx.query(
+          "SELECT tenant FROM telegram_hub_connections WHERE chat_id=$1 AND tenant<>$2 "+
+          "AND enabled=TRUE AND status='connected' AND chat_type IN ('group','supergroup') LIMIT 1 FOR UPDATE",
+          [link.claimed_chat_id,tenant(req)]
+        );
+        if(existing.rows.length){
+          await tx.query("ROLLBACK");return res.status(409).json({error:"GROUP_ALREADY_LINKED"});
+        }
+      }
       await tx.query(
-        "INSERT INTO telegram_hub_connections(tenant,chat_id,telegram_user_id,telegram_username,chat_type,enabled,status,connected_at,next_report_at) "+
-        "VALUES($1,$2,$3,$4,$5,TRUE,'connected',NOW(),NOW()+INTERVAL '60 minutes') "+
+        "INSERT INTO telegram_hub_connections(tenant,chat_id,telegram_user_id,telegram_username,chat_type,chat_title,enabled,status,connected_at,next_report_at) "+
+        "VALUES($1,$2,$3,$4,$5,$6,TRUE,'connected',NOW(),NOW()+INTERVAL '60 minutes') "+
         "ON CONFLICT(tenant) DO UPDATE SET chat_id=EXCLUDED.chat_id,telegram_user_id=EXCLUDED.telegram_user_id,"+
-        "telegram_username=EXCLUDED.telegram_username,chat_type=EXCLUDED.chat_type,"+
+        "telegram_username=EXCLUDED.telegram_username,chat_type=EXCLUDED.chat_type,chat_title=EXCLUDED.chat_title,"+
         "enabled=TRUE,status='connected',connected_at=NOW(),next_report_at=NOW()+INTERVAL '60 minutes',"+
         "last_delivery_status='not_tested',updated_at=NOW()",
-        [tenant(req),link.claimed_chat_id,link.claimed_user_id,link.claimed_username,link.claimed_chat_type]
+        [tenant(req),link.claimed_chat_id,link.claimed_user_id,link.claimed_username,link.claimed_chat_type,
+          isGroup?safeGroupTitle(link.claimed_chat_title):""]
       );
       // Bridge existing immediate TrustPositif outbox, but only with a verified chat.
       await tx.query(
@@ -308,7 +346,8 @@ function createMerchantTelegramHubRouter(db = pool) {
       await tx.query("UPDATE telegram_hub_links SET consumed_at=NOW() WHERE request_id=$1",[id]);
       await tx.query("DELETE FROM telegram_hub_links WHERE tenant=$1 AND consumed_at IS NULL",[tenant(req)]);
       await tx.query("COMMIT");
-      return res.json({ok:true,connected:true,chat_type:link.claimed_chat_type,username:link.claimed_username});
+      return res.json({ok:true,connected:true,chat_type:link.claimed_chat_type,
+        chat_title:isGroup?safeGroupTitle(link.claimed_chat_title):"",username:link.claimed_username});
     }catch(e){await tx.query("ROLLBACK").catch(()=>{});throw e;}
     finally{tx.release();}
   }));
@@ -351,6 +390,7 @@ function createMerchantTelegramHubRouter(db = pool) {
     return res.json({ok:true,status:"connected"});
   }));
   router.post("/disconnect",guard(async(req,res)=>{
+    return res.status(409).json({error:"PERMANENT_GROUP_CANNOT_BE_DISCONNECTED_BY_MERCHANT"});
     const tx=await db.connect();
     try{
       await tx.query("BEGIN");
@@ -368,7 +408,9 @@ function createMerchantTelegramHubRouter(db = pool) {
   }));
   router.post("/test",guard(async(req,res)=>{
     const {rows}=await db.query(
-      "SELECT chat_id FROM telegram_hub_connections WHERE tenant=$1 AND enabled=TRUE AND status='connected'",
+      "SELECT c.chat_id FROM telegram_hub_connections c "+
+      "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
+      "WHERE c.tenant=$1 AND c.enabled=TRUE AND c.status='connected'",
       [tenant(req)]
     );
     if(!rows.length)return res.status(409).json({error:"TELEGRAM_NOT_CONNECTED"});
@@ -388,6 +430,8 @@ function createMerchantTelegramHubRouter(db = pool) {
 }
 
 async function handleTelegramUpdate(update, db = pool) {
+  // Never accept old one-time /start or /startgroup claims as group routing.
+  return;
   const msg=update?.message;
   if (!msg || !msg.chat || !msg.from || msg.from.is_bot) return;
   const match=String(msg.text||"").trim().match(/^\/start(?:@[A-Za-z0-9_]+)?\s+pt_([A-Za-z0-9_-]{20,50})$/i);
@@ -396,6 +440,13 @@ async function handleTelegramUpdate(update, db = pool) {
   const mode=type==="private"?"private":(["group","supergroup"].includes(type)?"group":"invalid");
   if(mode==="invalid")return;
   if(mode==="private"&&String(msg.from.id)!==String(msg.chat.id))return;
+  if(mode==="group"&&String(msg.chat.id)===configuredOpsChatId()){
+    // An internal operations forum contains other tenants' information.
+    // Never allow it to be bound as a customer-facing report group.
+    await tg("sendMessage",{chat_id:msg.chat.id,
+      text:"Pentagon: this is the internal operations forum. Choose a private merchant report group instead."}).catch(()=>{});
+    return;
+  }
   if(mode==="group"){
     try{
       const member=await tg("getChatMember",{chat_id:msg.chat.id,user_id:msg.from.id});
@@ -407,16 +458,16 @@ async function handleTelegramUpdate(update, db = pool) {
   }
   const {rows}=await db.query(
     "UPDATE telegram_hub_links SET claimed_at=NOW(),claimed_chat_id=$2,claimed_user_id=$3,"+
-    "claimed_username=$4,claimed_chat_type=$5 "+
+    "claimed_username=$4,claimed_chat_type=$5,claimed_chat_title=$7 "+
     "WHERE token_hash=$1 AND mode=$6 AND consumed_at IS NULL AND claimed_at IS NULL "+
     "AND expires_at>NOW() RETURNING request_id",
     [hashToken(match[1]),String(msg.chat.id),String(msg.from.id),
-      safeUsername(msg.from.username)||"",type,mode]
+      safeUsername(msg.from.username)||"",type,mode,mode==="group"?safeGroupTitle(msg.chat.title):""]
   );
   await tg("sendMessage",{
     chat_id:msg.chat.id,
     text:rows.length
-      ?"Pentagon: permintaan diterima. Kembali ke dashboard dan konfirmasi akun Telegram ini untuk mengaktifkan report."
+      ?(mode==="group"?"Pentagon: grup laporan diterima. Kembali ke dashboard dan konfirmasi grup ini untuk mengaktifkan report.":"Pentagon: akun Telegram diterima. Kembali ke dashboard dan konfirmasi untuk mengaktifkan report.")
       :"Pentagon: tautan tidak valid atau sudah kedaluwarsa. Buat tautan baru di dashboard."
   }).catch(()=>{});
 }
@@ -434,7 +485,11 @@ function telegramHubWebhookRouter(db = pool) {
         [update.update_id]
       );
       if(!inserted.rowCount)return res.json({ok:true,duplicate:true});
-      if(update.message)await handleTelegramUpdate(update,db);
+      if(update.message){
+         const handled=await permanentGroups.handlePermanentGroupBind(update.message,db,
+           {tg,opsChatId:configuredOpsChatId()});
+         if(!handled)await handleTelegramUpdate(update,db);
+       }
       else if(update.callback_query){
         const cb=update.callback_query;
         const parts=String(cb.data||"").split(":");
@@ -463,6 +518,7 @@ async function startTelegramHub() {
   initialized=true;
   try{
     await ensureTables();
+    await permanentGroups.ensurePermanentGroupTables();
     await botName();
     console.log("[Telegram Hub] bot identity:",botUsername);
     const url=String(process.env.TELEGRAM_HUB_WEBHOOK_BASE_URL||BASE_URL).replace(/\/+$/,"")+HUB_PATH;
