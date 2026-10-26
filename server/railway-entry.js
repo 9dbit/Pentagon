@@ -57,3 +57,11 @@ require("./index");
 // Scoped TrustPositif worker is independent of the intentionally disabled
 // main scheduler. It only runs when explicitly enabled by a separate flag.
 scheduler.startScopedTrustPositifScheduler();
+
+const telegramHub = require("./telegramHub");
+const hubBootTimer = setTimeout(() => {
+  telegramHub.startTelegramHub().catch(error => {
+    console.warn("[Telegram Hub] startup failed", String(error.code || "UNAVAILABLE").slice(0,30));
+  });
+}, 5000);
+hubBootTimer.unref?.();
