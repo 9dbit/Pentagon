@@ -546,11 +546,16 @@ async function sendHourlyDigest(source) {
     1
   );
 
+  const nodeSummary = await getNodesSummary();
   const message = [
-    `🛸 <b>DOMAIN RADAR — LAPORAN JAM</b> ⏰`,
+    `🛰️ <b>PENTAGON REPORT</b>`,
     `<i>${htmlEsc(nowWib())} WIB</i>`,
     '',
-    '<b>STATUS</b>',
+    '<b>NODES</b>',
+    `Online: ${nodeSummary.online} / ${nodeSummary.total}`,
+    `Offline: ${nodeSummary.offline}`,
+    '',
+    '<b>DOMAIN STATUS</b>',
     `<pre>${htmlEsc(statusTable)}</pre>`,
     '<b>PER PROJECT</b>',
     `<pre>${htmlEsc(projTable)}</pre>`
@@ -1049,6 +1054,7 @@ function startScopedTrustPositifScheduler() {
   }
   scopedTimerStarted = true;
   console.log("[TrustPositif Scoped] enabled, separate from full scheduler; interval_ms=" + scopedWatchIntervalMs);
+  startDigestWatchdog();
   // Independent delivery ticker: retries definite failures even when there
   // are not enough healthy checker nodes to run a scan.
   const deliver = () => drainOutbox().then(result => {
