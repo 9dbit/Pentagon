@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import "./MerchantAdminPage.css";
 import MerchantNodeCardV2 from "./MerchantNodeCardV2";
+import MerchantTelegramHub from "./MerchantTelegramHub";
 
 const dateWib = value => value && Number.isFinite(new Date(value).getTime())
   ? new Date(value).toLocaleString("id-ID", { timeZone: "Asia/Jakarta",
@@ -35,6 +36,7 @@ const NAV = [
   { key: "trust", text: "Trust Positif", icon: ShieldCheck },
   { key: "direct", text: "Direct Checker", icon: Activity },
   { key: "alerts", text: "Notifikasi", icon: Bell },
+  { key: "telegram", text: "Telegram Reports", icon: Bell },
   { key: "settings", text: "Merchant Settings", icon: Settings2 }
 ];
 const statusText = value => ({
@@ -59,7 +61,6 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
   const [showDomainForm, setShowDomainForm] = useState(false);
   const [showKeywordForm, setShowKeywordForm] = useState(false);
   const [detail, setDetail] = useState(null);
-  const [telegramForm, setTelegramForm] = useState({enabled:false,chat_id:""});
 
   const reload = useCallback(async () => {
     try {
@@ -69,14 +70,12 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
         request("/api/customer/alerts"), request("/api/merchant/history"),
         request("/api/merchant/profile")
       ]);
-      const [trust,direct,telegram]=await Promise.all([
+      const [trust,direct]=await Promise.all([
         request("/api/merchant/trust-positif").catch(()=>null),
-        request("/api/merchant/direct-checker").catch(()=>null),
-        request("/api/merchant/telegram").catch(()=>null)
+        request("/api/merchant/direct-checker").catch(()=>null)
       ]);
       setData({ overview, domains, keywords, nodes: nodeHealth.nodes || [], nodeAsOf: nodeHealth.as_of,
-        alerts, history, profile, trust, direct, telegram });
-      if (telegram) setTelegramForm({enabled:telegram.enabled,chat_id:telegram.chat_id || ""});
+        alerts, history, profile, trust, direct });
       setError("");
       setRefreshedAt(new Date().toISOString());
     } catch (err) {
@@ -316,32 +315,16 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
             {!data.alerts.length && <div className="maEmpty">Belum ada alert tercatat. Ini bukan konfirmasi semua domain sehat.</div>}</div>
         </section>}
 
+        {page === "telegram" && <section className="maPanel maTelegramHubPanel"><MerchantTelegramHub/></section>}
         {page === "settings" && <section className="maPanel"><h2>Profil Merchant</h2><p>Hak akses yang berlaku untuk akun saat ini.</p>
           <div className="maAccountDetails"><div><small>Merchant</small><strong>{data.profile.tenant || "—"}</strong></div>
             <div><small>Role</small><strong>Merchant Administrator</strong></div>
             <div><small>Akun</small><strong>{accountEmail || "—"}</strong></div>
             <div><small>Ruang lingkup</small><strong>Domain, keyword, whitelist, laporan merchant</strong></div></div>
-          <h2 className="maTelegramHeading">Telegram Merchant</h2>
-          <p>Gunakan Telegram Chat ID grup merchant. Bot pusat tetap dikelola Super Admin.</p>
-          <form className="maForm maTelegramForm" onSubmit={async e=>{
-            e.preventDefault();
-            await act("/api/merchant/telegram","PATCH",telegramForm,"Pengaturan Telegram tersimpan.");
-          }}>
-            <label>Telegram Chat ID<input value={telegramForm.chat_id}
-              placeholder="-1001234567890" onChange={e=>setTelegramForm(p=>({...p,chat_id:e.target.value}))}/></label>
-            <label className="maTelegramToggle">
-              <input type="checkbox" checked={telegramForm.enabled}
-                onChange={e=>setTelegramForm(p=>({...p,enabled:e.target.checked}))}/>
-              Aktifkan notifikasi</label>
-            <button className="maPrimary" disabled={busy}>Simpan</button>
-            <button className="maPill" type="button" disabled={busy||!data.telegram?.enabled}
-              onClick={()=>act("/api/merchant/telegram/test","POST",{},"Pesan uji Telegram terkirim.")}>
-              <Bell size={14}/> Test Send
-            </button>
-          </form>
-          <div className="maInfo"><LockKeyhole size={16}/>
-            <span>Bot: {data.telegram?.bot_configured?"Tersedia":"Belum dikonfigurasi"}.
-              Test Send hanya mengirim pesan ketika ditekan. Notifikasi otomatis harus dihubungkan ke jalur alert terverifikasi.</span></div>
+          <div className="maTelegramShortcut">
+            <span>Telegram Reports kini memakai koneksi terverifikasi dan hanya memuat domain merchant Anda.</span>
+            <button className="maPrimary" type="button" onClick={()=>setPage("telegram")}><Bell size={15}/> Open Telegram Reports</button>
+          </div>
           <div className="maInfo"><LockKeyhole size={18}/><span>Pengaturan Super Admin, node fisik, Telegram global, serta data merchant lain tetap dilindungi.</span></div>
         </section>}
         {detail && <div className="maDialogBackdrop" role="presentation"
