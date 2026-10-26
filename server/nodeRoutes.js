@@ -1,8 +1,11 @@
 const express = require("express");
 const axios = require("axios");
 const { pool } = require("./db");
+const { requireAuthenticatedScope } = require("./migrationSafety");
 
 const router = express.Router();
+// Stage-only gate: all node management requires trusted session and server fleet.
+router.use(requireAuthenticatedScope);
 
 async function ensureNodeTable() {
   await pool.query(`
@@ -189,7 +192,7 @@ async function getPollingNodeHealth(nodeId) {
 router.get("/", async (req, res, next) => {
   try {
     await ensureNodeTable();
-    const tenant = req.tenant || 'admin';
+    const { tenant, fleet } = req.migrationScope;
     const { rows } = await pool.query(`
       SELECT n.*,
         t.battery_percent,
@@ -212,9 +215,9 @@ router.get("/", async (req, res, next) => {
         t.last_low_battery_alert_at
       FROM provider_nodes n
       LEFT JOIN node_telemetry t ON t.node_id = n.id
-      WHERE n.tenant=$1
+      WHERE n.tenant=$1 AND n.fleet=$2
       ORDER BY n.id DESC
-    `, [tenant]);
+    `, [tenant, fleet]);
     res.json(rows.map(enrichNodeForUi));
   } catch (err) {
     next(err);
@@ -231,15 +234,15 @@ router.post("/presets", async (req, res, next) => {
     const inserted = [];
     for (const node of pollingPresets()) {
       const { rows } = await pool.query(
-        `INSERT INTO provider_nodes (name, provider_name, network_type, endpoint_url, secret_key)
-         VALUES ($1,$2,$3,$4,$5)
-         ON CONFLICT (name) DO UPDATE SET provider_name=EXCLUDED.provider_name, network_type=EXCLUDED.network_type, endpoint_url=EXCLUDED.endpoint_url, secret_key=EXCLUDED.secret_key
+        `INSERT INTO provider_nodes (name, provider_name, network_type, endpoint_url, secret_key, tenant, fleet)
+         VALUES ($1,$2,$3,$4,$5,$6,$7)
+         ON CONFLICT DO NOTHING
          RETURNING *`,
-        [node.name, node.provider_name, node.network_type, node.endpoint_url, node.secret_key]
+        [node.name, node.provider_name, node.network_type, node.endpoint_url, node.secret_key, req.migrationScope.tenant, req.migrationScope.fleet]
       );
-      inserted.push(rows[0]);
+      if (rows[0]) inserted.push(rows[0]);
     }
-    res.json({ ok: true, count: inserted.length, nodes: inserted });
+    res.json({ ok: true, count: inserted.length, skipped_count: pollingPresets().length - inserted.length, nodes: inserted });
   } catch (err) {
     next(err);
   }
@@ -256,12 +259,13 @@ router.post("/", async (req, res, next) => {
     if (!name || !provider || !endpoint) return res.status(400).json({ error: "Name, provider, and endpoint URL are required" });
 
     const { rows } = await pool.query(
-      `INSERT INTO provider_nodes (name, provider_name, network_type, endpoint_url, secret_key)
-       VALUES ($1,$2,$3,$4,$5)
-       ON CONFLICT (name) DO UPDATE SET provider_name=EXCLUDED.provider_name, network_type=EXCLUDED.network_type, endpoint_url=EXCLUDED.endpoint_url, secret_key=EXCLUDED.secret_key
+      `INSERT INTO provider_nodes (name, provider_name, network_type, endpoint_url, secret_key, tenant, fleet)
+       VALUES ($1,$2,$3,$4,$5,$6,$7)
+       ON CONFLICT DO NOTHING
        RETURNING *`,
-      [name, provider, network, endpoint, secret]
+      [name, provider, network, endpoint, secret, req.migrationScope.tenant, req.migrationScope.fleet]
     );
+    if (!rows[0]) return res.status(409).json({ error: "Node already exists; active credentials were preserved" });
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -271,7 +275,7 @@ router.post("/", async (req, res, next) => {
 router.post("/:id/ping", async (req, res, next) => {
   try {
     await ensureNodeTable();
-    const { rows } = await pool.query("SELECT * FROM provider_nodes WHERE id=$1", [req.params.id]);
+    const { rows } = await pool.query("SELECT * FROM provider_nodes WHERE id=$1 AND tenant=$2 AND fleet=$3", [req.params.id, req.migrationScope.tenant, req.migrationScope.fleet]);
     if (!rows[0]) return res.status(404).json({ error: "Node not found" });
 
     try {
@@ -287,12 +291,12 @@ router.post("/:id/ping", async (req, res, next) => {
 
       await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
       await pool.query(
-        "UPDATE provider_nodes SET last_health_status=$1, last_health_reason=$2, last_ping_at=NOW() WHERE id=$3",
-        [health, reason, req.params.id]
+        "UPDATE provider_nodes SET last_health_status=$1, last_health_reason=$2, last_ping_at=NOW() WHERE id=$3 AND tenant=$4 AND fleet=$5",
+        [health, reason, req.params.id, req.migrationScope.tenant, req.migrationScope.fleet]
       );
       res.json({ ...result, health, reason });
     } catch (err) {
-      await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [req.params.id]);
+      await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1 AND tenant=$2 AND fleet=$3", [req.params.id, req.migrationScope.tenant, req.migrationScope.fleet]);
       res.json({ ok: false, error: err.message });
     }
   } catch (err) {
@@ -305,9 +309,10 @@ router.patch("/:id", async (req, res, next) => {
     await ensureNodeTable();
     const { is_active } = req.body;
     const { rows } = await pool.query(
-      "UPDATE provider_nodes SET is_active=COALESCE($1,is_active) WHERE id=$2 RETURNING *",
-      [is_active, req.params.id]
+      "UPDATE provider_nodes SET is_active=COALESCE($1,is_active) WHERE id=$2 AND tenant=$3 AND fleet=$4 RETURNING *",
+      [is_active, req.params.id, req.migrationScope.tenant, req.migrationScope.fleet]
     );
+    if (!rows[0]) return res.status(404).json({ error: "Node not found in authorized fleet" });
     res.json(rows[0]);
   } catch (err) {
     next(err);
@@ -317,7 +322,8 @@ router.patch("/:id", async (req, res, next) => {
 router.delete("/:id", async (req, res, next) => {
   try {
     await ensureNodeTable();
-    await pool.query("DELETE FROM provider_nodes WHERE id=$1", [req.params.id]);
+    const deleted = await pool.query("DELETE FROM provider_nodes WHERE id=$1 AND tenant=$2 AND fleet=$3 RETURNING id", [req.params.id, req.migrationScope.tenant, req.migrationScope.fleet]);
+    if (!deleted.rowCount) return res.status(404).json({ error: "Node not found in authorized fleet" });
     res.json({ ok: true });
   } catch (err) {
     next(err);

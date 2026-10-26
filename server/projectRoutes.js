@@ -1,7 +1,10 @@
 const express = require("express");
 const { pool } = require("./db");
+const { requireAuthenticatedScope } = require("./migrationSafety");
 
 const router = express.Router();
+// The staging schema and server scope must be verified before reading/writing projects.
+router.use(requireAuthenticatedScope);
 
 let _tableReady = false;
 
@@ -32,7 +35,7 @@ async function ensureProjectTable() {
 router.get("/", async (req, res, next) => {
   try {
     await ensureProjectTable();
-    const tenant = req.tenant || 'admin';
+    const { tenant, fleet } = req.migrationScope;
     const { rows } = await pool.query(`
       SELECT
         COALESCE(p.name, d.project_name, 'No Project') AS project_name,
@@ -42,11 +45,11 @@ router.get("/", async (req, res, next) => {
         COUNT(d.id) FILTER (WHERE d.global_status='working')::int AS working,
         COUNT(d.id) FILTER (WHERE d.global_status='warning')::int AS warning,
         COUNT(d.id) FILTER (WHERE d.global_status='blocked')::int AS blocked
-      FROM (SELECT * FROM projects WHERE tenant=$1) p
-      FULL OUTER JOIN (SELECT * FROM domains WHERE tenant=$1) d ON d.project_name = p.name
+      FROM (SELECT * FROM projects WHERE tenant=$1 AND fleet=$2) p
+      FULL OUTER JOIN (SELECT * FROM domains WHERE tenant=$1 AND fleet=$2) d ON d.project_name = p.name
       GROUP BY COALESCE(p.name, d.project_name, 'No Project')
       ORDER BY total DESC, project_name ASC
-    `, [tenant]);
+    `, [tenant, fleet]);
     res.json(rows);
   } catch (err) {
     next(err);
@@ -59,15 +62,15 @@ router.post("/", async (req, res, next) => {
     const name = String(req.body.name || "").trim();
     const notes = String(req.body.notes || "").trim();
     if (!name) return res.status(400).json({ error: "Project name required" });
-    const existing = await pool.query("SELECT name FROM projects WHERE LOWER(name)=LOWER($1)", [name]);
+    const existing = await pool.query("SELECT name FROM projects WHERE LOWER(name)=LOWER($1) AND tenant=$2 AND fleet=$3", [name, req.migrationScope.tenant, req.migrationScope.fleet]);
     if (existing.rowCount > 0) {
       return res.status(409).json({ error: `A project named "${existing.rows[0].name}" already exists` });
     }
     let rows;
     try {
       ({ rows } = await pool.query(
-        `INSERT INTO projects (name, notes, tenant) VALUES ($1,$2,$3) RETURNING *`,
-        [name, notes, req.tenant || 'admin']
+        `INSERT INTO projects (name, notes, tenant, fleet) VALUES ($1,$2,$3,$4) RETURNING *`,
+        [name, notes, req.migrationScope.tenant, req.migrationScope.fleet]
       ));
     } catch (insertErr) {
       if (insertErr.code === "23505") {
@@ -81,86 +84,13 @@ router.post("/", async (req, res, next) => {
   }
 });
 
-router.patch("/:name", async (req, res, next) => {
-  try {
-    await ensureProjectTable();
-    const oldName = String(req.params.name || "").trim();
-    const newName = String(req.body.name || "").trim();
-    if (!oldName || !newName) return res.status(400).json({ error: "Old and new project names required" });
-    if (oldName === newName) return res.json({ ok: true });
-
-    const existing = await pool.query(
-      "SELECT name FROM projects WHERE LOWER(name)=LOWER($1) AND LOWER(name)!=LOWER($2)",
-      [newName, oldName]
-    );
-    if (existing.rowCount > 0) {
-      return res.status(409).json({ error: `A project named "${existing.rows[0].name}" already exists` });
-    }
-
-    const client = await pool.connect();
-    try {
-      await client.query("BEGIN");
-
-      try {
-        await client.query("UPDATE projects SET name=$1 WHERE name=$2", [newName, oldName]);
-      } catch (updateErr) {
-        await client.query("ROLLBACK");
-        client.release();
-        if (updateErr.code === "23505") {
-          return res.status(409).json({ error: `A project named "${newName}" already exists` });
-        }
-        throw updateErr;
-      }
-      await client.query("UPDATE domains SET project_name=$1 WHERE project_name=$2", [newName, oldName]);
-
-      try {
-        await client.query("UPDATE seo_score_history SET project_name=$1 WHERE project_name=$2", [newName, oldName]);
-      } catch (_) {}
-
-      try {
-        await client.query("UPDATE suggestion_completions SET project_name=$1 WHERE project_name=$2", [newName, oldName]);
-      } catch (_) {}
-
-      try {
-        await client.query("UPDATE rank_keyword_groups SET project_name=$1 WHERE project_name=$2", [newName, oldName]);
-      } catch (_) {}
-
-      try {
-        await client.query("UPDATE project_telegram_groups SET project_name=$1 WHERE project_name=$2", [newName, oldName]);
-      } catch (_) {}
-
-      try {
-        await client.query(
-          `UPDATE analytics_cache
-           SET cache_key = REPLACE(cache_key, $1, $2)
-           WHERE cache_key LIKE $3`,
-          [oldName, newName, `%_${oldName}`]
-        );
-      } catch (_) {}
-
-      await client.query("COMMIT");
-    } catch (err) {
-      await client.query("ROLLBACK");
-      throw err;
-    } finally {
-      client.release();
-    }
-
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
-
-router.delete("/:name", async (req, res, next) => {
-  try {
-    await ensureProjectTable();
-    const name = String(req.params.name || "").trim();
-    await pool.query("DELETE FROM projects WHERE name=$1", [name]);
-    res.json({ ok: true });
-  } catch (err) {
-    next(err);
-  }
-});
+// Renames/deletes cascade into some historical tables that lack tenant/fleet.
+// Until reviewed schema migrations and mapping cover those tables, fail closed.
+router.patch("/:name", (req, res) => res.status(503).json({
+  error: "Project rename disabled until all dependent tables support tenant/fleet scope"
+}));
+router.delete("/:name", (req, res) => res.status(503).json({
+  error: "Project delete disabled until all dependent tables support tenant/fleet scope"
+}));
 
 module.exports = router;
