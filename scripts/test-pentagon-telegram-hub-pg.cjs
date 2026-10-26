@@ -235,7 +235,7 @@ async function main(){
   await test("Independent merchant TrustPositif and Google Rank reports stay isolated",async()=>{
     const queued=await call(route+"/report/send-now","POST",{});
     assert.equal(queued.status,202);
-    assert.equal(queued.data.pages,2);
+    assert.equal(queued.data.queued,2);
     const {rows}=await pool.query(
       "SELECT tenant,chat_id,kind,message FROM telegram_hub_report_outbox ORDER BY id");
     assert.equal(rows.length,2);
@@ -286,7 +286,7 @@ async function main(){
       {digest_enabled:false,rank_report:true},"merchant_b")).status,200);
     const queued=await call(route+"/report/send-now","POST",{},"merchant_b");
     assert.equal(queued.status,202);
-    assert.equal(queued.data.pages,1);
+    assert.equal(queued.data.queued,1);
     const data=(await pool.query("SELECT tenant,chat_id,kind,message FROM telegram_hub_report_outbox "+
       "WHERE tenant='merchant_b'")).rows;
     assert.equal(data.length,1);
