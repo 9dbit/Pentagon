@@ -175,6 +175,7 @@ async function main(){
     assert.equal(other.data.preferences_saved,false);
     assert.equal(other.data.preferences.interval_minutes,60);
     assert.equal(other.data.preferences.immediate_alert,true);
+    assert.equal(other.data.preferences.rank_report,true,"Google Rank enabled by default for new merchant");
   });
   await test("Only authenticated Super Admin can generate group setup token",async()=>{
     assert.equal((await call(adminRoute+"/setup","POST",{tenant:"merchant_a"})).status,403);
