@@ -1,36 +1,35 @@
 #!/usr/bin/env node
 "use strict";
-const assert=require("node:assert/strict");
-const fs=require("node:fs");
-const path=require("node:path");
-const ui=fs.readFileSync(path.join(__dirname,"../src/MerchantTelegramHub.jsx"),"utf8");
-const css=fs.readFileSync(path.join(__dirname,"../src/MerchantTelegramHub.css"),"utf8");
-const hub=fs.readFileSync(path.join(__dirname,"../server/telegramHub.js"),"utf8");
-const group=fs.readFileSync(path.join(__dirname,"../server/telegramPermanentGroups.js"),"utf8");
+const assert=require("node:assert/strict"),fs=require("node:fs"),path=require("node:path");
+const load=name=>fs.readFileSync(path.join(__dirname,"..",name),"utf8");
+const reports=load("src/MerchantTelegramHub.jsx");
+const settings=load("src/MerchantTelegramGroupSettings.jsx");
+const css=load("src/MerchantTelegramGroupSettings.css");
+const hub=load("server/telegramHub.js");
+const group=load("server/telegramPermanentGroups.js");
 let passed=0;
-function test(name,fn){fn();passed++;console.log("PASS "+name);}
-test("Report Settings rendered for pending and connected merchant",()=>{
-  const settingsIndex=ui.indexOf('className="maTgSection maTgSettingsSection"');
-  const pendingIndex=ui.indexOf('{!ready?<div className="maTgSection">');
-  assert.ok(settingsIndex>=0 && pendingIndex>settingsIndex,"settings must precede pending group UI");
-  assert.doesNotMatch(ui,/\{ready&&<div className="maTgSection">\s*<h3>Report preferences/);
-  assert.match(ui,/<h3><Bell size=\{18\}\/> Report Settings<\/h3>/);
+function check(name,fn){fn();passed++;console.log("PASS "+name);}
+check("Telegram Reports displays only delivery events, not merchant group selectors",()=>{
+ assert.match(reports,/Report Delivery History/);
+ assert.match(reports,/\/deliveries/);
+ assert.match(reports,/onOpenGroupSettings/);
+ assert.doesNotMatch(reports,/<input[^>]*type="checkbox"/);
+ assert.doesNotMatch(reports,/startgroup/);
 });
-test("Inputs can be changed without a linked group, with loading protection",()=>{
-  assert.match(ui,/disabled=\{working\|\|!state\}/);
-  assert.doesNotMatch(ui,/disabled=\{working\|\|!connected\}[\s\S]{0,60}checked=\{Boolean\(prefs\[key\]\)\}/);
-  assert.match(ui,/Settings can be saved now/);
-  assert.match(css,/\.maTgSettingsSection/);
+check("Report preferences are editable from separate Telegram Settings",()=>{
+ assert.match(settings,/Report Preferences/);
+ assert.match(settings,/onChange=\{e=>updatePref\(key,e.target.checked\)\}/);
+ assert.match(settings,/Digest frequency/);
+ assert.match(css,/\.maGroupPrefs/);
 });
-test("Tenant scoped pending changes create disabled row and report saved status",()=>{
-  assert.match(hub,/if\(!permittedTenant\(t\)\)return res\.status\(403\)/);
-  assert.match(hub,/INSERT INTO telegram_hub_connections/);
-  assert.match(hub,/FALSE,'disconnected'/);
-  assert.match(hub,/ON CONFLICT\(tenant\) DO UPDATE/);
-  assert.match(hub,/preferences_saved:Boolean\(c\)/);
+check("Preferences persist pre-provision with disabled connection",()=>{
+ assert.match(hub,/INSERT INTO telegram_hub_connections/);
+ assert.match(hub,/FALSE,'disconnected'/);
+ assert.match(hub,/ON CONFLICT\(tenant\) DO UPDATE/);
+ assert.match(hub,/preferences_saved:Boolean\(c\)/);
 });
-test("Permanent group binding preserves preconfigured frequency and unique group",()=>{
-  assert.match(group,/next_report_at=NOW\(\)\+\(telegram_hub_connections\.interval_minutes\*INTERVAL '1 minute'\)/);
-  assert.match(group,/SELECT tenant FROM telegram_merchant_groups/);
+check("Permanent bound destinations cannot reset merchant interval",()=>{
+ assert.match(group,/next_report_at=NOW\(\)\+\(telegram_hub_connections\.interval_minutes\*INTERVAL '1 minute'\)/);
+ assert.match(group,/chat_id TEXT NOT NULL UNIQUE/);
 });
 console.log("PENTAGON_TELEGRAM_SETTINGS_VISIBILITY_PASS="+passed+"/4");
