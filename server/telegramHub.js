@@ -120,6 +120,9 @@ async function ensureTables(db = pool) {
     // Existing production tables predate group-name metadata. Additive only.
     await db.query("ALTER TABLE telegram_hub_links ADD COLUMN IF NOT EXISTS claimed_chat_title TEXT");
     await db.query("ALTER TABLE telegram_hub_connections ADD COLUMN IF NOT EXISTS chat_title TEXT");
+    // Existing production tables were created with rank_report=false. Change only
+    // the default; explicit merchant choices in existing rows remain unchanged.
+    await db.query("ALTER TABLE telegram_hub_connections ALTER COLUMN rank_report SET DEFAULT TRUE");
     await db.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_hub_unique_connected_group ON telegram_hub_connections(chat_id) WHERE enabled=TRUE AND status='connected' AND chat_type IN ('group','supergroup') AND chat_id IS NOT NULL");
     await db.query("CREATE TABLE IF NOT EXISTS telegram_hub_webhook_updates (update_id BIGINT PRIMARY KEY, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_links_tenant ON telegram_hub_links(tenant,requester_email,created_at DESC)");
