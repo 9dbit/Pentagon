@@ -117,16 +117,16 @@ async function queueMerchantReport(tenant, db=pool, options={}) {
     const messages=[],now=new Date();
     if(conn.digest_enabled){
       const domains=await trustRows(tenant,tx);
-      const [nodes,observations]=await Promise.all([
-        providerRows(tx),networkObservations(domains,tx)
-      ]);
+      // One PostgreSQL transaction client must run queries sequentially.
+      const nodes=await providerRows(tx);
+      const observations=await networkObservations(domains,tx);
       for(const message of trustPositifReportPages(tenant,domains,nodes,observations,now))
         messages.push({kind:"trustpositif_summary",message});
     }
     if(conn.rank_report){
-      const [ranking,nodes,snapshots]=await Promise.all([
-        rankRows(tenant,tx),providerRows(tx),rankSnapshots(tenant,tx)
-      ]);
+      const ranking=await rankRows(tenant,tx);
+      const nodes=await providerRows(tx);
+      const snapshots=await rankSnapshots(tenant,tx);
       for(const message of rankReportPages(tenant,ranking,nodes,snapshots,now))
         messages.push({kind:"google_rank",message});
     }
