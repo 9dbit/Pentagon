@@ -4,6 +4,8 @@
 // dashboard-confirmed Telegram connection. No cross-tenant joins are allowed.
 const { pool } = require("./db");
 const { ensureTables, hubEnabled, tg } = require("./telegramHub");
+const {trustRows,providerRows,networkObservations,rankRows,rankSnapshots} = require("./telegramMerchantReportData");
+const {trustPositifReportPages,rankReportPages} = require("./telegramMerchantReportFormats");
 let ticking = false;
 
 function esc(x) {
@@ -88,41 +90,59 @@ async function queueMerchantReport(tenant, db=pool, options={}) {
   try {
     await tx.query("BEGIN");
     const {rows}=await tx.query(
-      "SELECT c.tenant,c.chat_id,c.interval_minutes,c.next_report_at "+
+      "SELECT c.tenant,c.chat_id,c.interval_minutes,c.next_report_at,"+
+      "c.digest_enabled,c.rank_report "+
       "FROM telegram_hub_connections c "+
       "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
       "WHERE c.tenant=$1 AND c.enabled=TRUE "+
-      "AND c.status='connected' AND c.digest_enabled=TRUE AND c.chat_id IS NOT NULL FOR UPDATE OF c",
+      "AND c.status='connected' AND (c.digest_enabled=TRUE OR c.rank_report=TRUE) "+
+      "AND c.chat_id IS NOT NULL FOR UPDATE OF c",
       [tenant]
     );
     const conn=rows[0];
-    if(!conn){
+    if(!conn){await tx.query("ROLLBACK");return 0;}
+    if(!options.force && new Date(conn.next_report_at).getTime()>Date.now()){
       await tx.query("ROLLBACK");return 0;
     }
-    if(!options.force&&new Date(conn.next_report_at).getTime()>Date.now()){
-      await tx.query("ROLLBACK");return 0;
-    }
-    // Explicit Send Now is rate limited, including failed/pending sends.
+    // One button press schedules both selected reports as separate messages.
+    // Treat pending/failed attempts as recent to prevent forced duplicate sends.
     if(options.force){
-      const recent=await tx.query("SELECT id FROM telegram_hub_report_outbox "+
-        "WHERE tenant=$1 AND kind='digest' AND created_at>NOW()-INTERVAL '60 seconds' LIMIT 1",[tenant]);
-      if(recent.rows.length){
-        await tx.query("ROLLBACK");return 0;
-      }
+      const recent=await tx.query(
+        "SELECT id FROM telegram_hub_report_outbox WHERE tenant=$1 "+
+        "AND kind IN ('digest','trustpositif_summary','google_rank') "+
+        "AND created_at>NOW()-INTERVAL '60 seconds' LIMIT 1",[tenant]
+      );
+      if(recent.rows.length){await tx.query("ROLLBACK");return 0;}
     }
-    const reportRows=await whitelistForTenant(tenant,tx);
-    const pages=buildReportPages(tenant,reportRows,new Date());
-    for(const message of pages){
+    const messages=[],now=new Date();
+    if(conn.digest_enabled){
+      const domains=await trustRows(tenant,tx);
+      // One PostgreSQL transaction client must run queries sequentially.
+      const nodes=await providerRows(tx);
+      const observations=await networkObservations(domains,tx);
+      for(const message of trustPositifReportPages(tenant,domains,nodes,observations,now))
+        messages.push({kind:"trustpositif_summary",message});
+    }
+    if(conn.rank_report){
+      const ranking=await rankRows(tenant,tx);
+      const nodes=await providerRows(tx);
+      const snapshots=await rankSnapshots(tenant,tx);
+      for(const message of rankReportPages(tenant,ranking,nodes,snapshots,now))
+        messages.push({kind:"google_rank",message});
+    }
+    for(const item of messages){
       await tx.query(
         "INSERT INTO telegram_hub_report_outbox(tenant,chat_id,kind,message) "+
-        "VALUES($1,$2,'digest',$3)",
-        [tenant,conn.chat_id,message]
+        "VALUES($1,$2,$3,$4)",
+        [tenant,conn.chat_id,item.kind,item.message]
       );
     }
-    await tx.query("UPDATE telegram_hub_connections SET next_report_at=NOW()+($2::int*INTERVAL '1 minute'),"+
-      "updated_at=NOW() WHERE tenant=$1",[tenant,conn.interval_minutes]);
+    await tx.query(
+      "UPDATE telegram_hub_connections SET next_report_at=NOW()+($2::int*INTERVAL '1 minute'),"+
+      "updated_at=NOW() WHERE tenant=$1",[tenant,conn.interval_minutes]
+    );
     await tx.query("COMMIT");
-    return pages.length;
+    return messages.length;
   }catch(err){await tx.query("ROLLBACK").catch(()=>{});throw err;}
   finally{tx.release();}
 }
@@ -155,9 +175,13 @@ async function drainReportOutbox(db=pool,limit=3) {
     );
     if(connections.length){
       try{
+        const button=row.kind==="google_rank"?"📊 Google Rank":
+          row.kind==="trustpositif_summary"?"🛡️ Trust Positif":"🔍 Pentagon Dashboard";
         await tg("sendMessage",{
           chat_id:row.chat_id,text:row.message,
-          parse_mode:"HTML",disable_web_page_preview:true
+          parse_mode:"HTML",disable_web_page_preview:true,
+          protect_content:true,
+          reply_markup:{inline_keyboard:[[{text:button,url:"https://pentagon.quest"}]]}
         },12000);
         result={status:"sent",code:""};
       }catch(e){result=classifyTelegramError(e,row.attempts);}
@@ -198,7 +222,8 @@ async function tickTelegramHub(db=pool) {
     const {rows}=await db.query(
       "SELECT c.tenant FROM telegram_hub_connections c "+
       "JOIN telegram_merchant_groups g ON g.tenant=c.tenant AND g.chat_id=c.chat_id "+
-      "WHERE c.enabled=TRUE AND c.status='connected' AND c.digest_enabled=TRUE "+
+      "WHERE c.enabled=TRUE AND c.status='connected' "+
+      "AND (c.digest_enabled=TRUE OR c.rank_report=TRUE) "+
       "AND c.next_report_at<=NOW() ORDER BY c.next_report_at LIMIT 5"
     );
     let queued=0;

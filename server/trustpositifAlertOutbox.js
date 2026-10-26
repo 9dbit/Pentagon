@@ -71,7 +71,7 @@ function formatEventMessage({ domain, tenant, project, eventType, nodes = [], co
   const uniqueProviders = [...new Set(nodes.map(n => String(n.provider || "").trim()).filter(Boolean))];
   const names = nodes.map(n => n.name || String(n.id)).filter(Boolean);
   return [
-    blocked ? "<b>PENTAGON SECURITY ALERT</b>" : "<b>PENTAGON TRUSTPOSITIF UPDATE</b>",
+    blocked ? "🚨 <b>PENTAGON SECURITY ALERT</b>" : "🛡️ <b>PENTAGON TRUSTPOSITIF UPDATE</b>",
     "",
     "<b>Status:</b> " + (blocked ? "BLOCKED (official registry + node quorum)" : "REGISTRY DELISTED (network not yet cleared)"),
     "<b>Domain:</b> <code>" + escapeHtml(domain) + "</code>",
@@ -188,7 +188,12 @@ async function deliverTelegram(message, entry = null, options = {}) {
   try {
     const response = await (options.transport || axios).post("https://api.telegram.org/bot" + token + "/sendMessage", {
       chat_id:chatId, text:String(message).slice(0,3900), parse_mode:"HTML",
-      disable_web_page_preview:true
+      disable_web_page_preview:true,
+      ...(entry?.event_type ? {
+        protect_content:true,
+        reply_markup:{inline_keyboard:[[{text:"🛡️ Review Defence Center",
+          url:"https://pentagon.quest"}]]}
+      } : {})
     }, { timeout:12000, validateStatus:() => true });
     const status = Number(response.status || 0);
     const payload = response.data || {};

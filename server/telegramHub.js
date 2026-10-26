@@ -92,7 +92,7 @@ async function ensureTables(db = pool) {
       "interval_minutes INTEGER NOT NULL DEFAULT 60,",
       "digest_enabled BOOLEAN NOT NULL DEFAULT TRUE,",
       "immediate_alert BOOLEAN NOT NULL DEFAULT TRUE, recovery_alert BOOLEAN NOT NULL DEFAULT TRUE,",
-      "node_warning BOOLEAN NOT NULL DEFAULT TRUE, rank_report BOOLEAN NOT NULL DEFAULT FALSE,",
+      "node_warning BOOLEAN NOT NULL DEFAULT TRUE, rank_report BOOLEAN NOT NULL DEFAULT TRUE,",
       "next_report_at TIMESTAMPTZ NOT NULL DEFAULT NOW()+INTERVAL '60 minutes',",
       "connected_at TIMESTAMPTZ, last_report_at TIMESTAMPTZ, last_delivery_at TIMESTAMPTZ,",
       "last_delivery_status TEXT NOT NULL DEFAULT 'not_tested',",
@@ -120,6 +120,9 @@ async function ensureTables(db = pool) {
     // Existing production tables predate group-name metadata. Additive only.
     await db.query("ALTER TABLE telegram_hub_links ADD COLUMN IF NOT EXISTS claimed_chat_title TEXT");
     await db.query("ALTER TABLE telegram_hub_connections ADD COLUMN IF NOT EXISTS chat_title TEXT");
+    // Existing production tables were created with rank_report=false. Change only
+    // the default; explicit merchant choices in existing rows remain unchanged.
+    await db.query("ALTER TABLE telegram_hub_connections ALTER COLUMN rank_report SET DEFAULT TRUE");
     await db.query("CREATE UNIQUE INDEX IF NOT EXISTS idx_hub_unique_connected_group ON telegram_hub_connections(chat_id) WHERE enabled=TRUE AND status='connected' AND chat_type IN ('group','supergroup') AND chat_id IS NOT NULL");
     await db.query("CREATE TABLE IF NOT EXISTS telegram_hub_webhook_updates (update_id BIGINT PRIMARY KEY, received_at TIMESTAMPTZ NOT NULL DEFAULT NOW())");
     await db.query("CREATE INDEX IF NOT EXISTS idx_hub_links_tenant ON telegram_hub_links(tenant,requester_email,created_at DESC)");
@@ -249,7 +252,7 @@ function createMerchantTelegramHubRouter(db = pool) {
         immediate_alert:c?.immediate_alert??true,
         recovery_alert:c?.recovery_alert??true,
         node_warning:c?.node_warning??true,
-        rank_report:c?.rank_report??false,
+        rank_report:c?.rank_report??true,
         interval_minutes:c?.interval_minutes||60
       }
     });
@@ -552,6 +555,13 @@ async function startTelegramHub() {
       const run=()=>tickTelegramHub().catch(e=>console.warn("[Telegram Hub] report tick unavailable",String(e.code||"DB_UNAVAILABLE").slice(0,30)));
       const first=setTimeout(run,15000);first.unref?.();
       const timer=setInterval(run,60000);timer.unref?.();
+      // Independent bounded merchant VPS rank scanner. The full legacy
+      // scheduler remains off; scans run only for tenant-verified report groups.
+      const {runMerchantRankScans}=require("./telegramMerchantRankScanner");
+      const runRanks=()=>runMerchantRankScans().catch(e=>
+        console.warn("[Merchant Rank Auto] unavailable",String(e.code||"SCAN_UNAVAILABLE").slice(0,36)));
+      const firstRanks=setTimeout(runRanks,45000);firstRanks.unref?.();
+      const rankTimer=setInterval(runRanks,300000);rankTimer.unref?.();
     }
   }catch(e){
     initialized=false;
