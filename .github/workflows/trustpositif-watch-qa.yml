@@ -22,6 +22,8 @@ on:
       - "scripts/test-pentagon-customer-viewer-pg.cjs"
       - "scripts/test-pentagon-test-account-auth.cjs"
       - "server/nodeChecker.js"
+      - "server/agentPollRoutes.js"
+      - "scripts/test-pentagon-polling-evidence-guard.cjs"
       - "server/index.js"
       - "src/TrustPositif*"
       - "src/trust-alert-notification.css"
@@ -76,6 +78,8 @@ jobs:
           node --check server/trustpositifWatch.js
           node --check server/trustpositifRoutes.js
           node --check server/nodeChecker.js
+          node --check server/agentPollRoutes.js
+          node --check scripts/test-pentagon-polling-evidence-guard.cjs
           node --check server/scheduler.js
           node --check server/trustpositifAlertOutbox.js
           node --check server/trustpositifReadiness.js
@@ -95,6 +99,8 @@ jobs:
           node --check scripts/test-pentagon-activation-review.cjs
           node --check scripts/pentagon-admin-activation-preview.cjs
           node --check scripts/test-pentagon-admin-activation-preview.cjs
+      - name: Provider node evidence and heartbeat safety
+        run: node scripts/test-pentagon-polling-evidence-guard.cjs
       - name: Source circuit breaker and scoped worker security contract
         run: node scripts/test-pentagon-trustpositif-source-backoff.cjs
       - name: Postgres synthetic whitelist and two-node consensus integration
