@@ -77,7 +77,7 @@ async function whitelistForTenant(tenant, db=pool) {
     "JOIN rank_keyword_groups g ON g.id=k.group_id",
     "JOIN domains d ON LOWER(TRIM(d.domain))=LOWER(TRIM(k.domain)) AND d.tenant=g.tenant",
     "WHERE g.tenant=$1 AND g.is_active=TRUE AND k.is_whitelisted=TRUE AND d.is_active=TRUE",
-    "ORDER BY LOWER(TRIM(k.domain)),d.last_checked_at DESC NULLS LAST LIMIT 2000"
+    "ORDER BY LOWER(TRIM(k.domain)),d.last_checked_at DESC NULLS LAST"
   ].join(" ");
   return (await db.query(q,[tenant])).rows;
 }
