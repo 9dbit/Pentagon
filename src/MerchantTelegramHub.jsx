@@ -82,6 +82,9 @@ export default function MerchantTelegramHub(){
     const timer=setInterval(check,3000);
     return ()=>{live=false;clearInterval(timer);};
   },[link?.request_id]);
+  useEffect(()=>{
+    if(state?.identity_hint)setUsername(value=>value||"@"+state.identity_hint);
+  },[state?.identity_hint]);
   useEffect(()=>()=>stopCamera(),[stopCamera]);
   async function action(path,method,body,success){
     setWorking(true);setError("");setMessage("");
