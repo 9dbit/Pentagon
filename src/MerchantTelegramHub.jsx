@@ -22,9 +22,9 @@ const dateWib=value=>value
 const options=[
   ["immediate_alert","Blocked alert","Only after independent provider and registry confirmation"],
   ["recovery_alert","Registry delisted","Official delisting, not a blanket guarantee of connectivity"],
-  ["digest_enabled","Whitelist report","Only active domains belonging to this merchant"],
+  ["digest_enabled","Trust Positif summary","Whitelist, checker coverage, anomalies and registry-confirmed blocked status"],
   ["node_warning","Node coverage alert","Preference saved; dedicated delivery integration is pending"],
-  ["rank_report","Google Rank report","Preference saved; dedicated delivery integration is pending"]
+  ["rank_report","Google Rank report","Keyword positions, changes and checker snapshots from stored scans"]
 ];
 
 export default function MerchantTelegramHub(){
@@ -158,8 +158,8 @@ export default function MerchantTelegramHub(){
         <button type="button" className="maTgPill" disabled={working||!connected}
           onClick={()=>action("/test","POST",{},"Test sent to your permanent group.")}><Send size={16}/> Send Test</button>
         <button type="button" className="maTgPill" disabled={working||!connected}
-          onClick={()=>action("/report/send-now","POST",{},"Whitelist report queued for your permanent group.")}>
-          <Bell size={16}/> Send report now
+          onClick={()=>action("/report/send-now","POST",{},"Selected reports queued for your permanent group.")}>
+          <Bell size={16}/> Send reports now
         </button>
       </div>
     </div>}
