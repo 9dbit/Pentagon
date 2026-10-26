@@ -42,3 +42,42 @@
 .maGroupFeedback{display:flex;gap:8px;align-items:center;border-radius:12px;padding:12px 16px;font-size:12px;background:#183428;color:#a9f3c6}
 .maGroupFeedback.error{color:#ffb3a8;background:#3d2426}
 @media(max-width:700px){.maGroupIdentity{grid-template-columns:1fr}.maGroupSetupArea{padding:18px 14px}.maGroupStep{gap:10px}.maGroupCopyRow{align-items:stretch}.maGroupCopyRow button{width:100%}.maGroupSettingsHead h2{font-size:21px}.maGroupFoot{align-items:stretch;flex-direction:column}.maGroupFoot .maGroupPill{align-self:flex-start}}
+
+/* Activate Telegram via one verified merchant identity, not via a group picker. */
+.maGroupControls{display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin-top:12px}
+.maGroupControls input{flex:1 1 230px;min-width:0;background:#0e141a;color:#f1f3f6;border:1px solid #37414d;border-radius:30px;padding:12px 16px;font:inherit;font-size:13px}
+.maGroupControls input:focus{outline:1px solid #fb861c}
+.maGroupSetupWarning{display:flex;gap:12px;align-items:flex-start;padding:14px 16px;background:#352a1c;border-radius:14px;color:#f8c48c;font-size:12px;line-height:1.6}
+.maGroupSetupWarning svg{flex-shrink:0}
+.maGroupActivation{display:grid;grid-template-columns:210px minmax(0,1fr);gap:21px;align-items:center;background:#0c1117;padding:20px;border-radius:15px;margin-top:18px}
+.maGroupActivation>div:last-child{min-width:0}
+.maGroupActivation strong,.maGroupInvitation h3{font-size:14px}
+.maGroupActivation p,.maGroupInvitation p{font-size:12px;line-height:1.65;color:#9dabb9;max-width:500px;margin:9px 0 18px}
+.maGroupActivation a{display:inline-flex;text-decoration:none}
+.maGroupQr{background:#fff;border-radius:12px;padding:12px;width:210px;height:210px;display:grid;place-items:center}
+.maGroupIdentityInput{margin-top:22px;display:flex;flex-direction:column;gap:9px}
+.maGroupIdentityInput>label{font-size:12px;font-weight:700}
+.maGroupIdentityInput small{font-size:11px;color:#94a2b0;line-height:1.5}
+.maGroupInvitation{display:flex;flex-direction:column;gap:10px;margin-top:18px;padding:18px;border-radius:14px;background:#0c1712}
+.maGroupInvitation h3{display:flex;gap:8px;align-items:center}
+.maGroupInvitation .maGroupPrimary,.maGroupInvitation .maGroupPill{align-self:flex-start}
+.maGroupPrefs{display:flex;flex-direction:column}
+.maGroupPref{display:flex;align-items:center;justify-content:space-between;gap:20px;padding:13px 0;border-bottom:1px solid #292e35}
+.maGroupPref>span{display:flex;flex-direction:column;gap:6px;min-width:0}
+.maGroupPref strong{font-size:12px}
+.maGroupPref small{font-size:11px;line-height:1.5;color:#929eab}
+.maGroupPref input{width:17px;height:17px;accent-color:#fa871d;cursor:pointer;flex-shrink:0}
+.maGroupFrequency{display:flex;gap:15px;align-items:center;justify-content:space-between;font-size:12px;font-weight:700;margin-top:18px}
+.maGroupFrequency select{border:0;border-radius:30px;padding:11px 16px;background:#252b33;color:#f1f3f6}
+.maGroupCam{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;background:rgba(0,0,0,.8);padding:16px}
+.maGroupCamContent{position:relative;width:min(500px,100%);background:#171c23;border:1px solid #323b44;border-radius:18px;padding:26px}
+.maGroupCamContent h3{display:flex;gap:8px;align-items:center;font-size:15px}
+.maGroupCamContent p{font-size:12px;color:#9dabb9}
+.maGroupCamContent video{display:block;object-fit:cover;width:100%;aspect-ratio:4/3;border-radius:13px;background:#0b1118}
+.maGroupCamClose{position:absolute;right:12px;top:11px;border:0;background:#29313b;color:#fff;width:34px;height:34px;border-radius:50%;display:grid;place-items:center;cursor:pointer}
+@media(max-width:700px){
+ .maGroupActivation{grid-template-columns:1fr;padding:15px}
+ .maGroupQr{width:100%;max-width:250px;height:auto;aspect-ratio:1}
+ .maGroupControls input,.maGroupControls .maGroupPrimary,.maGroupControls .maGroupPill{width:100%}
+ .maGroupFrequency{flex-wrap:wrap}
+}

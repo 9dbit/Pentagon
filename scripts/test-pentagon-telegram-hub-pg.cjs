@@ -13,7 +13,8 @@ process.env.TELEGRAM_BOT_TOKEN="synthetic-telegram-token-for-local-ci";
 process.env.TELEGRAM_CHAT_ID="-100999999";
 process.env.PENTAGON_CUSTOMER_VIEWERS_JSON=JSON.stringify([
   {email:"merchant-a@example.test",tenant:"merchant_a",role:"merchant_admin"},
-  {email:"merchant-b@example.test",tenant:"merchant_b",role:"merchant_admin"}
+  {email:"merchant-b@example.test",tenant:"merchant_b",role:"merchant_admin"},
+  {email:"merchant-c@example.test",tenant:"merchant_c",role:"merchant_admin"}
 ]);
 const original=process.env.DATABASE_URL||"";
 if(process.env.CI!=="true"||
@@ -25,6 +26,8 @@ let admin=null,pool=null,server=null,base="";
 const groupMap=new Map([
   ["-100700001",{title:"PENTAGON | MERCHANT_A | REPORTS",type:"supergroup"}],
   ["-100700002",{title:"PENTAGON | MERCHANT_B | REPORTS",type:"supergroup"}],
+  ["-100700003",{title:"PENTAGON | MERCHANT_C | REPORTS",type:"supergroup"}],
+  ["-100700004",{title:"PENTAGON | MERCHANT_D | REPORTS",type:"supergroup"}],
   ["-100999999",{title:"Domain Radar Staff Operations",type:"supergroup",is_forum:true}]
 ]);
 const calls=[];
@@ -117,14 +120,19 @@ async function main(){
     const persona=req.headers["x-ci-persona"];
     if(persona==="admin")req.session={isAdmin:true,isDemo:false,
       isCustomerViewer:false,tenant:"admin",adminEmail:"superadmin@example.test"};
-    else if(["merchant_a","merchant_b"].includes(persona))
+    else if(["merchant_a","merchant_b","merchant_c"].includes(persona))
       req.session={isAdmin:false,isDemo:false,isCustomerViewer:true,tenant:persona,
-        adminEmail:persona==="merchant_a"?"merchant-a@example.test":"merchant-b@example.test"};
+        adminEmail:persona==="merchant_a"?"merchant-a@example.test":persona==="merchant_b"?"merchant-b@example.test":"merchant-c@example.test"};
     next();
   });
   app.use(adminRoute,permanent.createPermanentGroupAdminRouter());
   app.use("/api/merchant/telegram-groups",permanent.createPermanentGroupMerchantRouter(pool,{
     tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+  }));
+  const activation=require("../server/telegramMerchantActivation");
+  const autoGroups=require("../server/telegramMerchantAutoProvisioner");
+  app.use("/api/merchant/telegram-onboarding",activation.createActivationRouter(pool,{
+    botName:hub.botName,tg:hub.tg
   }));
   app.use(route,hub.createMerchantTelegramHubRouter());
   app.use("/api/telegram/hub/webhook",hub.telegramHubWebhookRouter());
@@ -360,6 +368,123 @@ async function main(){
     assert.equal(current.interval_minutes,180);
     assert.equal(current.immediate_alert,true);
 
+  });
+  await test("Signup lifecycle queues one unverified tenant report group without sending a message",async()=>{
+    const inserted=await activation.prepareMerchantTenant("merchant_c","merchant-c@example.test",pool);
+    assert.equal(inserted,true);
+    assert.equal(await activation.prepareMerchantTenant("merchant_c","merchant-c@example.test",pool),true);
+    const {rows}=await pool.query(
+      "SELECT tenant,telegram_user_id,group_state FROM telegram_merchant_activations WHERE tenant='merchant_c'");
+    assert.equal(rows.length,1);
+    assert.equal(rows[0].group_state,"queued");
+    assert.equal(rows[0].telegram_user_id,null);
+    const initial=await call("/api/merchant/telegram-onboarding/status","GET",undefined,"merchant_c");
+    assert.equal(initial.status,200);
+    assert.equal(initial.data.identity_verified,false);
+    assert.equal(initial.data.group_ready,false);
+    assert.equal(initial.data.provisioner_configured,false);
+    assert.equal((await autoGroups.runProvisioning(pool,{tg:hub.tg})).status,"service_account_not_configured");
+    assert.equal((await call("/api/merchant/telegram-onboarding/activate","POST",{},"admin")).status,403);
+  });
+  await test("MTProto adapter automatically creates a dedicated private group exactly once",async()=>{
+    const created=[];
+    const adapter=async(action,data)=>{
+      created.push({action,tenant:data.tenant,title:data.title,chat_id:data.chat_id});
+      if(action==="create")return{chat_id:"-100700003"};
+      if(action==="secure")return{ok:true,chat_id:data.chat_id};
+      throw Error("Unexpected bridge call");
+    };
+    const result=await autoGroups.runProvisioning(pool,{
+      adapter,tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+    });
+    assert.equal(result.status,"created");
+    assert.equal(result.tenant,"merchant_c");
+    assert.deepEqual(created.map(x=>x.action),["create","secure"]);
+    assert.ok(created.every(x=>x.tenant==="merchant_c"));
+    const group=(await pool.query(
+      "SELECT tenant,chat_id FROM telegram_merchant_groups WHERE tenant='merchant_c'")).rows[0];
+    assert.equal(group.chat_id,"-100700003");
+    const connection=(await pool.query(
+      "SELECT status,enabled,chat_id FROM telegram_hub_connections WHERE tenant='merchant_c'")).rows[0];
+    assert.equal(connection.chat_id,"-100700003");
+    assert.equal(connection.enabled,false,"no merchant identity yet");
+    assert.equal(connection.status,"disconnected");
+    assert.equal((await autoGroups.runProvisioning(pool,{adapter,tg:hub.tg})).status,"idle");
+  });
+  await test("Telegram ID or QR is a hint, never proof of merchant account ownership",async()=>{
+    const path="/api/merchant/telegram-onboarding";
+    assert.equal((await call(path+"/identity-hint","POST",
+      {identity:"@merchantC"},"merchant_c")).status,200);
+    assert.equal((await call(path+"/identity-hint","POST",
+      {identity:"https://t.me/+OtherGroup"},"merchant_c")).status,400);
+    const qr=await call(path+"/activate","POST",{},"merchant_c");
+    assert.equal(qr.status,201);
+    assert.match(qr.data.url,/^https:\/\/t\.me\/PentagonReportTestBot\?start=pma_[A-Za-z0-9_-]{32}$/);
+    assert.ok(!qr.data.url.includes("startgroup"));
+    const deepLink=qr.data.url.split("start=")[1];
+    const wrong=await call("/api/telegram/hub/webhook","POST",{
+      update_id:10,message:{chat:{id:55555,type:"private"},
+      from:{id:55555,username:"another_user"},text:"/start "+deepLink}
+    },"anon");
+    assert.equal(wrong.status,200);
+    const statusAfterWrong=await call(path+"/status","GET",undefined,"merchant_c");
+    assert.equal(statusAfterWrong.data.identity_verified,false);
+    const good=await call("/api/telegram/hub/webhook","POST",{
+      update_id:11,message:{chat:{id:55555,type:"private"},
+      from:{id:55555,username:"merchantC"},text:"/start "+deepLink}
+    },"anon");
+    assert.equal(good.status,200);
+    const final=await call(path+"/status","GET",undefined,"merchant_c");
+    assert.equal(final.data.identity_verified,true);
+    assert.equal(final.data.group_ready,true);
+    const connection=(await pool.query(
+      "SELECT enabled,status,chat_id FROM telegram_hub_connections WHERE tenant='merchant_c'")).rows[0];
+    assert.equal(connection.enabled,true);
+    assert.equal(connection.status,"connected");
+    assert.equal(connection.chat_id,"-100700003");
+    const invitation=calls.find(c=>c.method==="sendMessage" &&
+      String(c.body.chat_id)==="55555" && String(c.body.text).includes("https://t.me/+FixtureInvite"));
+    assert.ok(invitation,"verified merchant receives the private group invite");
+    const history=await call(path+"/deliveries","GET",undefined,"merchant_c");
+    assert.equal(history.status,200);
+    assert.equal(history.data.tenant,"merchant_c");
+    assert.ok(!history.data.deliveries.some(d=>String(d).includes("merchant_a")));
+    assert.equal((await call(path+"/identity-hint","POST",
+      {identity:"@other_user"},"merchant_c")).status,409);
+  });
+  await test("Partial MTProto failure retries securing the same group, never creating another",async()=>{
+    await activation.prepareMerchantTenant("merchant_d","merchant-d@example.test",pool);
+    const operations=[];let failOnce=true;
+    const adapter=async(action,payload)=>{
+      operations.push(action+":"+payload.tenant);
+      if(action==="create")return {chat_id:"-100700004"};
+      if(action==="secure"){
+        if(failOnce){failOnce=false;throw Object.assign(new Error("Temporary error"),{code:"TEMPORARY_FAILURE"});}
+        return {ok:true};
+      }
+      throw Error("unexpected operation");
+    };
+    const first=await autoGroups.runProvisioning(pool,{
+      adapter,tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+    });
+    assert.equal(first.status,"retry");
+    const saved=(await pool.query(
+      "SELECT created_group_chat_id,group_state FROM telegram_merchant_activations WHERE tenant='merchant_d'")).rows[0];
+    assert.equal(saved.created_group_chat_id,"-100700004");
+    assert.equal(saved.group_state,"retry");
+    await pool.query("UPDATE telegram_merchant_activations SET next_provision_at=NOW() WHERE tenant='merchant_d'");
+    const second=await autoGroups.runProvisioning(pool,{
+      adapter,tg:hub.tg,opsChatId:process.env.TELEGRAM_CHAT_ID
+    });
+    assert.equal(second.status,"created");
+    assert.equal(operations.filter(x=>x==="create:merchant_d").length,1);
+    assert.equal(operations.filter(x=>x==="secure:merchant_d").length,2);
+    assert.equal((await pool.query(
+      "SELECT COUNT(*)::int n FROM telegram_merchant_groups WHERE tenant='merchant_d'")).rows[0].n,1);
+    const connection=(await pool.query(
+      "SELECT enabled,status FROM telegram_hub_connections WHERE tenant='merchant_d'")).rows[0];
+    assert.equal(connection.enabled,false);
+    assert.equal(connection.status,"disconnected");
   });
   console.log("PENTAGON_PERMANENT_TELEGRAM_E2E_PASS="+passed);
 }

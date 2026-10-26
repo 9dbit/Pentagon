@@ -28,6 +28,7 @@ const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
 const { createMerchantTelegramHubRouter, telegramHubWebhookRouter, verifyWebhookSecret } = require("./telegramHub");
 const { createPermanentGroupAdminRouter, createPermanentGroupMerchantRouter } = require("./telegramPermanentGroups");
+const {createActivationRouter,prepareMerchantTenant} = require("./telegramMerchantActivation");
 const axios = require("axios");
 const { seedDemoData } = require("./demoSeed");
 
@@ -180,6 +181,15 @@ app.post("/api/auth/login", (req, res) => {
         req.session.isCustomerViewer = true;
         req.session.tenant = viewerTenant;
         req.session.adminEmail = testAccount.email;
+        // Pentagon currently has no public merchant signup endpoint. Seed
+        // idempotent group provisioning on the first verified merchant login,
+        // until the future signup transaction calls prepareMerchantTenant().
+        const grant=require("./customerViewerAuth").customerGrantForEmail(testAccount.email);
+        if(grant?.role==="merchant_admin"){
+          prepareMerchantTenant(viewerTenant,testAccount.email).catch(err=>
+            console.warn("[Telegram Auto Groups] onboarding seed unavailable",
+              String(err.code||"UNAVAILABLE").slice(0,28)));
+        }
         return res.json({ ok: true, email: testAccount.email, isCustomerViewer: true });
       });
     }
@@ -213,6 +223,10 @@ app.post("/api/auth/logout", (req, res) => { req.session.destroy(() => { res.cle
 app.use("/api/customer", createCustomerViewerRouter());
 // Both routes rely on the existing session tenant firewall or signed Telegram webhook.
 app.use("/api/merchant/telegram-hub", createMerchantTelegramHubRouter());
+app.use("/api/merchant/telegram-onboarding", createActivationRouter(undefined,{
+  botName:require("./telegramHub").botName,
+  tg:require("./telegramHub").tg
+}));
 app.use("/api/merchant/telegram-groups", createPermanentGroupMerchantRouter(undefined,{
   tg: require("./telegramHub").tg,
   opsChatId:process.env.TELEGRAM_OPS_MAIN_CHAT_ID||require("./telegram").getTelegramConfig().chatId

@@ -1,177 +1,122 @@
-import React, { useCallback, useEffect, useState } from "react";
-import { QRCodeSVG } from "qrcode.react";
-import { Bell, CheckCircle2, CircleAlert, Copy, ExternalLink, LockKeyhole,
-  Pause, Play, RefreshCw, Send, ShieldCheck, Users } from "lucide-react";
+import React,{useCallback,useEffect,useState} from "react";
+import {Bell,CheckCircle2,Clock3,ExternalLink,RefreshCw,
+  Send,Settings2,ShieldCheck,ShieldAlert,Activity} from "lucide-react";
 import "./MerchantTelegramHub.css";
 
-async function request(url,method="GET",body){
-  const result=await fetch(url,{
-    method,credentials:"include",cache:"no-store",
-    headers:body===undefined?{}:{"Content-Type":"application/json"},
-    ...(body===undefined?{}:{body:JSON.stringify(body)})
-  });
-  const data=await result.json().catch(()=>({}));
-  if(!result.ok)throw new Error(data.error||"Telegram report unavailable");
+const endpoint="/api/merchant/telegram-onboarding";
+async function request(url){
+  const response=await fetch(url,{credentials:"include",cache:"no-store"});
+  const data=await response.json().catch(()=>({}));
+  if(!response.ok)throw new Error(data.error||"TELEGRAM_REPORT_UNAVAILABLE");
   return data;
 }
-const api=(path,method="GET",body)=>
-  request("/api/merchant/telegram-hub"+path,method,body);
-const dateWib=value=>value
+const dateWib=value=>value&&Number.isFinite(new Date(value).getTime())
   ?new Date(value).toLocaleString("id-ID",{timeZone:"Asia/Jakarta",
-      dateStyle:"medium",timeStyle:"short"})+" WIB":"Not available";
-const options=[
-  ["immediate_alert","Blocked alert","Only after independent provider and registry confirmation"],
-  ["recovery_alert","Registry delisted","Official delisting, not a blanket guarantee of connectivity"],
-  ["digest_enabled","Trust Positif summary","Whitelist, checker coverage, anomalies and registry-confirmed blocked status"],
-  ["node_warning","Node coverage alert","Preference saved; dedicated delivery integration is pending"],
-  ["rank_report","Google Rank report","Keyword positions, changes and checker snapshots from stored scans"]
-];
-
+    dateStyle:"medium",timeStyle:"short"})+" WIB":"Not available";
+const kindName={
+  google_rank:"Google Rank Report",
+  trustpositif_summary:"Trust Positif Summary",
+  tp_BLOCKED:"Confirmed BLOCKED",
+  tp_REGISTRY_DELISTED:"Registry Delisted",
+  digest:"Whitelist Report"
+};
+const statusName={
+  sent:"Delivered to Telegram",
+  pending:"Queued",retry:"Retry scheduled",sending:"Sending",
+  failed:"Failed",uncertain:"Delivery unconfirmed",
+  cancelled:"Cancelled"
+};
 export default function MerchantTelegramHub({onOpenGroupSettings}){
-  const [state,setState]=useState(null);
-  const [invite,setInvite]=useState(null);
-  const [working,setWorking]=useState(false);
-  const [message,setMessage]=useState("");
+  const [hub,setHub]=useState(null);
+  const [status,setStatus]=useState(null);
+  const [history,setHistory]=useState([]);
   const [error,setError]=useState("");
   const reload=useCallback(async()=>{
-    try{const data=await api("/status");setState(data);return data;}
-    catch(e){setError(e.message);return null;}
+    try{
+      const [h,s,d]=await Promise.all([
+        request("/api/merchant/telegram-hub/status"),
+        request(endpoint+"/status"),
+        request(endpoint+"/deliveries")
+      ]);
+      setHub(h);setStatus(s);setHistory(d.deliveries||[]);setError("");
+    }catch(e){setError(e.message);}
   },[]);
   useEffect(()=>{
-    reload();
-    const timer=setInterval(reload,30000);
-    return ()=>clearInterval(timer);
+    reload();const interval=setInterval(reload,20000);
+    return ()=>clearInterval(interval);
   },[reload]);
-  async function action(path,method,body,success){
-    setWorking(true);setError("");setMessage("");
-    try{
-      const result=await api(path,method,body);
-      setMessage(success||"Saved");
-      await reload();
-      return result;
-    }catch(e){setError(e.message);return null;}
-    finally{setWorking(false);}
-  }
-  async function openDirectInvite(){
-    setWorking(true);setError("");setMessage("");setInvite(null);
-    try{
-      const result=await request("/api/merchant/telegram-groups/invite","POST",{});
-      setInvite(result);
-    }catch(e){setError(e.message);}
-    finally{setWorking(false);}
-  }
-  const ready=state?.permanent_group_ready===true;
-  const connected=ready&&state?.connected===true&&state?.status==="connected";
-  const paused=ready&&state?.status==="paused";
-  const title=state?.permanent_group_title||("PENTAGON | "+String(state?.tenant||"MERCHANT").toUpperCase()+" | REPORTS");
-  const prefs=state?.preferences||{};
-  const updatePref=(key,value)=>action("/preferences","PATCH",{[key]:value},"Report setting saved for this merchant.");
+  const connected=Boolean(hub?.connected&&status?.identity_verified&&status?.group_ready);
+  const sent=history.filter(r=>r.status==="sent").length;
+  const latest=history.find(r=>r.status==="sent");
   return <div className="maTgHub">
-    <div className="maTgHeader">
+    <header className="maTgHeader">
       <div>
-        <div className="maTgEyebrow">PENTAGON / DEDICATED TELEGRAM REPORT</div>
+        <div className="maTgEyebrow">PENTAGON / MERCHANT DELIVERY MONITOR</div>
         <h2>Telegram Reports</h2>
-        <p>One merchant, one permanent private report group. QR always opens your own group directly, without selecting any Telegram group.</p>
+        <p>Read-only delivery timeline for {String(hub?.tenant||"your merchant").toUpperCase()}.
+          Google Rank, Trust Positif and confirmed registry alerts are sent only to your assigned private report group.</p>
       </div>
-      <span className={"maTgStatus "+(connected?"online":paused?"paused":"offline")}>
-        <span className="maTgDot"/> {connected?"Group connected":paused?"Reports paused":"Group setup pending"}
+      <span className={"maTgStatus "+(connected?"online":"offline")}>
+        <span className="maTgDot"/> {connected?"Telegram active":"Activation pending"}
       </span>
-    </div>
-    {error&&<div className="maTgFeedback error" role="alert"><CircleAlert size={15}/>{error}</div>}
-    {message&&<div className="maTgFeedback" role="status"><CheckCircle2 size={15}/>{message}</div>}
+    </header>
+    {error&&<p className="maTgFeedback error" role="alert">{error}</p>}
     <div className="maTgStats">
-      <div><span>Whitelisted domains</span><strong>{state?.whitelist_count??"—"}</strong></div>
-      <div><span>Report destination</span><strong>{ready?title:"Awaiting dedicated group"}</strong></div>
-      <div><span>Last report</span><strong>{dateWib(state?.last_report_at)}</strong></div>
-      <div><span>Delivery</span><strong>{state?.last_delivery_status||"Not tested"}</strong></div>
+      <div><span>Merchant</span><strong>{String(hub?.tenant||"—").toUpperCase()}</strong></div>
+      <div><span>Assigned group</span><strong>{status?.group_title||"Not assigned"}</strong></div>
+      <div><span>Delivered (last 30 events)</span><strong>{sent}</strong></div>
+      <div><span>Last successful delivery</span><strong>{dateWib(latest?.sent_at)}</strong></div>
     </div>
-    <div className="maTgSection maTgSettingsSection" aria-label="Telegram report settings">
-      <div className="maTgSettingsHeading">
-        <div>
-          <h3><Bell size={18}/> Report Settings</h3>
-          <p>Configure report types and delivery frequency for {String(state?.tenant||"your merchant").toUpperCase()}.</p>
-        </div>
-        <span className="maTgSettingsState">{state?.preferences_saved?"Preferences saved":"Default preferences"}</span>
-      </div>
-      {!ready&&<p className="maTgSettingsNotice">
-        Settings can be saved now. Delivery starts only after your merchant’s permanent group is verified.
-      </p>}
-      <div className="maTgOptions">{options.map(([key,name,description])=>
-        <label key={key} className="maTgOption">
-          <span><strong>{name}</strong><small>{description}</small></span>
-          <input type="checkbox" disabled={working||!state}
-            checked={Boolean(prefs[key])} onChange={e=>updatePref(key,e.target.checked)}/>
-        </label>)}
-      </div>
-      <label className="maTgInterval">Digest frequency
-        <select disabled={working||!state} value={prefs.interval_minutes||60}
-          onChange={e=>updatePref("interval_minutes",Number(e.target.value))}>
-          {[10,30,60,180,1440].map(n=><option value={n} key={n}>
-            {n<60?n+" minutes":n===1440?"Daily":n/60+" hour"+(n>60?"s":"")}
-          </option>)}
-        </select>
-      </label>
-      <p className="maTgSettingsFooter">Changes are saved to this merchant account only. No Telegram message is sent while group setup is pending.</p>
-    </div>
-    {!ready?<div className="maTgSection">
-      <h3><Users size={18}/> Preparing your permanent report group</h3>
-      <p>Open Telegram Settings to register your dedicated private group once. You will never need to select a group again when scanning a report QR.</p>
+    {!connected&&<section className="maTgSection">
+      <h3><ShieldCheck size={18}/> Activate your Telegram reports</h3>
+      <p>Activate your Telegram identity via QR, Telegram ID or camera in Telegram Settings.
+        Pentagon creates your merchant's private group automatically when its Telegram service account is configured.
+        You will not be asked to select another group.</p>
       <div className="maTgControls">
         <button type="button" className="maTgPrimary" onClick={onOpenGroupSettings}>
-          <Users size={16}/> Open Telegram Group Settings
+          <Settings2 size={16}/> Activate Telegram Report
         </button>
-        <button type="button" className="maTgPill" disabled={working} onClick={reload}>
-          <RefreshCw size={16}/> Refresh group status
-        </button>
-      </div>
-    </div>:<div className="maTgSection">
-      <h3><ShieldCheck size={19}/> {title}</h3>
-      <p>This group is permanently assigned to your merchant. Scanning the invite QR goes straight to this exact private group; there is no Telegram group picker.</p>
-      <div className="maTgControls">
-        <button className="maTgPrimary" type="button" disabled={working} onClick={openDirectInvite}>
-          <Users size={16}/> {invite?"Generate new invite QR":"Open my report group QR"}
+        <button type="button" className="maTgPill" onClick={reload}>
+          <RefreshCw size={15}/> Refresh status
         </button>
       </div>
-      {invite&&<div className="maTgActivate">
-        <div className="maTgQr" aria-label={"Direct private invite QR for "+invite.group_title}>
-          <QRCodeSVG value={invite.url} size={190} marginSize={0} level="M"/>
-        </div>
-        <div className="maTgActivateText">
-          <strong>Direct invite: {invite.group_title}</strong>
-          <p>Scan and tap Join in Telegram. No group selection. This link expires after 10 minutes and admits one member.</p>
-          <div className="maTgControls">
-            <a href={invite.url} target="_blank" rel="noreferrer" className="maTgPrimary">
-              <ExternalLink size={15}/> Open report group
-            </a>
-            <button type="button" className="maTgPill"
-              onClick={()=>navigator.clipboard?.writeText(invite.url)}><Copy size={15}/> Copy invite</button>
+    </section>}
+    <section className="maTgSection">
+      <div className="maTgDeliveryHeader">
+        <div><h3><Activity size={18}/> Report Delivery History</h3>
+          <p>Last 30 delivery events. Each status comes from the tenant-scoped Telegram outbox, not a simulated message.</p></div>
+        <button className="maTgPill" type="button" onClick={reload}>
+          <RefreshCw size={15}/> Refresh
+        </button>
+      </div>
+      <div className="maTgDeliveryList">
+        {history.map((item,i)=><div className="maTgDeliveryRow" key={i}>
+          <div className="maTgDeliveryType">
+            {item.kind==="google_rank"?<Activity size={17}/>:item.kind==="tp_BLOCKED"?<ShieldAlert size={17}/>:<Bell size={17}/>}
+            <div><strong>{kindName[item.kind]||item.kind}</strong>
+              <small>{dateWib(item.created_at)}</small></div>
           </div>
-        </div>
-      </div>}
-      <div className="maTgIdentity">
-        <div className="maTgAvatar"><Bell size={24}/></div>
-        <div><strong>{title}</strong><span>Tenant: {state?.tenant||"—"}</span>
-          <small>Group verified {dateWib(state?.permanent_group_verified_at)}</small></div>
+          <div className="maTgDeliveryState">
+            {item.status==="sent"?<CheckCircle2 size={15}/>:<Clock3 size={15}/>}
+            <span>{statusName[item.status]||item.status}</span>
+            {item.status==="sent"&&<small>{dateWib(item.sent_at)}</small>}
+          </div>
+        </div>)}
+        {!history.length&&<div className="maTgDeliveryEmpty">
+          <Send size={22}/>
+          <strong>No reports sent yet</strong>
+          <span>{connected?"The next scheduled report will appear here after delivery.":
+            "Delivery history will appear after Telegram activation and the first report."}</span>
+        </div>}
       </div>
       <div className="maTgControls">
         <button type="button" className="maTgPill" onClick={onOpenGroupSettings}>
-          <ShieldCheck size={16}/> Telegram Group Settings
+          <Settings2 size={15}/> Report preferences
         </button>
-        {paused?<button type="button" className="maTgPrimary" disabled={working}
-          onClick={()=>action("/resume","POST",{},"Merchant reports resumed.")}><Play size={16}/> Resume</button>
-          :<button type="button" className="maTgPill" disabled={working||!connected}
-          onClick={()=>action("/pause","POST",{},"Merchant reports paused.")}><Pause size={16}/> Pause</button>}
-        <button type="button" className="maTgPill" disabled={working||!connected}
-          onClick={()=>action("/test","POST",{},"Test sent to your permanent group.")}><Send size={16}/> Send Test</button>
-        <button type="button" className="maTgPill" disabled={working||!connected}
-          onClick={()=>action("/report/send-now","POST",{},"Selected reports queued for your permanent group.")}>
-          <Bell size={16}/> Send reports now
-        </button>
+        <a className="maTgPill" href="https://pentagon.quest" target="_blank" rel="noopener noreferrer">
+          <ExternalLink size={15}/> Open Pentagon Dashboard
+        </a>
       </div>
-    </div>}
-    <div className="maTgPrivacy"><LockKeyhole size={16}/>
-      Each report destination is registered once by an authenticated merchant admin or Super Admin, verified with Telegram and unique per merchant.
-      A shared operations forum is never a merchant destination. A pending setup never falls back to Domain Radar.
-    </div>
+    </section>
   </div>;
 }
