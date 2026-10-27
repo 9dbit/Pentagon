@@ -303,12 +303,12 @@ async function main(){
     assert.ok(rows.every(r=>!r.message.includes("Merchant B Secret")));
     assert.match(rows[0].message,/TRUST POSITIF REPORT/);
     assert.match(rows[0].message,/merchant-a\.example\.test/);
-    assert.match(rows[0].message,/CHECKER COVERAGE/);
+    assert.match(rows[0].message,/Healthy providers/);
     assert.match(rows[1].message,/GOOGLE RANK REPORT/);
     assert.match(rows[1].message,/Merchant A Official/);
     assert.match(rows[1].message,/#3/);
-    assert.match(rows[1].message,/↑2/);
-    assert.match(rows[1].message,/TSEL: #4/);
+    assert.match(rows[1].message,/▲ \+2/);
+    assert.match(rows[1].message,/TELKOMSEL #4/);
     assert.ok(rows.every(r=>r.message.length<4096));
     assert.ok(rows.every(r=>typeof r.rich_message?.html==="string"));
     assert.ok(rows.every(r=>r.rich_message.html.includes("<table bordered striped>")));
@@ -376,7 +376,61 @@ async function main(){
     assert.match(data[0].message,/Merchant B Secret/);
     assert.doesNotMatch(data[0].message,/Merchant A Official/);
     assert.doesNotMatch(data[0].message,/merchant-a\.example\.test/);
+    // Telegram explicitly rejected native formatting: HTML fallback is safe
+    // only after a deterministic 400 (no message was delivered).
+    richTestMode="explicit_400";
+    const before=calls.length;
     assert.equal((await reports.drainReportOutbox(pool,4)).claimed,1);
+    const emitted=calls.slice(before).filter(c=>
+      ["sendRichMessage","sendMessage"].includes(c.method));
+    assert.deepEqual(emitted.map(c=>c.method),["sendRichMessage","sendMessage"]);
+    assert.ok(emitted.every(c=>String(c.body.chat_id)==="-100700002"));
+    assert.match(emitted[1].body.text,/Merchant B Secret/);
+    assert.equal(emitted[1].body.parse_mode,"HTML");
+    const state=(await pool.query(
+      "SELECT status,attempts,last_error_code FROM telegram_hub_report_outbox "+
+      "WHERE tenant='merchant_b' ORDER BY id DESC LIMIT 1")).rows[0];
+    assert.equal(state.status,"sent");
+    assert.equal(state.attempts,1);
+    richTestMode="success";
+  });
+  await test("Ambiguous Telegram rich 5xx never falls back or produces duplicate",async()=>{
+    // Same verified merchant binding, but transport outcome is uncertain.
+    // Retrying or HTML-fallback here could duplicate an already sent message.
+    await pool.query(
+      "INSERT INTO telegram_hub_report_outbox(tenant,chat_id,kind,message,rich_message) "+
+      "VALUES($1,$2,'google_rank',$3,$4::jsonb)",
+      ["merchant_b","-100700002","<b>📊 GOOGLE RANK REPORT</b>",
+        JSON.stringify({html:"<h3>📊 GOOGLE RANK REPORT</h3><p>no duplicate</p>"})]
+    );
+    richTestMode="ambiguous_500";
+    const before=calls.length;
+    assert.equal((await reports.drainReportOutbox(pool,4)).claimed,1);
+    const sent=calls.slice(before).filter(c=>
+      ["sendRichMessage","sendMessage"].includes(c.method));
+    assert.deepEqual(sent.map(c=>c.method),["sendRichMessage"]);
+    assert.equal(String(sent[0].body.chat_id),"-100700002");
+    const last=(await pool.query(
+      "SELECT status,last_error_code FROM telegram_hub_report_outbox "+
+      "WHERE tenant='merchant_b' ORDER BY id DESC LIMIT 1")).rows[0];
+    assert.equal(last.status,"uncertain");
+    assert.equal(last.last_error_code,"HTTP_5XX_AMBIGUOUS");
+    assert.equal((await reports.drainReportOutbox(pool,4)).claimed,0);
+    richTestMode="success";
+  });
+  await test("Old HTML-only report rows remain deliverable without rich payload",async()=>{
+    await pool.query(
+      "INSERT INTO telegram_hub_report_outbox(tenant,chat_id,kind,message,rich_message) "+
+      "VALUES($1,$2,'digest','<b>LEGACY WHITELIST REPORT</b>',NULL)",
+      ["merchant_a","-100700001"]
+    );
+    const before=calls.length;
+    assert.equal((await reports.drainReportOutbox(pool,4)).claimed,1);
+    const sent=calls.slice(before).filter(c=>
+      ["sendRichMessage","sendMessage"].includes(c.method));
+    assert.deepEqual(sent.map(c=>c.method),["sendMessage"]);
+    assert.equal(String(sent[0].body.chat_id),"-100700001");
+    assert.equal(sent[0].body.parse_mode,"HTML");
   });
 
   await test("Merchant preferences retain pause and resume without reassigning group",async()=>{
