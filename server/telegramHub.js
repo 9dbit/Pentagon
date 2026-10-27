@@ -122,6 +122,8 @@ async function ensureTables(db = pool) {
     // Existing production tables predate group-name metadata. Additive only.
     await db.query("ALTER TABLE telegram_hub_links ADD COLUMN IF NOT EXISTS claimed_chat_title TEXT");
     await db.query("ALTER TABLE telegram_hub_connections ADD COLUMN IF NOT EXISTS chat_title TEXT");
+    // Additive rich rendering; old queued legacy HTML messages remain readable.
+    await db.query("ALTER TABLE telegram_hub_report_outbox ADD COLUMN IF NOT EXISTS rich_message JSONB");
     // Existing production tables were created with rank_report=false. Change only
     // the default; explicit merchant choices in existing rows remain unchanged.
     await db.query("ALTER TABLE telegram_hub_connections ALTER COLUMN rank_report SET DEFAULT TRUE");
