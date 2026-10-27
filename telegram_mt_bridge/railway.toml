@@ -1,6 +1,6 @@
 [build]
-builder = "NIXPACKS"
-buildCommand = "python -m py_compile app.py"
+builder = "DOCKERFILE"
+dockerfilePath = "/telegram_mt_bridge/Dockerfile"
 
 [deploy]
 startCommand = "uvicorn app:app --host 0.0.0.0 --port 8080"
