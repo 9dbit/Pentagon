@@ -223,7 +223,8 @@ export default function TrustPositifWatchlist() {
               status.key==="healthy" || status.key==="recovered" ? <CheckCircle2 size={13}/> : <ShieldCheck size={13}/>}
             {status.text}</span>
             <small>{nodes.length} node evidence · Registry check: {displayTime(row.registry_checked_at)}
-              {row.registry_listed===true ? " · EXACT MATCH" : row.registry_listed===false ? " · NOT LISTED" : " · UNKNOWN"}</small>
+              {row.registry_listed===true ? (row.registry_lookup_domain!==row.domain ? " · APEX MATCH" : " · EXACT MATCH") :
+                row.registry_listed===false ? " · NOT LISTED" : " · UNKNOWN"}</small>
           </div>
           <div className="tpWatchWhen">
             {status.key==="blocked" ? <span className="tpWatchTimestamp"><BellRing size={13}/> First detected: {displayTime(row.detected_at)}</span> :
@@ -238,6 +239,7 @@ export default function TrustPositifWatchlist() {
                 row.registry_listed===false ? "NOT LISTED (snapshot)" : "NOT CHECKED"}</div>
               <div><b>Registry source:</b> {row.registry_source || "Not checked"}</div>
               <div><b>Registry checked:</b> {displayTime(row.registry_checked_at)}</div>
+              <div><b>Registry lookup key:</b> {row.registry_lookup_domain || "Not checked"}{row.registry_lookup_domain && row.registry_lookup_domain!==row.domain ? " (www alias uses parent lookup)" : ""}</div>
               {row.registry_last_error && <div><b>Registry sync:</b> {row.registry_last_error}</div>}
               <div><b>BLOCKED confirmation source:</b> {row.source || "Awaiting 2 provider signals"}</div>
               <div><b>Verified at:</b> {displayTime(row.verified_at)}</div>
