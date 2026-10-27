@@ -28,6 +28,8 @@ on:
       - "scripts/test-pentagon-customer-viewer-pg.cjs"
       - "scripts/test-pentagon-test-account-auth.cjs"
       - "server/nodeChecker.js"
+      - "server/agentPollRoutes.js"
+      - "scripts/test-pentagon-node-task-safety-pg.cjs"
       - "server/index.js"
       - "src/TrustPositif*"
       - "src/trust-alert-notification.css"
@@ -86,6 +88,8 @@ jobs:
           python -m py_compile scripts/trustpositif-source-bridge.py
           node --check server/trustpositifRoutes.js
           node --check server/nodeChecker.js
+          node --check server/agentPollRoutes.js
+          node --check scripts/test-pentagon-node-task-safety-pg.cjs
           node --check server/scheduler.js
           node --check server/trustpositifAlertOutbox.js
           node --check server/trustpositifReadiness.js
@@ -111,6 +115,8 @@ jobs:
         run: node scripts/test-pentagon-trustpositif-watch-pg.cjs
       - name: PostgreSQL protected exact-registry source bridge
         run: node scripts/test-pentagon-trustpositif-source-bridge-pg.cjs
+      - name: PostgreSQL mobile checker late-result safety
+        run: node scripts/test-pentagon-node-task-safety-pg.cjs
       - name: Postgres durable TrustPositif notification outbox
         run: node scripts/test-pentagon-trustpositif-outbox-pg.cjs
       - name: PostgreSQL whitelist reconciliation readiness (strictly read only)

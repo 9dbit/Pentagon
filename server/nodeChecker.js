@@ -49,7 +49,12 @@ async function checkViaPollingNode(domain, node) {
   const started = Date.now();
   try {
     const taskId = await enqueueNodeTask(node, domain);
-    const data = await waitForNodeTask(taskId, 45000);
+    // The Android agent may spend 10-40 seconds on TLS/DNS checks after
+    // claiming a task. Keep the caller's deadline above normal execution time,
+    // but bound it so queue slots cannot be occupied indefinitely.
+    const waitMs=Math.max(60000,Math.min(120000,
+      Number(process.env.PENTAGON_NODE_CHECK_TIMEOUT_MS||90000)));
+    const data = await waitForNodeTask(taskId, waitMs);
 
     if (data.__polling_state === "timeout") {
       await pool.query("UPDATE provider_nodes SET last_health_status='waiting', last_ping_at=NOW() WHERE id=$1", [node.id]);

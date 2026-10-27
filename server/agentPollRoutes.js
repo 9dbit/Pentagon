@@ -193,35 +193,10 @@ async function upsertTelemetry(node, telemetryRaw, req) {
   }
 }
 
-function normalizeDomainStatus(status) {
-  const value = String(status || "unknown").toLowerCase().trim();
-  if (["working", "normal", "online", "ok", "success"].includes(value)) return "working";
-  if (["blocked", "block", "down", "offline"].includes(value)) return "blocked";
-  if (["warning", "warn", "timeout", "error"].includes(value)) return "warning";
-  return value || "unknown";
-}
-
-async function syncDomainStatusFromTask(taskId, node, result) {
-  const { rows } = await pool.query(
-    "SELECT domain FROM provider_node_tasks WHERE id=$1 AND node_id=$2 LIMIT 1",
-    [taskId, node.id]
-  );
-  const domain = rows[0]?.domain;
-  if (!domain) return;
-
-  const status = normalizeDomainStatus(result?.status);
-  const reason = String(result?.reason || result?.final_url || status || "checked").slice(0, 500);
-  const lastStatus = `${node.name}: ${reason}`.slice(0, 700);
-
-  await pool.query(
-    `UPDATE domains
-     SET global_status=$1,
-         last_status=$2,
-         last_checked_at=NOW()
-     WHERE domain=$3`,
-    [status, lastStatus, domain]
-  );
-}
+// A single provider-node response is raw observation only. In particular,
+// it must not write domains.global_status, which is owned by the consensus
+// scanner (two independent credible providers + exact official registry).
+// Late, failed and partial responses are not promoted into a domain verdict.
 
 async function enqueueNodeTask(node, domain, options = {}) {
   await ensureTaskTable();
@@ -235,18 +210,28 @@ async function enqueueNodeTask(node, domain, options = {}) {
   return id;
 }
 
-async function waitForNodeTask(taskId, timeoutMs = 45000) {
-  const started = Date.now();
-  while (Date.now() - started < timeoutMs) {
-    const { rows } = await pool.query("SELECT * FROM provider_node_tasks WHERE id=$1", [taskId]);
-    const task = rows[0];
-    if (!task) return { status: "warning", reason: "Polling task disappeared", __polling_state: "error" };
-    if (task.status === "done") return task.result || { status: "warning", reason: "Polling task returned empty result", __polling_state: "error" };
-    if (task.status === "error") return { status: "warning", reason: task.error || "Polling task error", __polling_state: "error" };
-    await new Promise((resolve) => setTimeout(resolve, 1000));
+async function waitForNodeTask(taskId, timeoutMs = 90000) {
+  const started=Date.now();
+  const maxWait=Math.max(1000,Math.min(120000,Number(timeoutMs)||90000));
+  while(Date.now()-started<maxWait){
+    const {rows}=await pool.query(
+      "SELECT status,result,error FROM provider_node_tasks WHERE id=$1",[taskId]);
+    const task=rows[0];
+    if(!task)return {status:"warning",reason:"Polling task disappeared",__polling_state:"error"};
+    if(task.status==="done")return task.result ||
+      {status:"warning",reason:"Polling task returned empty result",__polling_state:"error"};
+    if(task.status==="error")return {status:"warning",reason:task.error||"Polling task error",__polling_state:"error"};
+    await new Promise(resolve=>setTimeout(resolve,1000));
   }
-  await pool.query("UPDATE provider_node_tasks SET status='error', error='Node polling timeout' WHERE id=$1 AND status <> 'done'", [taskId]);
-  return { status: "warning", reason: "Node polling timeout / no response from device", __polling_state: "timeout" };
+  // Terminal state is monotonic: a timeout cannot overwrite a concurrent
+  // completion, and the late APK callback may not resurrect an expired task.
+  await pool.query(
+    "UPDATE provider_node_tasks SET status='error',error='Node polling timeout',completed_at=NOW() "+
+    "WHERE id=$1 AND status IN ('queued','claimed')",[taskId]);
+  const {rows}=await pool.query(
+    "SELECT status,result FROM provider_node_tasks WHERE id=$1",[taskId]);
+  if(rows[0]?.status==="done" && rows[0].result)return rows[0].result;
+  return {status:"warning",reason:"Node polling timeout / no response from device",__polling_state:"timeout"};
 }
 
 function providerFromOperator(operator) {
@@ -353,16 +338,23 @@ router.post("/poll", async (req, res, next) => {
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason=$1, last_ping_at=NOW() WHERE id=$2", [req.body.network_reason || "network matched", node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);
 
+    // Old unclaimed scans must not monopolize a newly connected APK.
+    await pool.query(
+      "UPDATE provider_node_tasks SET status='error',error='EXPIRED_BEFORE_POLL',completed_at=NOW() "+
+      "WHERE node_id=$1 AND status='queued' AND created_at<NOW()-INTERVAL '3 minutes'",
+      [node.id]
+    );
     const { rows } = await pool.query(
-      `UPDATE provider_node_tasks
-       SET status='claimed', claimed_at=NOW()
-       WHERE id = (
+      `WITH next_task AS (
          SELECT id FROM provider_node_tasks
          WHERE node_id=$1 AND status='queued'
          ORDER BY created_at ASC
-         LIMIT 1
+         LIMIT 1 FOR UPDATE SKIP LOCKED
        )
-       RETURNING id, domain, COALESCE(task_type,'domain_check') AS task_type, payload`,
+       UPDATE provider_node_tasks t
+       SET status='claimed', claimed_at=NOW()
+       FROM next_task WHERE t.id=next_task.id
+       RETURNING t.id,t.domain,COALESCE(t.task_type,'domain_check') AS task_type,t.payload`,
       [node.id]
     );
 
@@ -372,6 +364,16 @@ router.post("/poll", async (req, res, next) => {
     next(err);
   }
 });
+
+async function guardedCompleteTask(db,nodeId,taskId,result){
+  const saved=await db.query(
+    "UPDATE provider_node_tasks "+
+    "SET status='done',result=$1::jsonb,error=NULL,completed_at=NOW() "+
+    "WHERE id=$2 AND node_id=$3 AND status='claimed' RETURNING id",
+    [JSON.stringify(result),taskId,nodeId]
+  );
+  return Boolean(saved.rowCount);
+}
 
 router.post("/result", async (req, res, next) => {
   try {
@@ -383,10 +385,13 @@ router.post("/result", async (req, res, next) => {
 
     const result = req.body.result || {};
     const { rows: taskRows } = await pool.query(
-      "SELECT COALESCE(task_type,'domain_check') AS task_type FROM provider_node_tasks WHERE id=$1 AND node_id=$2 LIMIT 1",
+      "SELECT status FROM provider_node_tasks WHERE id=$1 AND node_id=$2 LIMIT 1",
       [taskId, node.id]
     );
-    const taskType = taskRows[0]?.task_type || "domain_check";
+    if(!taskRows[0])return res.status(404).json({error:"TASK_NOT_FOUND"});
+    // Ignore duplicated/late callbacks after the deadline or after success.
+    if(taskRows[0].status!=="claimed")
+      return res.json({ok:true,ignored:true,reason:"TASK_NO_LONGER_ACTIVE"});
 
     const { rows: healthRows } = await pool.query(
       "SELECT last_health_status, last_health_reason FROM provider_nodes WHERE id=$1 LIMIT 1",
@@ -400,7 +405,8 @@ router.post("/result", async (req, res, next) => {
 
     if (waitingBecauseNetwork) {
       await pool.query(
-        "UPDATE provider_node_tasks SET status='error', error=$1, completed_at=NOW() WHERE id=$2 AND node_id=$3",
+        "UPDATE provider_node_tasks SET status='error', error=$1, completed_at=NOW() "+
+        "WHERE id=$2 AND node_id=$3 AND status='claimed'",
         [health.last_health_reason || "wrong network", taskId, node.id]
       );
       await pool.query(
@@ -410,15 +416,10 @@ router.post("/result", async (req, res, next) => {
       return res.json({ ok: false, ignored: true, reason: health.last_health_reason || "wrong network" });
     }
 
-    await pool.query(
-      `UPDATE provider_node_tasks
-       SET status='done', result=$1::jsonb, completed_at=NOW()
-       WHERE id=$2 AND node_id=$3`,
-      [JSON.stringify(result), taskId, node.id]
-    );
-    if (taskType === "domain_check") {
-      await syncDomainStatusFromTask(taskId, node, result);
-    }
+    if(!(await guardedCompleteTask(pool,node.id,taskId,result)))
+      return res.json({ok:true,ignored:true,reason:"TASK_NO_LONGER_ACTIVE"});
+    // Raw node reports remain in the task journal. Only the trusted
+    // scheduler may write global domain status / official BLOCKED transitions.
     await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason='result submitted', last_ping_at=NOW() WHERE id=$1", [node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);
@@ -428,4 +429,4 @@ router.post("/result", async (req, res, next) => {
   }
 });
 
-module.exports = { router, ensureTaskTable, enqueueNodeTask, waitForNodeTask };
+module.exports = { router, ensureTaskTable, enqueueNodeTask, waitForNodeTask, guardedCompleteTask };
