@@ -7,6 +7,7 @@ on:
   pull_request:
     paths:
       - "server/trustpositifWatch.js"
+      - "server/trustpositifRegistrySync.js"
       - "server/railway-entry.js"
       - "scripts/test-pentagon-trustpositif-source-backoff.cjs"
       - "server/trustpositifRoutes.js"
@@ -74,6 +75,7 @@ jobs:
       - name: Check monitoring modules
         run: |
           node --check server/trustpositifWatch.js
+          node --check server/trustpositifRegistrySync.js
           node --check server/trustpositifRoutes.js
           node --check server/nodeChecker.js
           node --check server/scheduler.js
