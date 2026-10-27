@@ -276,6 +276,13 @@ async function main(){
     assert.equal(again.scanned,0);
   });
   await test("Independent merchant TrustPositif and Google Rank reports stay isolated",async()=>{
+    // A ready Domain Radar operations topic must NOT receive merchant reports,
+    // even when present and owned by the internal admin forum.
+    await pool.query(
+      "INSERT INTO telegram_hub_ops_topics(tenant,chat_id,message_thread_id,status) "+
+      "VALUES('merchant_a','-100999999',34865,'ready') ON CONFLICT(tenant) "+
+      "DO UPDATE SET chat_id=EXCLUDED.chat_id,message_thread_id=EXCLUDED.message_thread_id,status='ready'"
+    );
     const queued=await call(route+"/report/send-now","POST",{});
     assert.equal(queued.status,202);
     assert.equal(queued.data.queued,2);
@@ -303,6 +310,12 @@ async function main(){
       /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(c.body.text||""));
     assert.equal(sent.length,2);
     assert.ok(sent.every(c=>String(c.body.chat_id)==="-100700001"));
+    assert.ok(!sent.some(c=>c.body.message_thread_id!=null),
+      "merchant report messages must not go to internal forum topics");
+    assert.ok(!calls.some(c=>c.method==="sendMessage" &&
+      String(c.body.chat_id)==="-100999999" &&
+      /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(c.body.text||"")),
+      "Domain Radar operations must never receive a merchant report mirror");
     assert.ok(sent.every(c=>c.body.reply_markup?.inline_keyboard?.[0]?.[0]?.url==="https://pentagon.quest"));
     const testResult=await call(route+"/test","POST",{});
     assert.equal(testResult.status,200);
