@@ -13,7 +13,7 @@ async function trustRows(tenant,db=pool) {
     "SELECT DISTINCT ON (LOWER(TRIM(k.domain)))",
     "d.id AS domain_id,LOWER(TRIM(d.domain)) AS domain,d.project_name,",
     "d.global_status,d.last_checked_at,",
-    "m.registry_listed,m.registry_checked_at,m.registry_source,",
+    "m.registry_listed,m.registry_checked_at,m.registry_source,m.registry_lookup_domain,",
     "ev.event_type AS latest_registry_event,",
     "ev.created_at AS latest_registry_event_at",
     "FROM rank_keyword_domains k",
