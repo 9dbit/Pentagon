@@ -7,6 +7,7 @@ on:
       - "server/merchantOperationsRoutes.js"
       - "server/telegramHub*.js"
       - "server/telegramMerchantReport*.js"
+      - "server/telegramMerchantNativeReports.js"
       - "server/telegramMerchantRankScanner.js"
       - "server/rankRoutes.js"
       - "server/telegramPermanentGroups.js"
@@ -23,6 +24,7 @@ on:
       - "scripts/test-pentagon-telegram-hub*.cjs"
       - "scripts/test-pentagon-telegram-bot-name.cjs"
       - "scripts/test-pentagon-telegram-report-formats.cjs"
+      - "scripts/test-pentagon-telegram-native-tables.cjs"
       - "scripts/test-pentagon-telegram-settings-ui.cjs"
       - "server/trustpositifAlertOutbox.js"
       - "android-node-app/**"
@@ -103,6 +105,9 @@ jobs:
           node --check server/rankRoutes.js
           node --check scripts/test-pentagon-telegram-report-formats.cjs
           node scripts/test-pentagon-telegram-report-formats.cjs
+          node --check server/telegramMerchantNativeReports.js
+          node --check scripts/test-pentagon-telegram-native-tables.cjs
+          node scripts/test-pentagon-telegram-native-tables.cjs
           node --check server/railway-entry.js
           node --check scripts/test-pentagon-telegram-hub.cjs
           node --check scripts/test-pentagon-telegram-hub-pg.cjs

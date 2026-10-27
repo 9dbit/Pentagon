@@ -5,7 +5,7 @@
 const { pool } = require("./db");
 const { ensureTables, hubEnabled, tg } = require("./telegramHub");
 const {trustRows,providerRows,networkObservations,rankRows,rankSnapshots} = require("./telegramMerchantReportData");
-const {trustPositifReportPages,rankReportPages} = require("./telegramMerchantReportFormats");
+const {trustPositifNativePages,googleRankNativePages} = require("./telegramMerchantNativeReports");
 let ticking = false;
 
 function esc(x) {
@@ -120,21 +120,21 @@ async function queueMerchantReport(tenant, db=pool, options={}) {
       // One PostgreSQL transaction client must run queries sequentially.
       const nodes=await providerRows(tx);
       const observations=await networkObservations(domains,tx);
-      for(const message of trustPositifReportPages(tenant,domains,nodes,observations,now))
-        messages.push({kind:"trustpositif_summary",message});
+      for(const page of trustPositifNativePages(tenant,domains,nodes,observations,now,conn.interval_minutes))
+        messages.push({kind:"trustpositif_summary",...page});
     }
     if(conn.rank_report){
       const ranking=await rankRows(tenant,tx);
       const nodes=await providerRows(tx);
       const snapshots=await rankSnapshots(tenant,tx);
-      for(const message of rankReportPages(tenant,ranking,nodes,snapshots,now))
-        messages.push({kind:"google_rank",message});
+      for(const page of googleRankNativePages(tenant,ranking,nodes,snapshots,now,conn.interval_minutes))
+        messages.push({kind:"google_rank",...page});
     }
     for(const item of messages){
       await tx.query(
-        "INSERT INTO telegram_hub_report_outbox(tenant,chat_id,kind,message) "+
-        "VALUES($1,$2,$3,$4)",
-        [tenant,conn.chat_id,item.kind,item.message]
+        "INSERT INTO telegram_hub_report_outbox(tenant,chat_id,kind,message,rich_message) "+
+        "VALUES($1,$2,$3,$4,$5::jsonb)",
+        [tenant,conn.chat_id,item.kind,item.message,JSON.stringify(item.rich_message)]
       );
     }
     await tx.query(
@@ -175,14 +175,39 @@ async function drainReportOutbox(db=pool,limit=3) {
     );
     if(connections.length){
       try{
-        const button=row.kind==="google_rank"?"📊 Google Rank":
-          row.kind==="trustpositif_summary"?"🛡️ Trust Positif":"🔍 Pentagon Dashboard";
-        await tg("sendMessage",{
-          chat_id:row.chat_id,text:row.message,
-          parse_mode:"HTML",disable_web_page_preview:true,
-          protect_content:true,
-          reply_markup:{inline_keyboard:[[{text:button,url:"https://pentagon.quest"}]]}
-        },12000);
+        // Both buttons are tenant-session pages on the Pentagon dashboard,
+        // not public links or another Telegram chat. The verified chat_id is
+        // checked immediately before EVERY send attempt.
+        const buttons=row.kind==="google_rank"
+          ?[{text:"📊 Google Rank",url:"https://pentagon.quest/?merchantTab=keywords"},
+            {text:"📝 Delivery History",url:"https://pentagon.quest/?merchantTab=telegram"}]
+          :[{text:"🛡️ Defence Center",url:"https://pentagon.quest/?merchantTab=trust"},
+            {text:"🌐 Domains",url:"https://pentagon.quest/?merchantTab=domains"}];
+        const base={
+          chat_id:row.chat_id,protect_content:true,
+          reply_markup:{inline_keyboard:[buttons]}
+        };
+        if(row.rich_message&&typeof row.rich_message.html==="string"){
+          try{
+            await tg("sendRichMessage",{...base,rich_message:row.rich_message},12000);
+          }catch(error){
+            // A 400 or 404 from Telegram is an explicit *unsent* response.
+            // Safe fallback for unsupported rich API / invalid rich parser.
+            // NEVER fall back on timeout / 429 / 5xx, which may have already
+            // delivered the rich message: that could duplicate reports.
+            if(!["TELEGRAM_HTTP_400","TELEGRAM_HTTP_404"].includes(error?.code))throw error;
+            await tg("sendMessage",{
+              ...base,text:row.message,parse_mode:"HTML",
+              disable_web_page_preview:true
+            },12000);
+          }
+        }else{
+          // Legacy rows queued before the migration are still deliverable.
+          await tg("sendMessage",{
+            ...base,text:row.message,parse_mode:"HTML",
+            disable_web_page_preview:true
+          },12000);
+        }
         result={status:"sent",code:""};
       }catch(e){result=classifyTelegramError(e,row.attempts);}
     }
