@@ -3,6 +3,10 @@ on:
   pull_request:
     paths:
       - "server/customerViewerAuth.js"
+      - "server/merchantSignupIntake.js"
+      - "public/signup/**"
+      - "server/db/migrations/*merchant_signup*"
+      - "scripts/test-merchant-signup-intake.cjs"
       - "server/merchantAdminRoutes.js"
       - "server/merchantOperationsRoutes.js"
       - "server/telegramHub*.js"
@@ -85,6 +89,8 @@ jobs:
       - name: JavaScript syntax and auth regressions
         run: |
           node --check server/customerViewerAuth.js
+          node --check server/merchantSignupIntake.js
+          node --test scripts/test-merchant-signup-intake.cjs
           node --check server/merchantAdminRoutes.js
           node --check server/merchantOperationsRoutes.js
           node --check server/merchantDirectChecker.js
