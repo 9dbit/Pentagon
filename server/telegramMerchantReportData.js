@@ -3,17 +3,23 @@
 // Every merchant-facing query is anchored to the authenticated tenant AND
 // an active, registered domain. Never use admin/global rank reporting here.
 const {pool}=require("./db");
+const {ensureMonitorTable}=require("./trustpositifWatch");
 
 async function trustRows(tenant,db=pool) {
+  await ensureMonitorTable(db);
   const {rows}=await db.query([
     "SELECT DISTINCT ON (LOWER(TRIM(k.domain)))",
     "d.id AS domain_id,LOWER(TRIM(d.domain)) AS domain,d.project_name,",
-    "d.global_status,d.last_checked_at,ev.event_type AS latest_registry_event,",
+    "d.global_status,d.last_checked_at,",
+    "m.registry_listed,m.registry_checked_at,m.registry_source,",
+    "ev.event_type AS latest_registry_event,",
     "ev.created_at AS latest_registry_event_at",
     "FROM rank_keyword_domains k",
     "JOIN rank_keyword_groups g ON g.id=k.group_id",
     "JOIN domains d ON d.tenant=g.tenant AND d.is_active=TRUE",
     "AND LOWER(TRIM(d.domain))=LOWER(TRIM(k.domain))",
+    "LEFT JOIN trustpositif_domain_monitor m ON m.tenant=d.tenant",
+    "AND m.domain=LOWER(TRIM(d.domain))",
     "LEFT JOIN LATERAL (SELECT event_type,created_at FROM trustpositif_notification_outbox o",
     "WHERE o.domain_id=d.id ORDER BY o.created_at DESC,o.id DESC LIMIT 1) ev ON TRUE",
     "WHERE g.tenant=$1 AND g.is_active=TRUE AND k.is_whitelisted=TRUE",
