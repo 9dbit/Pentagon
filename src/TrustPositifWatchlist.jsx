@@ -18,14 +18,16 @@ function classify(row) {
   if (!row.monitored) return {key:"off",text:"Monitor nonaktif"};
   if (row.listed === true && row.global_status === "blocked") return {key:"blocked",text:"BLOCKED"};
   if (row.recovered_at && row.listed === false) return {key:"recovered",text:"Delisted / recovery registry"};
+  if (row.registry_listed === true && row.listed !== true)
+    return {key:"registry",text:"Terdaftar registry · menunggu bukti 2 ISP"};
   if (recent && votes >= 2 && (row.last_error || row.listed == null))
     return {key:"verifying",text:"Verifying / menunggu registry"};
   if (recent && votes > 0 && row.listed !== true) return {key:"suspected",text:"Suspected / sinyal jaringan"};
   if (row.listed === true) return {key:"verifying",text:"Registry listed, status menunggu"};
-  if (row.listed === false && row.global_status === "working" &&
+  if (row.registry_listed === false && row.global_status === "working" &&
       since(row.last_node_check_at) < 20 * 60 * 1000 && !recent)
     return {key:"healthy",text:"Network healthy · registry clear"};
-  if (row.listed === false) return {key:"unknown",text:"Registry clear · jaringan belum terkonfirmasi"};
+  if (row.registry_listed === false) return {key:"unknown",text:"Tidak terdaftar registry · jaringan belum terkonfirmasi"};
   return {key:"unknown",text:"Unknown / belum diverifikasi"};
 }
 const readinessLabels = {
@@ -164,6 +166,7 @@ export default function TrustPositifWatchlist() {
     <div className="tpWatchMetrics">
       <div><span>Domain whitelist</span><strong>{data?.summary?.total ?? "—"}</strong></div>
       <div><span>Aktif dimonitor</span><strong>{data?.summary?.monitored ?? "—"}</strong></div>
+      <div><span>Registry listed · menunggu ISP</span><strong>{data?.summary?.registry_pending_isp ?? (counts.registry||0)}</strong></div>
       <div><span>Suspected / verifying</span><strong>{(counts.suspected || 0)+(counts.verifying || 0)}</strong></div>
       <div><span>Blocked</span><strong className="tpWatchBadNumber">{counts.blocked || 0}</strong></div>
       <div><span>Registry delisted</span><strong>{counts.recovered || 0}</strong></div>
@@ -172,6 +175,8 @@ export default function TrustPositifWatchlist() {
       <span>Telegram queued: <b>{delivery.queued ?? "—"}</b></span>
       <span>Delivered: <b>{delivery.sent ?? "—"}</b></span>
       <span>Needs review: <b>{delivery.attention ?? "—"}</b></span>
+      <span>Registry belum diperiksa: <b>{data?.summary?.registry_unchecked ?? "—"}</b></span>
+      <span>Registry worker: <b>{data?.worker?.registry_sync?.lastResult || "—"}</b></span>
       <span>Dashboard refreshed: {displayTime(data?.generated_at)}</span>
     </p>
     {error && <p className="tpWatchError" role="status">{error}</p>}
@@ -188,7 +193,7 @@ export default function TrustPositifWatchlist() {
       <label><span>Status</span><select aria-label="Filter status" value={statusFilter}
         onChange={e=>resetFilters(setStatusFilter,e.target.value)}>
         <option value="all">Semua status</option>
-        <option value="blocked">Blocked</option><option value="suspected">Suspected</option>
+        <option value="blocked">Blocked</option><option value="registry">Registry listed · ISP pending</option><option value="suspected">Suspected</option>
         <option value="verifying">Verifying</option><option value="recovered">Registry delisted</option>
         <option value="healthy">Tidak terdaftar</option><option value="unknown">Unknown</option>
         <option value="off">Monitor nonaktif</option>
@@ -217,7 +222,9 @@ export default function TrustPositifWatchlist() {
             {status.key==="blocked" ? <ShieldAlert size={13}/> :
               status.key==="healthy" || status.key==="recovered" ? <CheckCircle2 size={13}/> : <ShieldCheck size={13}/>}
             {status.text}</span>
-            <small>{nodes.length} node evidence · TrustPositif: {displayTime(row.verified_at)}</small>
+            <small>{nodes.length} node evidence · Registry check: {displayTime(row.registry_checked_at)}
+              {row.registry_listed===true ? (row.registry_lookup_domain!==row.domain ? " · APEX MATCH" : " · EXACT MATCH") :
+                row.registry_listed===false ? " · NOT LISTED" : " · UNKNOWN"}</small>
           </div>
           <div className="tpWatchWhen">
             {status.key==="blocked" ? <span className="tpWatchTimestamp"><BellRing size={13}/> First detected: {displayTime(row.detected_at)}</span> :
@@ -225,10 +232,16 @@ export default function TrustPositifWatchlist() {
               <span><Clock3 size={13}/> Node: {displayTime(row.last_node_check_at || row.last_anomaly_at)}</span>}
             {row.last_error && <small>Source pending: {String(row.last_error).slice(0,90)} · Retry {displayTime(row.next_check_at)}</small>}
           </div>
-          {(nodes.length>0 || row.last_error || row.source) && <details className="tpWatchDetails">
+          {(nodes.length>0 || row.last_error || row.source || row.registry_checked_at || row.registry_last_error) && <details className="tpWatchDetails">
             <summary>Evidence &amp; history <ChevronDown size={13}/></summary>
             <div className="tpWatchDetailBody">
-              <div><b>Official source:</b> {row.source || "Not verified"}</div>
+              <div><b>Official registry:</b> {row.registry_listed===true ? "LISTED · exact source match" :
+                row.registry_listed===false ? "NOT LISTED (snapshot)" : "NOT CHECKED"}</div>
+              <div><b>Registry source:</b> {row.registry_source || "Not checked"}</div>
+              <div><b>Registry checked:</b> {displayTime(row.registry_checked_at)}</div>
+              <div><b>Registry lookup key:</b> {row.registry_lookup_domain || "Not checked"}{row.registry_lookup_domain && row.registry_lookup_domain!==row.domain ? " (www alias uses parent lookup)" : ""}</div>
+              {row.registry_last_error && <div><b>Registry sync:</b> {row.registry_last_error}</div>}
+              <div><b>BLOCKED confirmation source:</b> {row.source || "Awaiting 2 provider signals"}</div>
               <div><b>Verified at:</b> {displayTime(row.verified_at)}</div>
               <div><b>First node anomaly:</b> {displayTime(row.first_anomaly_at)}</div>
               <div><b>First blocked:</b> {displayTime(row.detected_at)}</div>

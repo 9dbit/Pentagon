@@ -7,6 +7,7 @@ const { getRuntimeSettings } = require("./runtimeSettings");
 const { getActiveNodes, checkViaNode } = require("./nodeChecker");
 const { classifyReasonType, reasonTypeLabel } = require("./reasonClassifier");
 const { checkAfterNodeConsensus, syncAdminWhitelist } = require("./trustpositifWatch");
+const { syncOfficialRegistryBatch } = require("./trustpositifRegistrySync");
 const { enqueueTransition, formatEventMessage, drainOutbox } = require("./trustpositifAlertOutbox");
 const { auditWhitelistReadiness } = require("./trustpositifReadiness");
 const { syncEligibleCustomerWhitelist,customerWhitelistCoverage,TENANT_SQL,NON_PRODUCTION_SQL } = require("./customerWhitelistSync");
@@ -677,8 +678,18 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
 
     const registryCheck = await maybeAddProviderRegistryResult(domain, results, nodes);
     if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked && !registryCheck.confirmedRecovered) {
-      // Inconclusive / not listed / fewer than two credible node findings:
-      // preserve existing global status. Never emit a false block alert.
+      // Persist actual per-provider observations for diagnosis even when
+      // consensus is missing. This must NOT modify global_status, alerts,
+      // official evidence, or send Telegram messages.
+      for (const r of results.filter(x=>String(x.checker_type||"").startsWith("node:"))) {
+        await pool.query(
+          "INSERT INTO check_results "+
+          "(domain_id,checker_type,provider_name,status,http_status,final_url,dns_result,latency_ms,reason,reason_type) "+
+          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+          [domain.id,r.checker_type,r.provider_name,r.status,r.http_status,r.final_url,
+           r.dns_result,r.latency_ms,r.reason,classifyReasonType(r)]
+        );
+      }
       return;
     }
 
@@ -932,12 +943,41 @@ const scopedWatch = {
   lastResult: "not_started", activeNodes: 0, scanned: 0, imported: 0, lastError: "",
   cursor: 0, readiness: null, sourceCoverage: null, configuredNodes: 0
 };
+// Separate registry observation worker; it runs without waiting for node
+// health, while BLOCKED transitions still require independent node consensus.
+const registrySyncHealth={running:false,lastResult:"not_started",lastChecked:0,
+  lastListed:0,lastError:"",lastFinishedAt:null};
+async function runScopedRegistryDiscovery(){
+  if(registrySyncHealth.running)return {status:"already_running"};
+  registrySyncHealth.running=true;
+  try{
+    const result=await syncOfficialRegistryBatch(pool,{limit:10});
+    registrySyncHealth.lastResult=result.status;
+    registrySyncHealth.lastChecked=Number(result.checked||0);
+    registrySyncHealth.lastListed=Number(result.listed||0);
+    registrySyncHealth.lastError=String(result.error_code||"").slice(0,55);
+    if(result.status==="complete")console.log(
+      "[TrustPositif Registry] exact source entries checked="+result.checked+
+      " listed="+result.listed+" (not a provider BLOCKED verdict)");
+    if(result.status==="source_unavailable")console.warn(
+      "[TrustPositif Registry] source temporarily unavailable: "+registrySyncHealth.lastError);
+    return result;
+  }catch(err){
+    registrySyncHealth.lastResult="error";
+    registrySyncHealth.lastError=String(err.code||"REGISTRY_UNAVAILABLE").slice(0,55);
+    return {status:"error",error_code:registrySyncHealth.lastError};
+  }finally{
+    registrySyncHealth.running=false;
+    registrySyncHealth.lastFinishedAt=new Date().toISOString();
+  }
+}
 const scopedWatchIntervalMs = Math.max(120000, Number(process.env.TRUSTPOSITIF_SCOPED_INTERVAL_MS || 300000));
 const scopedWatchBatchSize = Math.min(20, Math.max(1, Number(process.env.TRUSTPOSITIF_SCOPED_BATCH_SIZE || 4)));
 const scopedWatchMaxNodes = Math.min(6, Math.max(2, Number(process.env.TRUSTPOSITIF_SCOPED_MAX_NODES || 4)));
 
 function getScopedWatchHealth() {
-  return { ...scopedWatch, interval_minutes: Math.round(scopedWatchIntervalMs / 60000),
+  return { ...scopedWatch, registry_sync:{...registrySyncHealth},
+    interval_minutes: Math.round(scopedWatchIntervalMs / 60000),
     batch_size: scopedWatchBatchSize, min_nodes: 2 };
 }
 async function runScopedTrustPositifChecks() {
@@ -1055,6 +1095,12 @@ function startScopedTrustPositifScheduler() {
   scopedTimerStarted = true;
   console.log("[TrustPositif Scoped] enabled, separate from full scheduler; interval_ms=" + scopedWatchIntervalMs);
   startDigestWatchdog();
+  // Registry membership discovery is independent of 2-ISP readiness, and
+  // updates only the registry_* monitor fields. It never emits BLOCKED alerts.
+  const registryInitial=setTimeout(runScopedRegistryDiscovery,20000);
+  registryInitial.unref?.();
+  const registryTick=setInterval(runScopedRegistryDiscovery,300000);
+  registryTick.unref?.();
   // Independent delivery ticker: retries definite failures even when there
   // are not enough healthy checker nodes to run a scan.
   const deliver = () => drainOutbox().then(result => {
@@ -1093,4 +1139,5 @@ function startScheduler() {
 }
 
 module.exports = { startScheduler, runChecks, runManualCheck, maybeAddProviderRegistryResult, sendHourlyDigestIfDue, clearRecurringAlert, getScanCycleHealth,
-  getScopedWatchHealth, runScopedTrustPositifChecks, startScopedTrustPositifScheduler };
+  getScopedWatchHealth, runScopedTrustPositifChecks, startScopedTrustPositifScheduler,
+  runScopedRegistryDiscovery };

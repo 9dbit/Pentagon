@@ -4,6 +4,7 @@ const assert=require("node:assert/strict");
 const { Pool }=require("pg");
 const fs=require("node:fs"),path=require("node:path");
 const watch=require("../server/trustpositifWatch");
+const registry=require("../server/trustpositifRegistrySync");
 
 if(process.env.CI!=="true" || !/^postgres(?:ql)?:\/\/[^@]*@(?:127\.0\.0\.1|localhost):5432\//.test(process.env.DATABASE_URL||"")){
   console.error("LOCAL_CI_POSTGRES_REQUIRED: never run this drill against production");
@@ -152,6 +153,66 @@ async function run(){
     assert.ok(Math.abs(new Date(fresh.detected_at).getTime()-again.getTime())<1000);
     const reset=(await db.query("SELECT recovered_at FROM trustpositif_domain_monitor WHERE domain='alpha.example'")).rows[0];
     assert.equal(reset.recovered_at,null);
+  });
+  await test("ordinary DNS and HTTP timeout do not count as ISP block quorum",async()=>{
+    const warnings=[
+      {node_id:10,checker_type:"node:cellular",status:"warning",reason:"HTTP timeout",http_status:null},
+      {node_id:20,checker_type:"node:cellular",status:"warning",reason:"DNS not found",http_status:null}
+    ];
+    assert.equal(watch.reliableNodeAnomalies(warnings,nodes).length,0);
+    assert.equal(watch.reliableNodeAnomalies(two,nodes).length,2);
+  });
+  await test("canonical registry domain lookup strips only www and protocol",async()=>{
+    assert.equal(registry.canonicalRegistryDomain("https://www.Wisnu123.NET/path"),"wisnu123.net");
+    assert.equal(registry.canonicalRegistryDomain("wisnu123.net"),"wisnu123.net");
+    assert.equal(registry.canonicalRegistryDomain("invalid@.net"),"");
+  });
+  await test("independent official registry sync persists listing, not global BLOCKED",async()=>{
+    const gid=(await db.query(
+      "INSERT INTO rank_keyword_groups(project_name,tenant) VALUES('WISNU','wisnu123') RETURNING id")).rows[0].id;
+    await db.query("INSERT INTO rank_keyword_domains(group_id,domain,is_whitelisted) "+
+      "VALUES($1,'www.wisnu123.net',TRUE)",[gid]);
+    await db.query("INSERT INTO domains(domain,tenant,is_active,global_status) "+
+      "VALUES('www.wisnu123.net','wisnu123',TRUE,'warning')");
+    const outcome=await registry.syncOfficialRegistryBatch(db,{now:new Date(),
+      lookup:async domains=>{
+        assert.ok(domains.includes("wisnu123.net"));
+        assert.ok(!domains.includes("www.wisnu123.net"));
+        return {entryCount:9952119,source:"fixture-exact-index",
+          matches:Object.fromEntries(domains.map(x=>[x,true]))};
+      }});
+    assert.equal(outcome.status,"complete");
+    assert.equal(outcome.listed,2);
+    const row=(await db.query("SELECT registry_listed,registry_checked_at,registry_lookup_domain,listed,detected_at "+
+      "FROM trustpositif_domain_monitor WHERE tenant='wisnu123'")).rows[0];
+    assert.equal(row.registry_listed,true);
+    assert.equal(row.registry_lookup_domain,"wisnu123.net");
+    assert.ok(row.registry_checked_at);
+    assert.equal(row.listed,null);
+    assert.equal(row.detected_at,null);
+    assert.equal((await db.query("SELECT global_status FROM domains WHERE tenant='wisnu123'")).rows[0].global_status,"warning");
+  });
+  await test("valid independent node quorum reuses a fresh www registry listing",async()=>{
+    const result=await watch.checkAfterNodeConsensus(
+      {domain:"www.wisnu123.net",tenant:"wisnu123",global_status:"warning"},[...two],nodes,
+      {db,lookup:async()=>{throw Error("SHOULD_REUSE_FRESH_REGISTRY_EVIDENCE")}});
+    assert.equal(result.confirmedBlocked,true);
+    assert.equal(result.nodes.length,2);
+  });
+  await test("official source timeout never erases exact registry evidence",async()=>{
+    await db.query("UPDATE trustpositif_domain_monitor SET registry_checked_at=NOW()-INTERVAL '7 hours' "+
+      "WHERE tenant='wisnu123'");
+    const result=await registry.syncOfficialRegistryBatch(db,{
+      lookup:async()=>{throw Object.assign(Error("Network error"),{code:"ETIMEDOUT"})}});
+    assert.equal(result.status,"source_unavailable");
+    const row=(await db.query("SELECT registry_listed,registry_last_error,registry_retry_after "+
+      "FROM trustpositif_domain_monitor WHERE tenant='wisnu123'")).rows[0];
+    assert.equal(row.registry_listed,true);
+    assert.equal(row.registry_last_error,"ETIMEDOUT");
+    assert.ok(row.registry_retry_after);
+    const backoff=await registry.syncOfficialRegistryBatch(db,{
+      lookup:async()=>{throw Error("RETRY_NOT_DUE")}});
+    assert.equal(backoff.status,"not_due");
   });
   await test("scheduler sends alerts and Telegram on verified status transition",async()=>{
     const scheduler=fs.readFileSync(path.resolve(__dirname,"../server/scheduler.js"),"utf8");

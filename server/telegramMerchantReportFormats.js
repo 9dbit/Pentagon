@@ -41,6 +41,8 @@ function statusOf(row,now) {
   const current=String(row.global_status||"unknown").toLowerCase();
   if(current==="blocked" && row.latest_registry_event==="BLOCKED")return "CONFIRMED BLOCKED";
   if(current==="blocked")return "BLOCKED / REVIEW";
+  if(row.registry_listed===true && validAge(row.registry_checked_at,now,24))
+    return "REGISTRY LISTED / ISP PENDING";
   if(!row.last_checked_at)return "UNKNOWN";
   if(!validAge(row.last_checked_at,now,24))return "STALE";
   if(current==="working")return "WORKING";
@@ -69,7 +71,8 @@ function trustPositifReportPages(tenant,domainRows,providerRows=[],observationRo
     "🕐 "+esc(wib(now)),
     "<b>Monitored:</b> "+statuses.length+
       " | <b>Warning:</b> "+count("WARNING")+
-      " | <b>Confirmed blocked:</b> "+count("CONFIRMED BLOCKED"),
+      " | <b>Confirmed blocked:</b> "+count("CONFIRMED BLOCKED")+
+      " | <b>Registry listed:</b> "+count("REGISTRY LISTED / ISP PENDING"),
     "<b>Working:</b> "+count("WORKING")+
       " | <b>Stale:</b> "+count("STALE")+
       " | <b>Unknown:</b> "+count("UNKNOWN")+
@@ -85,11 +88,15 @@ function trustPositifReportPages(tenant,domainRows,providerRows=[],observationRo
     if(list.length<3)list.push(providerTag(r.provider_name)+": "+clip(r.status||"unknown",25));
   }
   const icon={"CONFIRMED BLOCKED":"🚨","BLOCKED / REVIEW":"🔴",
-    WARNING:"⚠️",STALE:"⌛",UNKNOWN:"❔",WORKING:"✅"};
+    WARNING:"⚠️",STALE:"⌛",UNKNOWN:"❔",WORKING:"✅",
+    "REGISTRY LISTED / ISP PENDING":"🛡️"};
   const lines=statuses.map((r,i)=>{
     const flag=r.report_status;
     let line=(i+1)+". "+icon[flag]+" <code>"+esc(clip(r.domain,150))+"</code> "+
-      "<b>"+esc(flag)+"</b>\n   Last checked: "+esc(wib(r.last_checked_at));
+      "<b>"+esc(flag)+"</b>\n   Last checked: "+
+      esc(wib(flag==="REGISTRY LISTED / ISP PENDING"?r.registry_checked_at:r.last_checked_at));
+    if(flag==="REGISTRY LISTED / ISP PENDING")
+      line+="\n   Official registry: exact match · waiting for 2 independent ISP signals";
     if(["WARNING","BLOCKED / REVIEW","CONFIRMED BLOCKED"].includes(flag)){
       const checks=observations.get(Number(r.domain_id))||[];
       if(checks.length)line+="\n   Network evidence: "+esc(checks.join(" • "));
@@ -101,6 +108,7 @@ function trustPositifReportPages(tenant,domainRows,providerRows=[],observationRo
   });
   const footer=[
     "<i>WORKING describes network reachability, not an official registry clearance.",
+    "REGISTRY LISTED means official source membership, NOT proof that two ISPs block access.",
     "CONFIRMED BLOCKED requires two independent providers and an exact official TrustPositif match.",
     "Unknown/stale does not mean safe. Review evidence in Pentagon Defence Center.</i>"
   ];

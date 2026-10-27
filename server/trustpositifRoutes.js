@@ -16,6 +16,10 @@ const router = express.Router();
 const SOURCE_URL = "https://trustpositif.komdigi.go.id/assets/db/domains_isp";
 const CACHE_PATH = process.env.TRUSTPOSITIF_CACHE_PATH || path.join(os.tmpdir(), "pentagon-domains_isp.txt");
 const CACHE_TTL_MS = Number(process.env.TRUSTPOSITIF_CACHE_TTL_MS || 6 * 60 * 60 * 1000);
+// An HTTP 200 with a short HTML error page must never be interpreted as
+// "all domains delisted". Fail closed if the official snapshot is truncated.
+const MIN_REGISTRY_BYTES = Math.max(1000000,Number(process.env.TRUSTPOSITIF_MIN_REGISTRY_BYTES||10000000));
+const MIN_REGISTRY_ENTRIES = Math.max(1000,Number(process.env.TRUSTPOSITIF_MIN_REGISTRY_ENTRIES||100000));
 let cacheDownloadPromise = null;
 // Global per-instance and disk-backed backoff to avoid repeated 200 MB+ downloads
 // when Komdigi is unreachable. Never invalidate an existing verified cache.
@@ -125,7 +129,9 @@ function indexMatchesCache() {
     const meta = readIndexMeta();
     return Boolean(meta)
       && Number(meta.buckets) === INDEX_BUCKETS
-      && Math.abs(Number(meta.source_mtime_ms || 0) - stat.mtimeMs) < 2;
+      && Number(meta.entry_count) >= MIN_REGISTRY_ENTRIES
+      && Math.abs(Number(meta.source_mtime_ms || 0) - stat.mtimeMs) < 2
+      && Array.from({length:INDEX_BUCKETS},(_,i)=>bucketPath(i)).every(p=>fs.existsSync(p));
   } catch (_) {
     return false;
   }
@@ -198,15 +204,14 @@ function loadBucket(id) {
     return hit;
   }
 
-  let values = new Set();
-  try {
-    values = new Set(
-      fs.readFileSync(bucketPath(id), "utf8")
-        .split(/\r?\n/)
-        .map(v => v.trim())
-        .filter(Boolean)
-    );
-  } catch (_) {}
+  // Missing index buckets are an UNAVAILABLE source, never proof that a
+  // domain is absent from the official registry.
+  const values = new Set(
+    fs.readFileSync(bucketPath(id), "utf8")
+      .split(/\r?\n/)
+      .map(v => v.trim())
+      .filter(Boolean)
+  );
 
   bucketCache.set(id, values);
   while (bucketCache.size > INDEX_BUCKET_CACHE_LIMIT) {
@@ -296,6 +301,12 @@ async function downloadSourceCache() {
         writer.on("finish", resolve);
         response.data.pipe(writer);
       });
+      const downloaded = fs.statSync(tmp);
+      if(downloaded.size < MIN_REGISTRY_BYTES){
+        const err=new Error("OFFICIAL_PAYLOAD_TOO_SMALL");
+        err.code="OFFICIAL_PAYLOAD_TOO_SMALL";
+        throw err;
+      }
       fs.renameSync(tmp, CACHE_PATH);
       clearSourceBackoff();
       const stat = fs.statSync(CACHE_PATH);
@@ -322,7 +333,7 @@ async function downloadSourceCache() {
 
 async function ensureSourceCache() {
   const info = cacheInfo();
-  if (info.fresh) {
+  if (info.fresh && info.bytes >= MIN_REGISTRY_BYTES) {
     return {
       ok: true, downloaded: false, source_url: SOURCE_URL, http_status: 200,
       latency_ms: 0, payload_bytes: info.bytes,
@@ -342,6 +353,11 @@ async function ensureSourceCache() {
 async function ensureIndexedCache() {
   const source = await ensureSourceCache();
   const index = await ensureIndexForCache();
+  if(!index?.ready || Number(index.entry_count)<MIN_REGISTRY_ENTRIES){
+    const err=new Error("OFFICIAL_INDEX_INCOMPLETE");
+    err.code="OFFICIAL_INDEX_INCOMPLETE";
+    throw err;
+  }
   return { ...source, index };
 }
 
@@ -604,6 +620,10 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
       rank_whitelisted: domains.filter(d => d.rank_whitelisted).length,
       monitored: domains.filter(d => d.monitored).length,
       blocked: domains.filter(d => d.listed === true && d.global_status === "blocked").length,
+      registry_listed: domains.filter(d => d.registry_listed === true).length,
+      registry_pending_isp: domains.filter(d => d.registry_listed === true &&
+        !(d.listed === true && d.global_status === "blocked")).length,
+      registry_unchecked: domains.filter(d => d.registry_checked_at == null).length,
       suspected: domains.filter(d => d.last_anomaly_at && Array.isArray(d.anomaly_nodes) &&
         d.anomaly_nodes.length === 1 && d.listed !== true).length,
       recovered: domains.filter(d => d.recovered_at && d.listed === false).length,

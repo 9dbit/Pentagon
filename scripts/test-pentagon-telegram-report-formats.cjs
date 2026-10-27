@@ -44,6 +44,20 @@ check("TrustPositif summary escapes HTML and never claims unknown safe",()=>{
   assert.doesNotMatch(all,/a&<test>/);
   assert.match(all,/Network evidence: TSEL: warning/);
 });
+check("Exact official registry listing never falsely claims ISP-confirmed BLOCKED",()=>{
+  const listed={domain_id:5,domain:"www.wisnu123.net",global_status:"warning",
+    registry_listed:true,registry_checked_at:now,last_checked_at:now};
+  assert.equal(statusOf(listed,now),"REGISTRY LISTED / ISP PENDING");
+  assert.equal(statusOf({...listed,latest_registry_event:"BLOCKED"},now),
+    "REGISTRY LISTED / ISP PENDING");
+  assert.equal(statusOf({...listed,registry_checked_at:"2026-10-23T00:00:00Z"},now),
+    "WARNING");
+  const page=trustPositifReportPages("wisnu123",[listed],[],[],now);
+  safe(page,/TRUST POSITIF REPORT/);
+  assert.match(page.join(""),/REGISTRY LISTED \/ ISP PENDING/);
+  assert.match(page.join(""),/Registry listed:<\/b> 1/);
+  assert.doesNotMatch(page.join(""),/CONFIRMED BLOCKED<\/b>/);
+});
 check("Rank summary uses only stored positions and historical evidence",()=>{
   const rows=[
     {group_id:1,keyword:"Brand & <script>",domain:"a.example",domain_label:"landing_page",
