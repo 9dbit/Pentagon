@@ -81,7 +81,7 @@ app.use(session({ store: new PgSessionStore(pool), name: "domain_radar_sid", sec
 app.use("/api",createMerchantAccountHydrator(merchantLifecycle||{
   validateSession:async()=>null
 }));
-app.use("/api",customerViewerFirewall);
+app.use("/api", customerViewerFirewall);
 // New merchant registration is pending-only until verified + approved.
 app.use("/api/merchant-signup",signupRouters.publicRouter);
 app.use("/api/admin/merchant-signup",signupRouters.adminRouter);
