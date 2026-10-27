@@ -552,6 +552,18 @@ async function startTelegramHub() {
     await permanentGroups.ensurePermanentGroupTables();
     await botName();
     console.log("[Telegram Hub] bot identity:",botUsername);
+    // Keep the existing @DomainRadarAi_Bot identity and all bound merchant
+    // groups intact; rename only the Telegram-visible display name.
+    try{
+      const {ensureTelegramBotBrand}=require("./telegramHubBrand");
+      const state=await ensureTelegramBotBrand(tg);
+      console.log("[Telegram Hub] bot display name:",state.name,
+        "verified_languages="+state.verified,"updated_languages="+state.updated);
+    }catch(err){
+      // Branding must never block the webhook, merchant reports, or alerts.
+      console.warn("[Telegram Hub] bot display name update pending",
+        String(err.code||"TELEGRAM_UNAVAILABLE").slice(0,40));
+    }
     const url=String(process.env.TELEGRAM_HUB_WEBHOOK_BASE_URL||BASE_URL).replace(/\/+$/,"")+HUB_PATH;
     if(!/^https:\/\/[A-Za-z0-9.-]+\/api\/telegram\/hub\/webhook$/.test(url))
       throw Object.assign(new Error("WEBHOOK_URL_INVALID"),{code:"WEBHOOK_URL_INVALID"});
