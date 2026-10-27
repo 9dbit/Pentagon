@@ -46,6 +46,8 @@ function renderPages(items,render){
 function statusStyle(status){
   if(status==="CONFIRMED BLOCKED")return {rich:"🚨 Blocked",fallback:"🚨 CONFIRMED BLOCKED"};
   if(status==="BLOCKED / REVIEW")return {rich:"🔴 Review",fallback:"🔴 BLOCKED / REVIEW"};
+  if(status==="REGISTRY LISTED / ISP PENDING")
+    return {rich:"🛡️ Registry listed",fallback:"🛡️ REGISTRY LISTED / ISP PENDING"};
   if(status==="WARNING")return {rich:"⚠️ Warning",fallback:"⚠️ WARNING"};
   if(status==="STALE")return {rich:"⌛ Stale",fallback:"⌛ STALE"};
   if(status==="WORKING")return {rich:"✅ Working",fallback:"✅ WORKING"};
@@ -73,10 +75,11 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
   const rows=domainRows.map(r=>{
     const status=statusOf(r,now);
     return {id:r.domain_id,domain:clip(r.domain,85),status,
-      age:minsSince(r.last_checked_at,now),
+      age:minsSince(status==="REGISTRY LISTED / ISP PENDING"?r.registry_checked_at:r.last_checked_at,now),
       checks:observationsByDomain.get(Number(r.domain_id))||[]};
   });
   const flagged=rows.filter(r=>r.status==="CONFIRMED BLOCKED").length;
+  const listedPending=rows.filter(r=>r.status==="REGISTRY LISTED / ISP PENDING").length;
   const warning=rows.filter(r=>r.status==="WARNING"||r.status==="BLOCKED / REVIEW").length;
   const unknown=rows.filter(r=>r.status==="STALE"||r.status==="UNKNOWN").length;
   const health=providerHealth(providers,now);
@@ -84,6 +87,7 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
   const stamp=esc(wib(now));
   const schedule=esc(period(intervalMinutes));
   const protection="Status Working adalah keterjangkauan jaringan, bukan bukti bebas blokir. " +
+    "Terdaftar registry belum berarti dua ISP memblokir akses. " +
     "Blocked terkonfirmasi membutuhkan bukti registry resmi dan minimal dua provider independen. " +
     "Unknown/Stale bukan berarti aman.";
   return renderPages(rows,(batch,part,total)=>{
@@ -91,7 +95,8 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
     const head="<h3>🛡️ TRUST POSITIF REPORT</h3><p><b>"+name+
       "</b> · "+stamp+"</p>"+countInfo+
       "<p><b>"+rows.length+"</b> Domains · <b>"+flagged+
-      "</b> Confirmed Blocked · <b>"+health.healthy+"/"+health.total+
+      "</b> Confirmed Blocked · <b>"+listedPending+
+      "</b> Registry Listed (ISP pending) · <b>"+health.healthy+"/"+health.total+
       "</b> Healthy Providers</p>"+
       "<p>⚠️ Review/Warning: <b>"+warning+"</b> · Unknown/Stale: <b>"+unknown+"</b></p>"+
       "<h4>DOMAIN MONITORING</h4>";
@@ -115,6 +120,7 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
       "<b>Merchant:</b> "+name+" · "+stamp,
       total>1?"<b>Bagian "+part+"/"+total+"</b>":null,
       "<b>Domains:</b> "+rows.length+" | <b>Confirmed blocked:</b> "+flagged+
+       " | <b>Registry listed:</b> "+listedPending+
        " | <b>Healthy providers:</b> "+health.healthy+"/"+health.total,
       "<b>Review/Warning:</b> "+warning+" | <b>Unknown/Stale:</b> "+unknown,
       "",
