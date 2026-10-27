@@ -8,6 +8,11 @@ on:
     paths:
       - "server/trustpositifWatch.js"
       - "server/trustpositifRegistrySync.js"
+      - "server/trustpositifEvidenceBridge.js"
+      - "scripts/trustpositif-source-bridge.py"
+      - "scripts/run-trustpositif-source-bridge.ps1"
+      - "scripts/test-pentagon-trustpositif-source-bridge-pg.cjs"
+      - "migrations/20261028_trustpositif_registry_bridge_audit.sql"
       - "server/railway-entry.js"
       - "scripts/test-pentagon-trustpositif-source-backoff.cjs"
       - "server/trustpositifRoutes.js"
@@ -76,6 +81,9 @@ jobs:
         run: |
           node --check server/trustpositifWatch.js
           node --check server/trustpositifRegistrySync.js
+          node --check server/trustpositifEvidenceBridge.js
+          node --check scripts/test-pentagon-trustpositif-source-bridge-pg.cjs
+          python -m py_compile scripts/trustpositif-source-bridge.py
           node --check server/trustpositifRoutes.js
           node --check server/nodeChecker.js
           node --check server/scheduler.js
@@ -101,6 +109,8 @@ jobs:
         run: node scripts/test-pentagon-trustpositif-source-backoff.cjs
       - name: Postgres synthetic whitelist and two-node consensus integration
         run: node scripts/test-pentagon-trustpositif-watch-pg.cjs
+      - name: PostgreSQL protected exact-registry source bridge
+        run: node scripts/test-pentagon-trustpositif-source-bridge-pg.cjs
       - name: Postgres durable TrustPositif notification outbox
         run: node scripts/test-pentagon-trustpositif-outbox-pg.cjs
       - name: PostgreSQL whitelist reconciliation readiness (strictly read only)

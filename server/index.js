@@ -270,6 +270,9 @@ app.patch("/api/auth/users/nickname", requireAdmin, requireNotDemo, async (req, 
   } catch (err) { next(err); }
 });
 
+// Machine-to-machine route: dedicated 48+ character bearer secret required;
+// not a user/merchant endpoint. It writes registry evidence, never BLOCKED.
+app.use("/api/internal/trustpositif/bridge", require("./trustpositifEvidenceBridge").router);
 app.use("/api/agent", agentPollRoutes);
 app.use("/api/settings", requireAdmin, requireNotDemoWrite, settingsRoutes);
 app.use("/api/projects", requireAdmin, requireNotDemoWrite, attachTenant, projectRoutes);
