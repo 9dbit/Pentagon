@@ -50,6 +50,13 @@ async function ensureMonitorTable(db = pool) {
   ].join(" "));
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS recovered_at TIMESTAMPTZ");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS first_anomaly_at TIMESTAMPTZ");
+  // Separate exact official-registry membership from provider-quorum
+  // confirmation. These fields NEVER by themselves update domains.global_status.
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_listed BOOLEAN");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_checked_at TIMESTAMPTZ");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_source TEXT NOT NULL DEFAULT ''");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_last_error TEXT NOT NULL DEFAULT ''");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_retry_after TIMESTAMPTZ");
   // Created through backend SQL inside public schema: enable RLS even though
   // client-facing Data API grants are not needed for this private monitor log.
   await db.query("ALTER TABLE trustpositif_domain_monitor ENABLE ROW LEVEL SECURITY");
@@ -72,12 +79,15 @@ async function syncAdminWhitelist(db = pool) {
 }
 
 async function exactOfficialLookup(domain) {
-  const { ensureIndexedCache, lookupIndexedDomains } = require("./trustpositifRoutes");
-  const cache = await ensureIndexedCache();
-  if (!cache?.index?.ready || Number(cache.index.entry_count) <= 0) throw Error("OFFICIAL_INDEX_NOT_READY");
-  const result = await lookupIndexedDomains([domain]);
-  if (result.entryCount <= 0 || typeof result.matches?.[domain] !== "boolean") throw Error("REGISTRY_RESULT_INVALID");
-  return { listed: result.matches[domain], verifiedAt: new Date(), source: "komdigi-domains_isp-exact" };
+  const { canonicalRegistryDomain, officialIndexLookup }=require("./trustpositifRegistrySync");
+  // Registry index intentionally strips "www". Always query and read the
+  // SAME canonical key; otherwise www.example.com causes an invalid result
+  // even when the parent domain is listed in the official feed.
+  const canonical=canonicalRegistryDomain(domain);
+  if(!canonical)throw Error("REGISTRY_DOMAIN_INVALID");
+  const result=await officialIndexLookup([canonical]);
+  if(typeof result.matches?.[canonical]!=="boolean")throw Error("REGISTRY_RESULT_INVALID");
+  return {listed:result.matches[canonical],verifiedAt:new Date(),source:result.source};
 }
 
 function makeOfficialEvidence(state, nodes, cached) {
@@ -144,7 +154,16 @@ async function checkAfterNodeConsensus(domainRow, results, activeNodes, options 
       nodes, source: "retry_backoff" };
   } else {
     try {
-      const verified = await lookup(domain);
+      const registryAt=previous?.registry_checked_at?new Date(previous.registry_checked_at).getTime():0;
+      const registryFresh=registryAt>0 && registryAt<=now.getTime()+300000 &&
+        now.getTime()-registryAt<TTL_MS &&
+        typeof previous?.registry_listed==="boolean";
+      // Reuse freshly audited source evidence, but NEVER count it as a block
+      // until this code has also received two independent credible node votes.
+      const verified=registryFresh
+        ? {listed:previous.registry_listed,verifiedAt:new Date(registryAt),
+           source:previous.registry_source||"komdigi-domains_isp-exact-index"}
+        : await lookup(domain);
       if (!verified || typeof verified.listed !== "boolean") throw Error("OFFICIAL_VERIFICATION_INDETERMINATE");
       const at = verified.verifiedAt || now;
       const result = await db.query([
@@ -214,7 +233,8 @@ async function listWatchlist(tenant = "admin", db = pool) {
     "SELECT r.tenant,r.domain,COALESCE(r.projects,'') AS project_name,r.rank_whitelisted,",
     "COALESCE(d.is_active,FALSE) AS monitored,COALESCE(d.global_status,'unknown') AS global_status,",
     "d.last_checked_at AS last_node_check_at,s.listed,s.verified_at,s.detected_at,s.recovered_at,s.first_anomaly_at,",
-    "s.last_anomaly_at,s.anomaly_nodes,s.last_error,s.next_check_at,s.source",
+    "s.last_anomaly_at,s.anomaly_nodes,s.last_error,s.next_check_at,s.source,",
+    "s.registry_listed,s.registry_checked_at,s.registry_source,s.registry_last_error,s.registry_retry_after",
     "FROM registry r LEFT JOIN domains d ON LOWER(TRIM(d.domain))=r.domain AND d.tenant=r.tenant",
     "LEFT JOIN trustpositif_domain_monitor s ON s.domain=r.domain AND s.tenant=r.tenant",
     "ORDER BY CASE WHEN s.listed=TRUE AND d.global_status='blocked' THEN 0",
