@@ -6,7 +6,9 @@ const {pool}=require("./db");
 const {ensureMonitorTable}=require("./trustpositifWatch");
 
 async function trustRows(tenant,db=pool) {
-  await ensureMonitorTable(db);
+  // Run one-time schema readiness on the pool, outside the report's
+  // tenant-bound transaction, to avoid DDL table locks inside send-now.
+  await ensureMonitorTable();
   const {rows}=await db.query([
     "SELECT DISTINCT ON (LOWER(TRIM(k.domain)))",
     "d.id AS domain_id,LOWER(TRIM(d.domain)) AS domain,d.project_name,",
