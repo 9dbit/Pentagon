@@ -86,13 +86,20 @@ function createPermanentGroupAdminRouter(db=pool){
   router.get("/list",async(_req,res)=>{
     try{
       await ensurePermanentGroupTables(db);
+      const activation=require("./telegramMerchantActivation");
+      await activation.ensureTables(db);
       const {rows}=await db.query(
         "WITH tenants AS (SELECT DISTINCT tenant FROM domains WHERE is_active=TRUE "+
         "UNION SELECT DISTINCT tenant FROM rank_keyword_groups WHERE is_active=TRUE) "+
-        "SELECT t.tenant,g.chat_title,g.verified_at FROM tenants t "+
+        "SELECT t.tenant,g.chat_title,g.verified_at,a.group_state,"+
+        "(a.verified_at IS NOT NULL) AS identity_verified,"+
+        "a.group_attempts,a.group_error,a.updated_at AS provisioning_updated_at "+
+        "FROM tenants t "+
         "LEFT JOIN telegram_merchant_groups g ON g.tenant=t.tenant "+
+        "LEFT JOIN telegram_merchant_activations a ON a.tenant=t.tenant "+
         "ORDER BY t.tenant LIMIT 500");
-      res.json({groups:rows.filter(row=>isProductionTenant(row.tenant))});
+      res.json({groups:rows.filter(row=>isProductionTenant(row.tenant)),
+        provisioner_configured:activation.bridgeAvailable()});
     }catch(e){res.status(503).json({error:"REPORT_GROUP_DIRECTORY_UNAVAILABLE"});}
   });
   router.post("/setup",async(req,res)=>{
