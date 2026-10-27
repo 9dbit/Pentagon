@@ -83,16 +83,30 @@ async function syncOfficialRegistryBatch(db=pool,options={}){
     const key=canonicalRegistryDomain(row.domain);
     const present=scan.matches[key]===true;
     if(present)listed++;
+    // Local indexed source does not provide a source-file hash. Do NOT
+    // carry a previous TRADEVICEPC hash/collector label forward to this
+    // later snapshot; that would create misleading provenance.
+    const matchKind=!present?"not_listed":
+      key===String(row.domain).trim().toLowerCase()?"exact":"parent_apex";
     await db.query(
       "INSERT INTO trustpositif_domain_monitor "+
       "(tenant,domain,registry_listed,registry_checked_at,registry_source,registry_lookup_domain,"+
-      "registry_last_error,registry_retry_after,updated_at) "+
-      "VALUES($1,$2,$3,$4,$5,$6,'',NULL,$4) ON CONFLICT(tenant,domain) DO UPDATE SET "+
+      "registry_last_error,registry_retry_after,registry_snapshot_sha256,registry_snapshot_bytes,"+
+      "registry_snapshot_entries,registry_collector,registry_match_kind,updated_at) "+
+      "VALUES($1,$2,$3,$4,$5,$6,'',NULL,'',NULL,$7,'RAILWAY',$8,$4) "+
+      "ON CONFLICT(tenant,domain) DO UPDATE SET "+
       "registry_listed=EXCLUDED.registry_listed,registry_checked_at=EXCLUDED.registry_checked_at,"+
       "registry_source=EXCLUDED.registry_source,registry_lookup_domain=EXCLUDED.registry_lookup_domain,"+
-      "registry_last_error='',registry_retry_after=NULL,updated_at=EXCLUDED.updated_at",
+      "registry_last_error='',registry_retry_after=NULL,"+
+      "registry_snapshot_sha256='',registry_snapshot_bytes=NULL,"+
+      "registry_snapshot_entries=EXCLUDED.registry_snapshot_entries,"+
+      "registry_collector='RAILWAY',registry_match_kind=EXCLUDED.registry_match_kind,"+
+      "updated_at=EXCLUDED.updated_at "+
+      "WHERE trustpositif_domain_monitor.registry_checked_at IS NULL "+
+      "OR trustpositif_domain_monitor.registry_checked_at<=EXCLUDED.registry_checked_at",
       [row.tenant,String(row.domain).trim().toLowerCase(),
-       present,now,String(scan.source||SOURCE).slice(0,100),key]
+       present,now,String(scan.source||SOURCE).slice(0,100),key,
+       Number(scan.entryCount)||null,matchKind]
     );
   }
   return {status:"complete",checked:candidates.length,listed};
