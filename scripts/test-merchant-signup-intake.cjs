@@ -9,6 +9,11 @@ async function run(enabled, payload, originOverride) {
  const app=express();app.use(express.json());
  app.use("/api/merchant-signup",createMerchantSignupIntake({query:async(sql,params)=>{writes.push({sql,params});return {rowCount:1};}},{enabled}));
  const server=app.listen(0,"127.0.0.1");
+ await new Promise((resolve,reject)=>{
+   if(server.listening)return resolve();
+   server.once("listening",resolve);
+   server.once("error",reject);
+ });
  try{
   const port=server.address().port,origin=`http://127.0.0.1:${port}`;
   const response=await fetch(origin+"/api/merchant-signup",{method:"POST",headers:{"Content-Type":"application/json","Origin":originOverride||origin},body:JSON.stringify(payload)});
