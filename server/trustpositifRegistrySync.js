@@ -85,14 +85,14 @@ async function syncOfficialRegistryBatch(db=pool,options={}){
     if(present)listed++;
     await db.query(
       "INSERT INTO trustpositif_domain_monitor "+
-      "(tenant,domain,registry_listed,registry_checked_at,registry_source,"+
+      "(tenant,domain,registry_listed,registry_checked_at,registry_source,registry_lookup_domain,"+
       "registry_last_error,registry_retry_after,updated_at) "+
-      "VALUES($1,$2,$3,$4,$5,'',NULL,$4) ON CONFLICT(tenant,domain) DO UPDATE SET "+
+      "VALUES($1,$2,$3,$4,$5,$6,'',NULL,$4) ON CONFLICT(tenant,domain) DO UPDATE SET "+
       "registry_listed=EXCLUDED.registry_listed,registry_checked_at=EXCLUDED.registry_checked_at,"+
-      "registry_source=EXCLUDED.registry_source,registry_last_error='',"+
-      "registry_retry_after=NULL,updated_at=EXCLUDED.updated_at",
+      "registry_source=EXCLUDED.registry_source,registry_lookup_domain=EXCLUDED.registry_lookup_domain,"+
+      "registry_last_error='',registry_retry_after=NULL,updated_at=EXCLUDED.updated_at",
       [row.tenant,String(row.domain).trim().toLowerCase(),
-       present,now,String(scan.source||SOURCE).slice(0,100)]
+       present,now,String(scan.source||SOURCE).slice(0,100),key]
     );
   }
   return {status:"complete",checked:candidates.length,listed};
