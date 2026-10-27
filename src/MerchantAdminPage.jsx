@@ -48,7 +48,12 @@ const statusText = value => ({
 const n = value => Number(value) || 0;
 
 export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
-  const [page, setPage] = useState("overview");
+  // Links in Telegram buttons resolve to this merchant's own authenticated
+  // dashboard tab. Do not take a tenant or domain selector from the URL.
+  const [page, setPage] = useState(() => {
+    const target=new URLSearchParams(window.location.search).get("merchantTab");
+    return NAV.some(item=>item.key===target)?target:"overview";
+  });
   const [data, setData] = useState({ overview: {}, domains: [], keywords: [], nodes: [], alerts: [], history: [], profile: {} });
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState("");
