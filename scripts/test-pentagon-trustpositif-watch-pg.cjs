@@ -192,6 +192,23 @@ async function run(){
     assert.equal(row.detected_at,null);
     assert.equal((await db.query("SELECT global_status FROM domains WHERE tenant='wisnu123'")).rows[0].global_status,"warning");
   });
+  await test("Railway source refresh clears stale TRADEVICEPC SHA provenance",async()=>{
+    await db.query("UPDATE trustpositif_domain_monitor SET "+
+      "registry_checked_at=NOW()-INTERVAL '7 hours',"+
+      "registry_snapshot_sha256=$1,registry_collector='TRADEVICEPC' "+
+      "WHERE tenant='wisnu123'",["a".repeat(64)]);
+    const fresh=await registry.syncOfficialRegistryBatch(db,{now:new Date(),
+      lookup:async domains=>({entryCount:9952119,source:"fixture-direct-railway",
+        matches:Object.fromEntries(domains.map(x=>[x,true]))})});
+    assert.equal(fresh.status,"complete");
+    const row=(await db.query("SELECT registry_snapshot_sha256,registry_snapshot_entries,"+
+      "registry_collector,registry_match_kind FROM trustpositif_domain_monitor "+
+      "WHERE tenant='wisnu123'")).rows[0];
+    assert.equal(row.registry_snapshot_sha256,"");
+    assert.equal(row.registry_collector,"RAILWAY");
+    assert.equal(Number(row.registry_snapshot_entries),9952119);
+    assert.equal(row.registry_match_kind,"parent_apex");
+  });
   await test("valid independent node quorum reuses a fresh www registry listing",async()=>{
     const result=await watch.checkAfterNodeConsensus(
       {domain:"www.wisnu123.net",tenant:"wisnu123",global_status:"warning"},[...two],nodes,
