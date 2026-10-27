@@ -360,7 +360,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               Lookup key: {detail.domain.registry_lookup_domain || "N/A"}. Registry checked: {dateWib(detail.domain.registry_checked_at)}.
               Bukti filtering independen: {detail.domain.confirmed_node_votes ?? 0}/2.
               Observasi node (termasuk timeout): {detail.domain.recent_node_providers ?? 0}.
-              Evidence terbaru: {dateWib(detail.domain.latest_evidence_at)}. Hanya domain merchant ini.</p>
+              Evidence terbaru: {dateWib(detail.domain.latest_evidence_at)}. Hanya domain merchant ini.</p>}
             {detail.direct && <p>HTTP: {detail.direct.http_status ?? "N/A"}, durasi: {detail.direct.latency_ms ?? "N/A"} ms,
               terakhir diperiksa: {dateWib(detail.direct.checked_at)}.</p>}
             {detail.node && <p>Provider: {detail.node.provider_name}. Sinyal: {detail.node.signal_label},
