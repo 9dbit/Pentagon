@@ -112,6 +112,8 @@ export default function TrustPositifWatchlist() {
     });
   },[all,filter,statusFilter,projectFilter,providerFilter,tenantFilter]);
   const counts = all.reduce((obj,row)=>{const key=classify(row).key;obj[key]=(obj[key]||0)+1;return obj;},{});
+  const recentPcEvidence=all.filter(row=>row.registry_collector==="TRADEVICEPC" &&
+    row.registry_checked_at && since(row.registry_checked_at)<12*3600000).length;
   const nodeHealth=data?.node_health || {};
   const delivery=data?.notification_delivery || {};
   const readiness=data?.readiness || null;
@@ -176,7 +178,8 @@ export default function TrustPositifWatchlist() {
       <span>Delivered: <b>{delivery.sent ?? "—"}</b></span>
       <span>Needs review: <b>{delivery.attention ?? "—"}</b></span>
       <span>Registry belum diperiksa: <b>{data?.summary?.registry_unchecked ?? "—"}</b></span>
-      <span>Registry worker: <b>{data?.worker?.registry_sync?.lastResult || "—"}</b></span>
+      <span>TRADEVICEPC verified registry: <b>{recentPcEvidence}</b></span>
+      <span>Railway direct source: <b>{data?.worker?.registry_sync?.lastResult || "—"}</b></span>
       <span>Dashboard refreshed: {displayTime(data?.generated_at)}</span>
     </p>
     {error && <p className="tpWatchError" role="status">{error}</p>}
@@ -239,6 +242,9 @@ export default function TrustPositifWatchlist() {
                 row.registry_listed===false ? "NOT LISTED (snapshot)" : "NOT CHECKED"}</div>
               <div><b>Registry source:</b> {row.registry_source || "Not checked"}</div>
               <div><b>Registry checked:</b> {displayTime(row.registry_checked_at)}</div>
+              <div><b>Registry collector:</b> {row.registry_collector || "Not recorded"} · {row.registry_match_kind || "—"}</div>
+              {row.registry_snapshot_sha256 && <div><b>Snapshot SHA-256:</b> <code>{row.registry_snapshot_sha256.slice(0,16)}…</code></div>}
+              {row.registry_snapshot_bytes && <div><b>Snapshot:</b> {Number(row.registry_snapshot_bytes).toLocaleString("id-ID")} bytes · {Number(row.registry_snapshot_entries||0).toLocaleString("id-ID")} entries</div>}
               <div><b>Registry lookup key:</b> {row.registry_lookup_domain || "Not checked"}{row.registry_lookup_domain && row.registry_lookup_domain!==row.domain ? " (www alias uses parent lookup)" : ""}</div>
               {row.registry_last_error && <div><b>Registry sync:</b> {row.registry_last_error}</div>}
               <div><b>BLOCKED confirmation source:</b> {row.source || "Awaiting 2 provider signals"}</div>
