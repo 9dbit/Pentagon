@@ -71,10 +71,18 @@ ALTER TABLE public.merchant_accounts ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_signup_rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_onboarding_jobs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.merchant_signup_requests, public.merchant_signup_challenges,
- public.merchant_accounts, public.merchant_signup_rate_limits, public.merchant_onboarding_jobs FROM PUBLIC,anon,authenticated;
--- Revoke only newly created signup sequences. Existing Pentagon sequences
--- are untouched.
+ public.merchant_accounts, public.merchant_signup_rate_limits, public.merchant_onboarding_jobs FROM PUBLIC;
+-- Revoke only signup sequences. Existing Pentagon sequences are untouched.
 REVOKE ALL ON SEQUENCE public.merchant_signup_requests_id_seq,
- public.merchant_signup_challenges_id_seq,public.merchant_onboarding_jobs_id_seq
- FROM PUBLIC,anon,authenticated;
+ public.merchant_signup_challenges_id_seq,public.merchant_onboarding_jobs_id_seq FROM PUBLIC;
+DO $ BEGIN
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='anon') THEN
+   EXECUTE 'REVOKE ALL ON public.merchant_signup_requests,public.merchant_signup_challenges,public.merchant_accounts,public.merchant_signup_rate_limits,public.merchant_onboarding_jobs FROM anon';
+   EXECUTE 'REVOKE ALL ON SEQUENCE public.merchant_signup_requests_id_seq,public.merchant_signup_challenges_id_seq,public.merchant_onboarding_jobs_id_seq FROM anon';
+ END IF;
+ IF EXISTS(SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN
+   EXECUTE 'REVOKE ALL ON public.merchant_signup_requests,public.merchant_signup_challenges,public.merchant_accounts,public.merchant_signup_rate_limits,public.merchant_onboarding_jobs FROM authenticated';
+   EXECUTE 'REVOKE ALL ON SEQUENCE public.merchant_signup_requests_id_seq,public.merchant_signup_challenges_id_seq,public.merchant_onboarding_jobs_id_seq FROM authenticated';
+ END IF;
+END $;
 -- No anon or authenticated policies created. Backend uses its own privileged pool.
