@@ -26,7 +26,10 @@ const { verifyTestUser } = require("./testAccountAuth");
 const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall, isStaleMerchantDemoSession } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
-const { createMerchantSignupIntake } = require("./merchantSignupIntake");
+const {createMerchantSignupLifecycle}=require("./merchantSignupLifecycle");
+const {createResendSender}=require("./merchantSignupEmail");
+const {createMerchantSignupRoutes,createMerchantAccountHydrator}=require("./merchantSignupRoutes");
+const {startSignupOnboarding}=require("./merchantSignupOnboarding");
 const { createMerchantTelegramHubRouter, telegramHubWebhookRouter, verifyWebhookSecret } = require("./telegramHub");
 const { createPermanentGroupAdminRouter, createPermanentGroupMerchantRouter } = require("./telegramPermanentGroups");
 const {createActivationRouter,prepareMerchantTenant} = require("./telegramMerchantActivation");
@@ -36,6 +39,26 @@ const { seedDemoData } = require("./demoSeed");
 const app = express();
 const sessionSecret = process.env.SESSION_SECRET || "domain-radar-dev-session-secret";
 const adminPassword = process.env.ADMIN_PASSWORD || "";
+// Account authentication and public new-account intake are independent switches.
+const merchantAccountsEnabled=process.env.PENTAGON_MERCHANT_ACCOUNTS_ENABLED==="true";
+const signupOrigin=process.env.PENTAGON_SIGNUP_BASE_URL||"https://pentagon.quest";
+const signupEmailReady=Boolean(process.env.PENTAGON_SIGNUP_RESEND_API_KEY&&process.env.PENTAGON_SIGNUP_FROM_EMAIL);
+if(merchantAccountsEnabled&&!adminPassword)throw new Error("MERCHANT_ACCOUNT_AUTH_REQUIRES_ADMIN_PASSWORD");
+let merchantLifecycle=null;
+if(merchantAccountsEnabled){
+  const sender=signupEmailReady?createResendSender({
+    apiKey:process.env.PENTAGON_SIGNUP_RESEND_API_KEY,
+    from:process.env.PENTAGON_SIGNUP_FROM_EMAIL,baseUrl:signupOrigin
+  }):async()=>{throw Object.assign(new Error("MAIL_NOT_CONFIGURED"),{code:"MAIL_NOT_CONFIGURED"});};
+  merchantLifecycle=createMerchantSignupLifecycle(pool,{
+    sendEmail:sender,baseUrl:signupOrigin,rateSecret:process.env.PENTAGON_SIGNUP_RATE_SECRET
+  });
+}
+const publicSignupEnabled=merchantAccountsEnabled&&signupEmailReady&&
+  process.env.PENTAGON_MERCHANT_SIGNUP_ENABLED==="true";
+const signupRouters=createMerchantSignupRoutes(express,merchantLifecycle,{
+  enabled:publicSignupEnabled,baseUrl:signupOrigin
+});
 const ipCountryCache = {};
 async function getCountry(ip) {
   const clean = (ip||'').replace(/^::ffff:/,'').split(',')[0].trim();
@@ -55,9 +78,13 @@ app.use(express.json({ limit: "2mb" }));
 app.use(session({ store: new PgSessionStore(pool), name: "domain_radar_sid", secret: sessionSecret, resave: false, saveUninitialized: false, proxy: true, cookie: { httpOnly: true, sameSite: "lax", secure: "auto", maxAge: 1000 * 60 * 60 * 24 * 7 } }));
 // Deny every non-customer API for a viewer, including routes mounted before
 // normal admin middleware and future endpoints. Static assets remain public.
-app.use("/api", customerViewerFirewall);
-// Public, pending-only merchant application intake. Feature flag defaults OFF.
-app.use("/api/merchant-signup", createMerchantSignupIntake(pool));
+app.use("/api",createMerchantAccountHydrator(merchantLifecycle||{
+  validateSession:async()=>null
+}));
+app.use("/api",customerViewerFirewall);
+// New merchant registration is pending-only until verified + approved.
+app.use("/api/merchant-signup",signupRouters.publicRouter);
+app.use("/api/admin/merchant-signup",signupRouters.adminRouter);
 
 function requireAdmin(req, res, next) { if (req.session?.isCustomerViewer) return res.status(403).json({ error: "CUSTOMER_VIEW_ONLY" }); if (!adminPassword) return next(); if (req.session && req.session.isAdmin) return next(); return res.status(401).json({ error: "Unauthorized" }); }
 function getTenant(req) { return (req.session && req.session.tenant) || 'admin'; }
@@ -144,8 +171,8 @@ app.get("/api/auth/me", (req, res) => {
       });
     });
   }
-  const viewerTenant = currentViewerTenant(req.session);
-  const merchantTenant = currentMerchantTenant(req.session);
+  const viewerTenant=currentViewerTenant(req.session,req.pentagonMerchantGrant);
+  const merchantTenant=currentMerchantTenant(req.session,req.pentagonMerchantGrant);
   const wasViewer = Boolean(req.session?.isCustomerViewer);
   return res.json({
     authenticated: wasViewer ? Boolean(viewerTenant) : (!adminPassword || Boolean(req.session?.isAdmin)),
@@ -157,7 +184,7 @@ app.get("/api/auth/me", (req, res) => {
     tenant: viewerTenant || (wasViewer ? null : (req.session?.tenant || "admin"))
   });
 });
-app.post("/api/auth/login", (req, res) => {
+app.post("/api/auth/login", async (req, res) => {
   const email = normalizeEmail(req.body.email || "");
   const password = String(req.body.password || "");
   const demoPassword = process.env.DEMO_PASSWORD || "Domainradar123";
@@ -203,6 +230,31 @@ app.post("/api/auth/login", (req, res) => {
     return res.json({ ok: true, email: testAccount.email, isDemo: true });
   }
 
+  // DB accounts are authenticated only against their own password hash.
+  // Do not fall through to the shared administrator password for a known DB
+  // merchant, including suspended or revoked accounts.
+  if(merchantLifecycle&&email){
+    try{
+      if(await merchantLifecycle.accountExists(email)){
+        const account=await merchantLifecycle.authenticate({email,password});
+        if(!account)return res.status(401).json({error:"Invalid credentials"});
+        return req.session.regenerate(err=>{
+          if(err)return res.status(503).json({error:"SESSION_UNAVAILABLE"});
+          req.session.isAdmin=false;
+          req.session.isDemo=false;
+          req.session.isCustomerViewer=true;
+          req.session.adminEmail=account.email;
+          req.session.tenant=account.tenant;
+          req.session.merchantAccountId=account.id;
+          return res.json({ok:true,email:account.email,
+            isCustomerViewer:true,isMerchantAdmin:true,role:"merchant_admin"});
+        });
+      }
+    }catch(err){
+      console.warn("[Merchant Auth] credential lookup unavailable",String(err?.code||"DB_UNAVAILABLE").slice(0,24));
+      return res.status(503).json({error:"AUTH_BACKEND_UNAVAILABLE"});
+    }
+  }
   // Preserve the existing administrator login semantics.
   if (!adminPassword) {
     req.session.isAdmin = true;
@@ -398,5 +450,9 @@ app.get("*", (req, res) => {
   res.json({ ok: true, message: "API server is running. Run npm run client for the dashboard during development." });
 });
 const port = process.env.PORT || 3000;
-async function boot() { try { await pool.query("ALTER TABLE domains ADD COLUMN IF NOT EXISTS label TEXT DEFAULT ''"); } catch(e) { console.warn("label migration:", e.message); } for (const t of ['domains','proxies','projects','provider_nodes']) { try { await pool.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS tenant TEXT NOT NULL DEFAULT 'admin'`); } catch(e) { console.warn(`tenant col ${t}:`, e.message); } } try { await pool.query(`CREATE TABLE IF NOT EXISTS user_sessions (session_id TEXT PRIMARY KEY, user_agent TEXT, ip TEXT, page TEXT DEFAULT 'dashboard', email TEXT DEFAULT '', nickname TEXT DEFAULT '', country TEXT DEFAULT '', first_seen_at TIMESTAMPTZ DEFAULT NOW(), last_seen_at TIMESTAMPTZ DEFAULT NOW(), heartbeat_count INT DEFAULT 1)`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS page TEXT DEFAULT 'dashboard'`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS country TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ DEFAULT NOW()`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT NOW()`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS heartbeat_count INT DEFAULT 1`); await pool.query(`DELETE FROM user_sessions WHERE last_seen_at < NOW() - INTERVAL '90 days'`); console.log("user_sessions table ready, old rows pruned"); } catch(e) { console.warn("user_sessions migration:", e.message); } try { await seedDemoData(); console.log("Demo data seeded"); } catch(e) { console.warn("Demo seed:", e.message); } try { await loadSettings(); console.log("Settings loaded from database"); } catch (err) { console.error("Settings load failed, using env defaults:", err.message); } app.listen(port, () => { console.log(`Server running on ${port}`); startScheduler(); }); }
+async function boot() { try { await pool.query("ALTER TABLE domains ADD COLUMN IF NOT EXISTS label TEXT DEFAULT ''"); } catch(e) { console.warn("label migration:", e.message); } for (const t of ['domains','proxies','projects','provider_nodes']) { try { await pool.query(`ALTER TABLE ${t} ADD COLUMN IF NOT EXISTS tenant TEXT NOT NULL DEFAULT 'admin'`); } catch(e) { console.warn(`tenant col ${t}:`, e.message); } } try { await pool.query(`CREATE TABLE IF NOT EXISTS user_sessions (session_id TEXT PRIMARY KEY, user_agent TEXT, ip TEXT, page TEXT DEFAULT 'dashboard', email TEXT DEFAULT '', nickname TEXT DEFAULT '', country TEXT DEFAULT '', first_seen_at TIMESTAMPTZ DEFAULT NOW(), last_seen_at TIMESTAMPTZ DEFAULT NOW(), heartbeat_count INT DEFAULT 1)`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS page TEXT DEFAULT 'dashboard'`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS email TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS nickname TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS country TEXT DEFAULT ''`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS first_seen_at TIMESTAMPTZ DEFAULT NOW()`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS last_seen_at TIMESTAMPTZ DEFAULT NOW()`); await pool.query(`ALTER TABLE user_sessions ADD COLUMN IF NOT EXISTS heartbeat_count INT DEFAULT 1`); await pool.query(`DELETE FROM user_sessions WHERE last_seen_at < NOW() - INTERVAL '90 days'`); console.log("user_sessions table ready, old rows pruned"); } catch(e) { console.warn("user_sessions migration:", e.message); } try { await seedDemoData(); console.log("Demo data seeded"); } catch(e) { console.warn("Demo seed:", e.message); } try { await loadSettings(); console.log("Settings loaded from database"); } catch (err) { console.error("Settings load failed, using env defaults:", err.message); } app.listen(port, () => {
+  console.log(`Server running on ${port}`);
+  startScheduler();
+  if(merchantAccountsEnabled)startSignupOnboarding(pool);
+}); }
 boot();
