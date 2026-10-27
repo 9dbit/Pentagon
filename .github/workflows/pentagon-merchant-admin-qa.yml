@@ -8,6 +8,8 @@ on:
       - "server/telegramHub*.js"
       - "server/telegramMerchantReport*.js"
       - "server/telegramMerchantNativeReports.js"
+      - "server/trustpositifRegistrySync.js"
+      - "server/trustpositifWatch.js"
       - "server/telegramMerchantRankScanner.js"
       - "server/rankRoutes.js"
       - "server/telegramPermanentGroups.js"
@@ -90,6 +92,8 @@ jobs:
           node --check server/merchantDirectChecker.js
           node --check server/merchantNodeTelemetry.js
           node --check server/trustpositifAlertOutbox.js
+          node --check server/trustpositifRegistrySync.js
+          node --check server/trustpositifWatch.js
           node --check server/telegramPermanentGroups.js
           node --check server/telegramMerchantActivation.js
           node --check server/telegramMerchantAutoProvisioner.js
