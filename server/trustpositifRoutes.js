@@ -604,6 +604,10 @@ router.get("/trustpositif/watchlist", async (req, res, next) => {
       rank_whitelisted: domains.filter(d => d.rank_whitelisted).length,
       monitored: domains.filter(d => d.monitored).length,
       blocked: domains.filter(d => d.listed === true && d.global_status === "blocked").length,
+      registry_listed: domains.filter(d => d.registry_listed === true).length,
+      registry_pending_isp: domains.filter(d => d.registry_listed === true &&
+        !(d.listed === true && d.global_status === "blocked")).length,
+      registry_unchecked: domains.filter(d => d.registry_checked_at == null).length,
       suspected: domains.filter(d => d.last_anomaly_at && Array.isArray(d.anomaly_nodes) &&
         d.anomaly_nodes.length === 1 && d.listed !== true).length,
       recovered: domains.filter(d => d.recovered_at && d.listed === false).length,
