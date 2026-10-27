@@ -21,6 +21,7 @@ on:
       - "scripts/test-pentagon-merchant-telegram-settings-menu.cjs"
       - "scripts/test-pentagon-auto-telegram-admin.cjs"
       - "scripts/test-pentagon-telegram-hub*.cjs"
+      - "scripts/test-pentagon-telegram-bot-name.cjs"
       - "scripts/test-pentagon-telegram-report-formats.cjs"
       - "scripts/test-pentagon-telegram-settings-ui.cjs"
       - "server/trustpositifAlertOutbox.js"
@@ -92,6 +93,9 @@ jobs:
           node --check server/telegramMerchantAutoProvisioner.js
           python -m py_compile telegram_mt_bridge/app.py
           node --check server/telegramHub.js
+          node --check server/telegramHubBrand.js
+          node --check scripts/test-pentagon-telegram-bot-name.cjs
+          node scripts/test-pentagon-telegram-bot-name.cjs
           node --check server/telegramHubReports.js
           node --check server/telegramMerchantReportFormats.js
           node --check server/telegramMerchantReportData.js
