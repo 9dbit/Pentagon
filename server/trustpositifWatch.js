@@ -22,9 +22,13 @@ function reliableNodeAnomalies(results = [], nodes = []) {
     if (status !== "blocked" && status !== "warning") continue;
     const reason = String(r.reason || "").toLowerCase();
     if (/node error|polling node error|polling timeout|no response from device|agent.*(error|offline|timeout)|invalid_or_missing_subscription|subscription.*missing|unauthorized node|unsupported task/i.test(reason)) continue;
-    const evidence = status === "blocked" || Number(r.http_status) === 451 ||
-      /trustpositif|internetpositif|nawala|access denied|blocked|block keyword|dns not found|dns error|connection refused|http (403|451|5[0-9][0-9])|http timeout|redirect/i.test(reason);
-    if (!evidence) continue;
+    // A site outage, DNS failure, HTTP 403/5xx or generic timeout is NOT
+    // positive evidence of an ISP block even if two providers see it.
+    // Require explicit filtering indicators or HTTP 451 from the checker.
+    const explicitBlock=Number(r.http_status)===451 ||
+      /internetpositif|trustpositif|nawala|block keyword detected|block page|government (?:block|filter)|unavailable for legal reasons/i.test(reason) ||
+      /internetpositif|trustpositif|nawala/i.test(String(r.final_url||"").toLowerCase());
+    if (!explicitBlock) continue;
     // Different node IDs on the same upstream provider are not independent ISP votes.
     const providerKey = String(node.provider_name || "").trim().toLowerCase();
     if (!providerKey || providerVotes.has(providerKey)) continue;
