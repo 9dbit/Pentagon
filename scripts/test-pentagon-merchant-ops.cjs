@@ -12,7 +12,13 @@ const db={async query(sql,args=[]){
   calls.push({sql,args});
   if(sql.startsWith("SELECT value FROM app_settings"))return {rows:setting?[{value:setting}]:[]};
   if(sql.startsWith("INSERT INTO app_settings")){setting=args[1];return {rows:[]};}
-  if(sql.includes("COUNT(DISTINCT r.provider_name)"))return {rows:[{id:1,domain:"own.example",global_status:"unknown",recent_node_providers:0}]};
+  if(sql.includes("COUNT(DISTINCT r.provider_name)"))return {rows:[{
+    id:1,domain:"own.example",global_status:"warning",recent_node_providers:3,
+    registry_listed:true,registry_checked_at:"2026-10-27T17:44:04.230Z",
+    registry_lookup_domain:"own.example",
+    registry_source:"komdigi-domains_isp-tradevicepc-sha256:fixture",
+    stored_quorum_nodes:0,last_anomaly_at:null,verified_block_listing:null
+  }]};
   if(sql.includes("FROM trustpositif_checks"))return {rows:[]};
   if(sql.includes("COUNT(*)::int AS total"))return {rows:[{total:1,active:1}]};
   if(sql.includes("FROM domains d LEFT JOIN LATERAL"))return {rows:[{domain:"own.example",status:null,is_active:true,checked_at:null}]};
@@ -52,7 +58,19 @@ async function main(){
       assert.equal(r.status,200);
       assert.equal(r.data.domains[0].domain,"own.example");
       assert.equal(r.data.domains[0].sufficient_independent_nodes,false);
+      assert.equal(r.data.domains[0].recent_node_providers,3,
+        "three timeout-only node observations must not form a blocking quorum");
+      assert.equal(r.data.domains[0].confirmed_node_votes,0);
+      assert.equal(r.data.domains[0].registry_listed,true);
+      assert.equal(r.data.domains[0].confirmed_blocked,false);
+      assert.equal(r.data.domain_summary.registry_listed,1);
+      assert.equal(r.data.domain_summary.registry_pending_isp,1);
+      assert.equal(r.data.domain_summary.confirmed_blocked,0);
+      assert.match(r.data.verification_notice,/Timeout/i);
       assert.ok(calls.some(c=>c.sql.includes("d.tenant=$1")&&c.args[0]==="fixture"));
+      assert.ok(calls.some(c=>c.sql.includes("m.tenant=d.tenant")&&
+        c.sql.includes("m.domain=LOWER(TRIM(d.domain))")),
+        "registry evidence must join on tenant AND exact registered domain");
     });
     await test("Direct Checker is own-domain read-only until an authorized check",async()=>{
       const g=await request("/api/merchant/direct-checker");
