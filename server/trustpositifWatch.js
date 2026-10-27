@@ -60,6 +60,13 @@ async function ensureMonitorTable(db = pool) {
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_checked_at TIMESTAMPTZ");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_source TEXT NOT NULL DEFAULT ''");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_lookup_domain TEXT NOT NULL DEFAULT ''");
+  // A remote trusted source bridge supplies full-snapshot provenance. Add
+  // columns idempotently for existing and new Supabase deployments.
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_snapshot_sha256 TEXT NOT NULL DEFAULT ''");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_snapshot_bytes BIGINT");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_snapshot_entries BIGINT");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_collector TEXT NOT NULL DEFAULT ''");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_match_kind TEXT NOT NULL DEFAULT ''");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_last_error TEXT NOT NULL DEFAULT ''");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_retry_after TIMESTAMPTZ");
   // Created through backend SQL inside public schema: enable RLS even though
@@ -240,7 +247,9 @@ async function listWatchlist(tenant = "admin", db = pool) {
     "d.last_checked_at AS last_node_check_at,s.listed,s.verified_at,s.detected_at,s.recovered_at,s.first_anomaly_at,",
     "s.last_anomaly_at,s.anomaly_nodes,s.last_error,s.next_check_at,s.source,",
     "s.registry_listed,s.registry_checked_at,s.registry_source,s.registry_lookup_domain,",
-    "s.registry_last_error,s.registry_retry_after",
+    "s.registry_last_error,s.registry_retry_after,",
+    "s.registry_snapshot_sha256,s.registry_snapshot_bytes,s.registry_snapshot_entries,",
+    "s.registry_collector,s.registry_match_kind",
     "FROM registry r LEFT JOIN domains d ON LOWER(TRIM(d.domain))=r.domain AND d.tenant=r.tenant",
     "LEFT JOIN trustpositif_domain_monitor s ON s.domain=r.domain AND s.tenant=r.tenant",
     "ORDER BY CASE WHEN s.listed=TRUE AND d.global_status='blocked' THEN 0",

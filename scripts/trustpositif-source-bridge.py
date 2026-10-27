@@ -18,8 +18,8 @@ import urllib.request
 OFFICIAL = "https://trustpositif.komdigi.go.id/assets/db/domains_isp"
 BASE = os.environ.get("PENTAGON_TP_BRIDGE_BASE", "https://pentagon.quest").rstrip("/")
 TOKEN = os.environ.get("PENTAGON_TP_BRIDGE_TOKEN", "")
-MIN_BYTES = 10000000
-MIN_ENTRIES = 100000
+MIN_BYTES = 100000000
+MIN_ENTRIES = 5000000
 
 
 def request_json(url, method="GET", body=None, timeout=40):

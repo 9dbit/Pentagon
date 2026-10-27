@@ -58,6 +58,8 @@ async function main(){
     await test("full source integrity metadata required",async()=>{
       assert.equal(validateEvidence({...payload(monitored),source_http:404},monitored).ok,false);
       assert.equal(validateEvidence({...payload(monitored),source_bytes:150},monitored).ok,false);
+      assert.equal(validateEvidence({...payload(monitored),source_bytes:99999999},monitored).ok,false);
+      assert.equal(validateEvidence({...payload(monitored),source_entries:4999999},monitored).ok,false);
       assert.equal(validateEvidence({...payload(monitored),source_sha256:"invalid"},monitored).ok,false);
       assert.equal(validateEvidence({...payload(monitored),source_entries:50},monitored).ok,false);
     });
@@ -78,10 +80,18 @@ async function main(){
       assert.equal(out.ok,true);assert.equal(out.accepted,2);assert.equal(out.listed,2);
       const {rows}=await testdb.query(
         "SELECT d.domain,d.global_status,m.registry_listed,m.registry_checked_at,"+
-        "m.registry_lookup_domain,m.listed,m.detected_at,m.registry_source "+
+        "m.registry_lookup_domain,m.listed,m.detected_at,m.registry_source,"+
+        "m.registry_snapshot_sha256,m.registry_snapshot_bytes,m.registry_snapshot_entries,"+
+        "m.registry_collector,m.registry_match_kind "+
         "FROM domains d LEFT JOIN trustpositif_domain_monitor m ON m.domain=d.domain "+
         "AND m.tenant=d.tenant ORDER BY d.domain");
       assert.equal(rows.find(x=>x.domain==="www.example.com").registry_lookup_domain,"example.com");
+      assert.equal(rows.find(x=>x.domain==="www.example.com").registry_match_kind,"parent_apex");
+      assert.equal(rows.find(x=>x.domain==="alpha.example").registry_match_kind,"exact");
+      assert.equal(rows.find(x=>x.domain==="alpha.example").registry_collector,"TRADEVICEPC");
+      assert.equal(rows.find(x=>x.domain==="alpha.example").registry_snapshot_sha256,"b".repeat(64));
+      assert.equal(Number(rows.find(x=>x.domain==="alpha.example").registry_snapshot_bytes),222980547);
+      assert.equal(Number(rows.find(x=>x.domain==="alpha.example").registry_snapshot_entries),9952119);
       assert.equal(rows.find(x=>x.domain==="alpha.example").registry_listed,true);
       assert.equal(rows.find(x=>x.domain==="alpha.example").listed,null);
       assert.equal(rows.find(x=>x.domain==="alpha.example").detected_at,null);
@@ -97,8 +107,8 @@ async function main(){
       earlier.matches.forEach(x=>x.listed=false);
       const out=await importEvidence(earlier,testdb);
       assert.equal(out.accepted,0);
-      assert.ok((await testdb.query("SELECT registry_listed FROM trustpositif_domain_monitor"))
-        .rows.every(x=>x.registry_listed===true));
+      assert.ok((await testdb.query("SELECT registry_listed,registry_snapshot_sha256 FROM trustpositif_domain_monitor"))
+        .rows.every(x=>x.registry_listed===true && x.registry_snapshot_sha256==="b".repeat(64)));
     });
     await test("HTTP route rejects missing or invalid secrets",async()=>{
       const app=express();app.use("/api/internal/trustpositif/bridge",router);

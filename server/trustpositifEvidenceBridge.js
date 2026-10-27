@@ -14,8 +14,8 @@ const {TENANT_SQL,NON_PRODUCTION_SQL,isProductionTenant}=require("./customerWhit
 const router=express.Router();
 const SOURCE_URL="https://trustpositif.komdigi.go.id/assets/db/domains_isp";
 const INVENTORY_LIMIT=5000;
-const MIN_BYTES=10000000;
-const MIN_ENTRIES=100000;
+const MIN_BYTES=100000000;
+const MIN_ENTRIES=5000000;
 const MAX_AGE_MS=2*60*60*1000;
 const CLOCK_SKEW_MS=5*60*1000;
 
@@ -97,20 +97,29 @@ async function importEvidence(body,db=pool){
     await client.query("SELECT pg_advisory_xact_lock(hashtext('pentagon_trustpositif_source_bridge'))");
     for(const row of validation.accepted){
       const source="komdigi-domains_isp-tradevicepc-sha256:"+body.source_sha256.slice(0,32);
+      const matchKind=!row.listed?"not_listed":
+        row.lookup_key===row.domain?"exact":"parent_apex";
       const result=await client.query([
         "INSERT INTO trustpositif_domain_monitor",
         "(tenant,domain,registry_listed,registry_checked_at,registry_source,registry_lookup_domain,",
-        "registry_last_error,registry_retry_after,updated_at)",
-        "VALUES($1,$2,$3,$4,$5,$6,'',NULL,NOW())",
+        "registry_last_error,registry_retry_after,registry_snapshot_sha256,registry_snapshot_bytes,",
+        "registry_snapshot_entries,registry_collector,registry_match_kind,updated_at)",
+        "VALUES($1,$2,$3,$4,$5,$6,'',NULL,$7,$8,$9,'TRADEVICEPC',$10,NOW())",
         "ON CONFLICT(tenant,domain) DO UPDATE SET",
         "registry_listed=EXCLUDED.registry_listed,",
         "registry_checked_at=EXCLUDED.registry_checked_at,",
         "registry_source=EXCLUDED.registry_source,",
         "registry_lookup_domain=EXCLUDED.registry_lookup_domain,",
-        "registry_last_error='',registry_retry_after=NULL,updated_at=NOW()",
+        "registry_last_error='',registry_retry_after=NULL,",
+        "registry_snapshot_sha256=EXCLUDED.registry_snapshot_sha256,",
+        "registry_snapshot_bytes=EXCLUDED.registry_snapshot_bytes,",
+        "registry_snapshot_entries=EXCLUDED.registry_snapshot_entries,",
+        "registry_collector=EXCLUDED.registry_collector,",
+        "registry_match_kind=EXCLUDED.registry_match_kind,updated_at=NOW()",
         "WHERE trustpositif_domain_monitor.registry_checked_at IS NULL",
         "OR trustpositif_domain_monitor.registry_checked_at<=EXCLUDED.registry_checked_at"
-      ].join(" "),[row.tenant,row.domain,row.listed,validation.at,source,row.lookup_key]);
+      ].join(" "),[row.tenant,row.domain,row.listed,validation.at,source,row.lookup_key,
+        body.source_sha256,body.source_bytes,body.source_entries,matchKind]);
       accepted+=result.rowCount||0;
       if(result.rowCount&&row.listed)listed++;
     }
