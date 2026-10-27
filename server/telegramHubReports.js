@@ -200,17 +200,10 @@ async function drainReportOutbox(db=pool,limit=3) {
       "WHERE tenant=$1 AND chat_id=$2",
       [row.tenant,row.chat_id,result.status]
     );
-    // Internal forum copies only after successful merchant delivery; topics
-    // are staff-only and must never be used as the merchant destination.
-    if(result.status==="sent"){
-      const ops=await db.query("SELECT chat_id,message_thread_id FROM telegram_hub_ops_topics "+
-        "WHERE tenant=$1 AND status='ready' AND message_thread_id IS NOT NULL LIMIT 1",[row.tenant]);
-      if(ops.rows[0]){
-        await tg("sendMessage",{chat_id:ops.rows[0].chat_id,
-          message_thread_id:Number(ops.rows[0].message_thread_id),
-          text:row.message,parse_mode:"HTML",disable_web_page_preview:true}).catch(()=>{});
-      }
-    }
+    // Strict one-merchant/one-destination policy:
+    // never copy a merchant report to the shared staff/Domain Radar forum.
+    // The permanently verified merchant group above is the only destination.
+
   }
   return {claimed:rows.length};
 }
