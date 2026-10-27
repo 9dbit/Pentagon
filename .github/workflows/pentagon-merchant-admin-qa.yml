@@ -3,6 +3,13 @@ on:
   pull_request:
     paths:
       - "server/customerViewerAuth.js"
+      - "server/merchantSignupIntake.js"
+      - "server/merchantSignup*.js"
+      - "server/merchantSignupOnboarding.js"
+      - "scripts/test-pentagon-merchant-signup-pg.cjs"
+      - "public/signup/**"
+      - "server/db/migrations/*merchant_signup*"
+      - "scripts/test-merchant-signup-intake.cjs"
       - "server/merchantAdminRoutes.js"
       - "server/merchantOperationsRoutes.js"
       - "server/telegramHub*.js"
@@ -85,6 +92,14 @@ jobs:
       - name: JavaScript syntax and auth regressions
         run: |
           node --check server/customerViewerAuth.js
+          node --check server/merchantSignupIntake.js
+          node --check server/merchantSignupSecurity.js
+          node --check server/merchantSignupEmail.js
+          node --check server/merchantSignupLifecycle.js
+          node --check server/merchantSignupRoutes.js
+          node --check server/merchantSignupOnboarding.js
+          node --check scripts/test-pentagon-merchant-signup-pg.cjs
+          node --test scripts/test-merchant-signup-intake.cjs
           node --check server/merchantAdminRoutes.js
           node --check server/merchantOperationsRoutes.js
           node --check server/merchantDirectChecker.js
@@ -137,6 +152,7 @@ jobs:
         run: |
           node scripts/test-pentagon-customer-viewer-pg.cjs
           node scripts/test-pentagon-merchant-admin-pg.cjs
+          PENTAGON_SIGNUP_FIXTURE=1 node scripts/test-pentagon-merchant-signup-pg.cjs
           node scripts/test-pentagon-telegram-hub-pg.cjs
       - name: Compile merchant dashboard and existing production UI
         run: |

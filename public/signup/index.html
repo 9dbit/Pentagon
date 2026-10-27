@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><title>Merchant Application | Pentagon</title>
+<style>
+:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#080808;color:#f4f4f4}
+*{box-sizing:border-box}body{margin:0;padding:32px 18px;min-height:100vh;display:grid;place-items:center}
+main{width:min(100%,450px)}h1{font-size:30px;line-height:1.1;margin:12px 0}p{color:#b9b9b9;line-height:1.55}
+header{font-size:14px;font-weight:750;letter-spacing:.08em;color:#f97316}
+form{display:grid;gap:12px;margin-top:28px}label{font-weight:650;font-size:13px}
+input:not([type=checkbox]){width:100%;margin-top:7px;border:1px solid #363636;border-radius:13px;background:#171717;color:white;padding:14px;font:inherit}
+.agree{display:flex;gap:10px;align-items:flex-start;font-weight:400;line-height:1.5}
+button{border:0;border-radius:999px;padding:15px 20px;background:#f97316;color:#140901;font-weight:800;font:inherit;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}a{color:#fb923c}#result{min-height:24px}
+.hide{position:absolute;left:-10000px}
+</style></head><body><main><header>PENTAGON / MERCHANT ACCESS</header><h1>Request a merchant account</h1>
+<p>Send your details for review. This does not immediately activate your dashboard or give administrator access.</p>
+<form id="signup">
+<label>Business name<input name="company" minlength="2" maxlength="120" required autocomplete="organization" placeholder="Company / brand"></label>
+<label>Business email<input name="email" type="email" maxlength="254" required autocomplete="email" placeholder="name@company.com"></label>
+<div class="hide" aria-hidden="true"><label>Website check<input name="websiteCheck" tabindex="-1" autocomplete="off"></label></div>
+<label class="agree"><input name="consent" type="checkbox" required><span>I agree to be contacted about merchant account activation and acknowledge the <a href="/privacy/" target="_blank" rel="noopener noreferrer">privacy notice</a>.</span></label>
+<button type="submit">Submit application</button><p id="result" role="status" aria-live="polite"></p></form>
+<p><a href="/">Back to Pentagon</a></p>
+</main><script>
+const form=document.getElementById("signup"),status=document.getElementById("result");
+form.addEventListener("submit",async e=>{
+ e.preventDefault();if(!form.reportValidity())return;
+ const btn=form.querySelector("button");btn.disabled=true;status.textContent="Submitting...";
+ const values=new FormData(form);
+ try{
+  const response=await fetch("/api/merchant-signup",{method:"POST",headers:{"Content-Type":"application/json"},
+   body:JSON.stringify({company:values.get("company"),email:values.get("email"),consent:values.get("consent")==="on",websiteCheck:values.get("websiteCheck")})});
+  if(!response.ok)throw new Error(response.status===503?"Applications are not available yet. Please try later.":"Could not submit your application.");
+  form.reset();status.textContent="Application received. We will review your request. Dashboard access is not active yet.";
+ }catch(err){status.textContent=err.message||"Could not submit. Please try again.";}
+ finally{btn.disabled=false;}
+});
+</script></body></html>

@@ -62,19 +62,33 @@ function isStaleMerchantDemoSession(session, raw) {
   return Boolean(customerGrantForEmail(session.adminEmail, raw));
 }
 
-function currentViewerTenant(session) {
+// DB merchant identities are attached only by server-side validateSession on
+// each request. A cookie alone NEVER proves account ownership or grants a role.
+function approvedDynamicGrant(session,dynamicGrant){
+  if(!dynamicGrant||!session?.merchantAccountId ||
+     session.merchantAccountId!==dynamicGrant.id ||
+     session.tenant!==dynamicGrant.tenant ||
+     session.adminEmail!==dynamicGrant.email ||
+     session.isCustomerViewer!==true ||
+     session.isAdmin!==false || session.isDemo!==false ||
+     dynamicGrant.role!=="merchant_admin" ||
+     !isEligibleCustomerTenant(dynamicGrant.tenant))return null;
+  return dynamicGrant;
+}
+function currentViewerTenant(session,dynamicGrant=null) {
   if (!session || session.isCustomerViewer !== true ||
       session.isAdmin === true || session.isDemo === true) return null;
+  if(session.merchantAccountId)return approvedDynamicGrant(session,dynamicGrant)?.tenant||null;
   const grant = customerGrantForEmail(session.adminEmail);
   if (!grant || grant.tenant !== session.tenant) return null;
   return grant.tenant;
 }
-
-function currentMerchantTenant(session) {
-  const tenant = currentViewerTenant(session);
-  if (!tenant) return null;
-  const grant = customerGrantForEmail(session.adminEmail);
-  return grant?.role === "merchant_admin" ? tenant : null;
+function currentMerchantTenant(session,dynamicGrant=null) {
+  const tenant=currentViewerTenant(session,dynamicGrant);
+  if(!tenant)return null;
+  if(session.merchantAccountId)return tenant;
+  const grant=customerGrantForEmail(session.adminEmail);
+  return grant?.role==="merchant_admin"?tenant:null;
 }
 
 // Guards ALL APIs, including provider-node and rank routes mounted before
@@ -94,7 +108,7 @@ function customerViewerFirewall(req, res, next) {
   // Merchant APIs are mounted only behind requireMerchantAdmin.
   // All other historic administrator endpoints remain explicitly blocked.
   if (fullPath.startsWith("/api/merchant/")) {
-    if (!currentMerchantTenant(req.session)) return res.status(403).json({ error: "MERCHANT_ADMIN_ONLY" });
+    if (!currentMerchantTenant(req.session,req.pentagonMerchantGrant)) return res.status(403).json({ error: "MERCHANT_ADMIN_ONLY" });
     return next();
   }
   if (!VIEWER_PATHS.has(req.method + " " + fullPath)) {
@@ -102,7 +116,7 @@ function customerViewerFirewall(req, res, next) {
   }
   if (fullPath !== "/api/auth/me" &&
       fullPath !== "/api/auth/logout" &&
-      !currentViewerTenant(req.session)) {
+      !currentViewerTenant(req.session,req.pentagonMerchantGrant)) {
     return res.status(403).json({ error: "CUSTOMER_ACCESS_REVOKED" });
   }
   next();
@@ -111,7 +125,7 @@ function customerViewerFirewall(req, res, next) {
 function requireCustomerViewer(req, res, next) {
   if (req.method !== "GET") return res.status(405).json({ error: "READ_ONLY" });
   if (!req.session?.isCustomerViewer) return res.status(401).json({ error: "LOGIN_REQUIRED" });
-  const tenant = currentViewerTenant(req.session);
+  const tenant = currentViewerTenant(req.session,req.pentagonMerchantGrant);
   if (!tenant) return res.status(403).json({ error: "CUSTOMER_ACCESS_REVOKED" });
   req.viewerTenant = tenant;
   next();
@@ -121,7 +135,7 @@ function requireMerchantAdmin(req, res, next) {
   if (!req.session?.isCustomerViewer) {
     return res.status(403).json({ error: "MERCHANT_ADMIN_ONLY" });
   }
-  const tenant = currentMerchantTenant(req.session);
+  const tenant = currentMerchantTenant(req.session,req.pentagonMerchantGrant);
   if (!tenant) return res.status(403).json({ error: "CUSTOMER_ACCESS_REVOKED" });
   req.merchantTenant = tenant;
   next();
