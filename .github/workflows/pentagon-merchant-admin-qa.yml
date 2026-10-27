@@ -19,6 +19,7 @@ on:
       - "src/MerchantTelegramHub.*"
       - "src/MerchantTelegramGroupSettings.*"
       - "scripts/test-pentagon-merchant-telegram-settings-menu.cjs"
+      - "scripts/test-pentagon-auto-telegram-admin.cjs"
       - "scripts/test-pentagon-telegram-hub*.cjs"
       - "scripts/test-pentagon-telegram-report-formats.cjs"
       - "scripts/test-pentagon-telegram-settings-ui.cjs"
@@ -105,6 +106,8 @@ jobs:
           node scripts/test-pentagon-telegram-settings-ui.cjs
           node --check scripts/test-pentagon-merchant-telegram-settings-menu.cjs
           node scripts/test-pentagon-merchant-telegram-settings-menu.cjs
+          node --check scripts/test-pentagon-auto-telegram-admin.cjs
+          node scripts/test-pentagon-auto-telegram-admin.cjs
           node --check scripts/test-pentagon-merchant-telegram-routing.cjs
           node --check scripts/test-pentagon-android-heartbeat-recovery.cjs
           node --check scripts/test-pentagon-node-health-v2.cjs
