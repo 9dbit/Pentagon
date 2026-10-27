@@ -24,3 +24,18 @@
 .tgPermError{font-size:12px;color:#f87171}
 .tgPermMuted{font-size:12px;opacity:.6}
 @media(max-width:720px){.tgPermHeading{flex-direction:column}.tgPermRow{grid-template-columns:1fr;gap:5px}.tgPermCommand>div{flex-direction:column;align-items:flex-start;gap:7px}.tgPermControls select,.tgPermControls .tgPermButton{width:100%}}
+/* Auto-provisioning progress: soft groups, minimal framing, mobile-safe. */
+.tgPermAutoStats{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:12px;margin:14px 0 18px}
+.tgPermAutoStats>div{display:flex;flex-direction:column;gap:7px;padding:15px 17px;border-radius:14px;background:#171c23}
+.tgPermAutoStats span{font-size:11px;color:#99a6b3}
+.tgPermAutoStats strong{font-size:22px;color:#eef1f4}
+.tgPermProvisionerWarning{display:flex;align-items:flex-start;gap:11px;margin:12px 0 20px;padding:14px;border-radius:13px;color:#e6b67e;background:#332a1f;font-size:12px;line-height:1.6}
+.tgPermProvisionerWarning>svg{flex-shrink:0}
+.tgPermAutoRow{grid-template-columns:minmax(120px,1fr) minmax(200px,2fr) minmax(155px,1fr)}
+.tgPermAutoRow small{font-size:11px;color:#a6b3c1;grid-column:1 / -1}
+.tgPermRecovery{margin-top:22px}
+.tgPermRecovery>summary{display:flex;align-items:center;gap:8px;cursor:pointer;color:#a9b6c4;font-size:12px;font-weight:700;padding:14px 0;list-style:none}
+.tgPermRecovery>summary::-webkit-details-marker{display:none}
+.tgPermRecovery>summary svg{color:#f68b34}
+@media(max-width:760px){.tgPermAutoStats{grid-template-columns:1fr 1fr}.tgPermAutoRow{grid-template-columns:minmax(0,1fr)}.tgPermAutoRow>span{overflow-wrap:anywhere}}
+@media(max-width:450px){.tgPermAutoStats{grid-template-columns:1fr}}
