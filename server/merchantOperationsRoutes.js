@@ -72,11 +72,19 @@ function createMerchantOperationsRouter(db = pool) {
     const [domains,checks,coverage]=await Promise.all([
       db.query(
         "SELECT d.id,d.domain,d.global_status,d.is_active,d.last_checked_at, "+
+        "m.registry_listed,m.registry_checked_at,m.registry_source,m.registry_lookup_domain, "+
+        "m.listed AS verified_block_listing,m.last_anomaly_at, "+
+        "COALESCE(JSONB_ARRAY_LENGTH(COALESCE(m.anomaly_nodes,'[]'::jsonb)),0)::int AS stored_quorum_nodes, "+
         "COUNT(DISTINCT r.provider_name) FILTER (WHERE r.checked_at>=NOW()-INTERVAL '24 hours' "+
         "AND r.checker_type ILIKE '%node%')::int AS recent_node_providers, "+
         "MAX(r.checked_at) AS latest_evidence_at "+
-        "FROM domains d LEFT JOIN check_results r ON r.domain_id=d.id "+
-        "WHERE d.tenant=$1 GROUP BY d.id ORDER BY d.id DESC LIMIT 200",[own(req)]
+        "FROM domains d "+
+        "LEFT JOIN trustpositif_domain_monitor m ON m.tenant=d.tenant "+
+        "AND m.domain=LOWER(TRIM(d.domain)) "+
+        "LEFT JOIN check_results r ON r.domain_id=d.id "+
+        "WHERE d.tenant=$1 GROUP BY d.id,m.registry_listed,m.registry_checked_at, "+
+        "m.registry_source,m.registry_lookup_domain,m.listed,m.last_anomaly_at,m.anomaly_nodes "+
+        "ORDER BY d.id DESC LIMIT 200",[own(req)]
       ),
       db.query(
         "SELECT provider_name,mode,ok,reason,created_at FROM trustpositif_checks "+
@@ -95,15 +103,35 @@ function createMerchantOperationsRouter(db = pool) {
         ok:r.ok===true,created_at:r.created_at,
         status:r.ok===true?"verified_source_reachable":"not_verified"
       })),
-      domain_summary:coverage.rows[0]||{total:0,active:0},
+      domain_summary:{
+        ...(coverage.rows[0]||{total:0,active:0}),
+        registry_listed:domains.rows.filter(d=>d.registry_listed===true).length,
+        registry_pending_isp:domains.rows.filter(d=>d.registry_listed===true &&
+          !(d.global_status==="blocked" && d.verified_block_listing===true)).length,
+        confirmed_blocked:domains.rows.filter(d=>d.global_status==="blocked" &&
+          d.verified_block_listing===true).length
+      },
       domains:domains.rows.map(d=>({
         domain:d.domain,global_status:d.global_status||"unknown",is_active:d.is_active,
         last_checked_at:d.last_checked_at,latest_evidence_at:d.latest_evidence_at,
         recent_node_providers:Number(d.recent_node_providers)||0,
-        // Never assert blocked based solely on a stale single node.
-        sufficient_independent_nodes:Number(d.recent_node_providers)>=2
+        registry_listed:typeof d.registry_listed==="boolean"?d.registry_listed:null,
+        registry_checked_at:d.registry_checked_at||null,
+        registry_source:String(d.registry_source||"").slice(0,125),
+        registry_lookup_domain:String(d.registry_lookup_domain||"").slice(0,253),
+        confirmed_blocked:d.global_status==="blocked" && d.verified_block_listing===true,
+        // Recent node observations include transport failures. Only vetted
+        // independent filter anomalies in the monitor count towards quorum.
+        confirmed_node_votes:d.last_anomaly_at &&
+          Date.now()-new Date(d.last_anomaly_at).getTime()<20*60*1000 &&
+          Date.now()-new Date(d.last_anomaly_at).getTime()>=-300000
+          ? Number(d.stored_quorum_nodes)||0 : 0,
+        sufficient_independent_nodes:Boolean(d.last_anomaly_at &&
+          Date.now()-new Date(d.last_anomaly_at).getTime()<20*60*1000 &&
+          Date.now()-new Date(d.last_anomaly_at).getTime()>=-300000 &&
+          Number(d.stored_quorum_nodes)>=2)
       })),
-      verification_notice:"Unknown is not safe; official source lookup and two independent checker providers required for confirmation."
+      verification_notice:"Official registry-listed is a separate source fact, not ISP block confirmation. BLOCKED requires verified source and 2 independent provider filtering signals; node timeouts do not count."
     });
   }));
   const activeChecks=new Set();
