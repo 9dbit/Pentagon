@@ -287,16 +287,25 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           {data.trust ? <>
             <div className="maMetrics">
               <div className="maMetric"><span>DOMAIN</span><strong>{data.trust.domain_summary?.total ?? 0}</strong></div>
-              <div className="maMetric"><span>AKTIF</span><strong>{data.trust.domain_summary?.active ?? 0}</strong></div>
-              <div className="maMetric"><span>SUMBER DIPERIKSA</span><strong>{data.trust.official_source_checks?.length ?? 0}</strong></div>
+              <div className="maMetric"><span>REGISTRY LISTED</span><strong>{data.trust.domain_summary?.registry_listed ?? 0}</strong></div>
+              <div className="maMetric"><span>CONFIRMED BLOCKED</span><strong>{data.trust.domain_summary?.confirmed_blocked ?? 0}</strong></div>
             </div>
             <div className="maInfo"><ShieldAlert size={19}/>
-              <span>Konfirmasi blocked memerlukan evidence resmi dan minimum dua provider node independen. Tidak ada simulasi status.</span></div>
-            <div className="maList">{data.trust.domains?.map(d=><button key={d.domain} className="maDataRowBtn"
-              type="button" onClick={()=>setDetail({label:d.domain,value:d.global_status,domain:d})}>
-              <strong>{d.domain}</strong><span>{statusText(d.global_status)}</span>
-              <small>Checker independen 24 jam: {d.recent_node_providers} · Bukti: {dateWib(d.latest_evidence_at)}</small>
-            </button>)}{!data.trust.domains?.length&&<div className="maEmpty">Belum ada domain.</div>}</div>
+              <span>Status registry resmi terpisah dari status jaringan. BLOCKED hanya setelah bukti resmi dan dua sinyal pemblokiran ISP independen. Timeout APK tidak dihitung sebagai bukti pemblokiran.</span></div>
+            <div className="maList">{data.trust.domains?.map(d=>{
+              const visibleStatus=d.confirmed_blocked ? "CONFIRMED BLOCKED" :
+                d.registry_listed===true ? "REGISTRY LISTED · ISP PENDING" :
+                d.registry_listed===false ? "NOT LISTED · NETWORK "+statusText(d.global_status) :
+                statusText(d.global_status);
+              return <button key={d.domain} className="maDataRowBtn"
+                type="button" onClick={()=>setDetail({label:d.domain,value:visibleStatus,domain:d})}>
+                <strong>{d.domain}</strong><span>{visibleStatus}</span>
+                <small>Registry: {d.registry_listed===true?"Terdaftar":d.registry_listed===false?"Tidak terdaftar":"Belum diverifikasi"}
+                  {" · "}Dicek: {dateWib(d.registry_checked_at)}{" · "}
+                  Bukti filtering ISP: {d.confirmed_node_votes ?? 0}/2
+                </small>
+              </button>;
+            })}{!data.trust.domains?.length&&<div className="maEmpty">Belum ada domain.</div>}</div>
           </>:<div className="maEmpty">Evidence Trust Positif belum dapat dimuat. Periksa koneksi server.</div>}
         </section>}
 
@@ -347,8 +356,11 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               <h2>{detail.label}</h2></div><button type="button" className="maPill"
               onClick={()=>setDetail(null)} aria-label="Tutup"><X size={18}/></button></div>
             <div className="maDetailValue">{String(detail.value ?? "Belum tersedia")}</div>
-            {detail.domain && <p>Node independen: {detail.domain.recent_node_providers}. Evidence terbaru: {dateWib(detail.domain.latest_evidence_at)}.
-              Hanya domain merchant ini.</p>}
+            {detail.domain && <p>Registry resmi: {detail.domain.registry_listed===true?"Terdaftar":detail.domain.registry_listed===false?"Tidak terdaftar":"Belum diperiksa"}.
+              Lookup key: {detail.domain.registry_lookup_domain || "N/A"}. Registry checked: {dateWib(detail.domain.registry_checked_at)}.
+              Bukti filtering independen: {detail.domain.confirmed_node_votes ?? 0}/2.
+              Observasi node (termasuk timeout): {detail.domain.recent_node_providers ?? 0}.
+              Evidence terbaru: {dateWib(detail.domain.latest_evidence_at)}. Hanya domain merchant ini.</p>
             {detail.direct && <p>HTTP: {detail.direct.http_status ?? "N/A"}, durasi: {detail.direct.latency_ms ?? "N/A"} ms,
               terakhir diperiksa: {dateWib(detail.direct.checked_at)}.</p>}
             {detail.node && <p>Provider: {detail.node.provider_name}. Sinyal: {detail.node.signal_label},
@@ -360,8 +372,10 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               <div className="maDetailEntries">
                 {(detail.section==="nodes" ? data.nodes.map(n=>({name:n.public_alias,description:n.connectivity+" · "+dateWib(n.last_seen_at)})):
                   detail.section==="keywords" ? data.keywords.map(k=>({name:k.keyword,description:(k.whitelist||[]).length+" relasi whitelist"})):
-                  detail.section==="trust" ? (data.trust?.domains||[]).filter(d=>["blocked","warning"].includes(d.global_status))
-                    .map(d=>({name:d.domain,description:statusText(d.global_status)})):
+                  detail.section==="trust" ? (data.trust?.domains||[]).filter(d=>
+                    d.registry_listed===true||["blocked","warning"].includes(d.global_status))
+                    .map(d=>({name:d.domain,description:d.confirmed_blocked?"CONFIRMED BLOCKED":
+                      d.registry_listed===true?"REGISTRY LISTED · ISP PENDING":statusText(d.global_status)})):
                   data.domains.map(d=>({name:d.domain,description:statusText(d.global_status)}))
                 ).slice(0,12).map((item,i)=><div key={i}><strong>{item.name}</strong><small>{item.description}</small></div>)}
               </div>
