@@ -183,9 +183,10 @@ async function run(){
       }});
     assert.equal(outcome.status,"complete");
     assert.equal(outcome.listed,2);
-    const row=(await db.query("SELECT registry_listed,registry_checked_at,listed,detected_at "+
+    const row=(await db.query("SELECT registry_listed,registry_checked_at,registry_lookup_domain,listed,detected_at "+
       "FROM trustpositif_domain_monitor WHERE tenant='wisnu123'")).rows[0];
     assert.equal(row.registry_listed,true);
+    assert.equal(row.registry_lookup_domain,"wisnu123.net");
     assert.ok(row.registry_checked_at);
     assert.equal(row.listed,null);
     assert.equal(row.detected_at,null);
