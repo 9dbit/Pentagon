@@ -72,5 +72,9 @@ ALTER TABLE public.merchant_signup_rate_limits ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.merchant_onboarding_jobs ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON public.merchant_signup_requests, public.merchant_signup_challenges,
  public.merchant_accounts, public.merchant_signup_rate_limits, public.merchant_onboarding_jobs FROM PUBLIC,anon,authenticated;
-REVOKE ALL ON ALL SEQUENCES IN SCHEMA public FROM anon,authenticated;
+-- Revoke only newly created signup sequences. Existing Pentagon sequences
+-- are untouched.
+REVOKE ALL ON SEQUENCE public.merchant_signup_requests_id_seq,
+ public.merchant_signup_challenges_id_seq,public.merchant_onboarding_jobs_id_seq
+ FROM PUBLIC,anon,authenticated;
 -- No anon or authenticated policies created. Backend uses its own privileged pool.
