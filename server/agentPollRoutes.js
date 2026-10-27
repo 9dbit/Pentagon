@@ -365,6 +365,16 @@ router.post("/poll", async (req, res, next) => {
   }
 });
 
+async function guardedCompleteTask(db,nodeId,taskId,result){
+  const saved=await db.query(
+    "UPDATE provider_node_tasks "+
+    "SET status='done',result=$1::jsonb,error=NULL,completed_at=NOW() "+
+    "WHERE id=$2 AND node_id=$3 AND status='claimed' RETURNING id",
+    [JSON.stringify(result),taskId,nodeId]
+  );
+  return Boolean(saved.rowCount);
+}
+
 router.post("/result", async (req, res, next) => {
   try {
     const node = await findNode(req.body.node_name, req.body.secret_key);
@@ -406,14 +416,7 @@ router.post("/result", async (req, res, next) => {
       return res.json({ ok: false, ignored: true, reason: health.last_health_reason || "wrong network" });
     }
 
-    const saved=await pool.query(
-      `UPDATE provider_node_tasks
-       SET status='done', result=$1::jsonb,error=NULL,completed_at=NOW()
-       WHERE id=$2 AND node_id=$3 AND status='claimed'
-       RETURNING id`,
-      [JSON.stringify(result), taskId, node.id]
-    );
-    if(!saved.rowCount)
+    if(!(await guardedCompleteTask(pool,node.id,taskId,result)))
       return res.json({ok:true,ignored:true,reason:"TASK_NO_LONGER_ACTIVE"});
     // Raw node reports remain in the task journal. Only the trusted
     // scheduler may write global domain status / official BLOCKED transitions.
@@ -426,4 +429,4 @@ router.post("/result", async (req, res, next) => {
   }
 });
 
-module.exports = { router, ensureTaskTable, enqueueNodeTask, waitForNodeTask };
+module.exports = { router, ensureTaskTable, enqueueNodeTask, waitForNodeTask, guardedCompleteTask };
