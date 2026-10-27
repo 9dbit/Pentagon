@@ -1,0 +1,19 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="robots" content="noindex,nofollow"><meta name="referrer" content="no-referrer"><title>Activate your merchant account | Pentagon</title>
+<style>:root{color-scheme:dark;font-family:system-ui,sans-serif;background:#080808;color:#f6f6f6}body{margin:0;min-height:100vh;display:grid;place-items:center;padding:24px}main{max-width:440px;width:100%}header{font-size:13px;letter-spacing:.12em;font-weight:800;color:#fb923c}h1{font-size:29px}p{color:#b6bfca;line-height:1.6}form{display:grid;gap:15px;margin-top:20px}label{font-size:13px;font-weight:700}input{display:block;width:100%;padding:13px;background:#171717;color:white;border:1px solid #383838;border-radius:13px;margin-top:7px;font:inherit}button{border:0;border-radius:999px;background:#f97316;color:#140a03;font:inherit;padding:14px 22px;font-weight:800;cursor:pointer}button:disabled{opacity:.5}a{color:#fca65a}</style></head><body><main><header>PENTAGON / MERCHANT ACCESS</header>
+<h1>Activate your account</h1><p>Your application was approved. Choose a unique password of at least 12 characters. Your invitation can be used once.</p>
+<form id="form"><label>New password<input id="pass" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label><label>Confirm password<input id="confirm" type="password" autocomplete="new-password" minlength="12" maxlength="128" required></label>
+<button type="submit">Activate account</button><p id="status" role="status" aria-live="polite"></p></form><p><a href="/">Back to sign in</a></p></main><script>
+const q=new URLSearchParams(location.search),token=q.get("code");history.replaceState(null,"",location.pathname);
+const form=document.getElementById("form"),status=document.getElementById("status");
+if(!token){form.querySelector("button").disabled=true;status.textContent="Activation token missing.";}
+form.addEventListener("submit",async(e)=>{
+ e.preventDefault();const a=document.getElementById("pass"),b=document.getElementById("confirm");
+ if(a.value!==b.value){status.textContent="Passwords do not match.";return;}
+ const btn=form.querySelector("button");btn.disabled=true;status.textContent="Activating...";
+ try{const r=await fetch("/api/merchant-signup/complete",{method:"POST",credentials:"same-origin",cache:"no-store",headers:{"Content-Type":"application/json"},body:JSON.stringify({token,password:a.value})});
+ if(!r.ok)throw Error(r.status===400?"Token expired or already used.":"Activation unavailable.");
+ a.value="";b.value="";status.textContent="Account activated. You can now sign in on Pentagon with your email and new password.";
+ }catch(err){btn.disabled=false;status.textContent=err.message;}
+});
+</script></body></html>
