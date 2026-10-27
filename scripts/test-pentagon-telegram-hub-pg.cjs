@@ -31,6 +31,7 @@ const groupMap=new Map([
   ["-100999999",{title:"Domain Radar Staff Operations",type:"supergroup",is_forum:true}]
 ]);
 const calls=[];
+let richTestMode="success";
 const realPost=axios.post;
 axios.post=async(url,body)=>{
   const method=String(url).split("/").pop();
@@ -47,6 +48,13 @@ axios.post=async(url,body)=>{
   }
   if(method==="createChatInviteLink")
     return{status:200,data:{ok:true,result:{invite_link:"https://t.me/+FixtureInvite"+calls.length}}};
+  if(method==="sendRichMessage"){
+    if(richTestMode==="explicit_400")
+      return{status:400,data:{ok:false,error_code:400,description:"Bad Request: unsupported rich table"}};
+    if(richTestMode==="ambiguous_500")
+      return{status:500,data:{ok:false,error_code:500,description:"Internal Server Error"}};
+    return{status:200,data:{ok:true,result:{message_id:calls.length}}};
+  }
   if(method==="sendMessage")
     return{status:200,data:{ok:true,result:{message_id:calls.length}}};
   if(method==="setWebhook")return{status:200,data:{ok:true,result:true}};
@@ -287,7 +295,7 @@ async function main(){
     assert.equal(queued.status,202);
     assert.equal(queued.data.queued,2);
     const {rows}=await pool.query(
-      "SELECT tenant,chat_id,kind,message FROM telegram_hub_report_outbox ORDER BY id");
+      "SELECT tenant,chat_id,kind,message,rich_message FROM telegram_hub_report_outbox ORDER BY id");
     assert.equal(rows.length,2);
     assert.deepEqual(rows.map(r=>r.kind),["trustpositif_summary","google_rank"]);
     assert.ok(rows.every(r=>r.tenant==="merchant_a"&&r.chat_id==="-100700001"));
@@ -302,21 +310,28 @@ async function main(){
     assert.match(rows[1].message,/↑2/);
     assert.match(rows[1].message,/TSEL: #4/);
     assert.ok(rows.every(r=>r.message.length<4096));
+    assert.ok(rows.every(r=>typeof r.rich_message?.html==="string"));
+    assert.ok(rows.every(r=>r.rich_message.html.includes("<table bordered striped>")));
+    assert.ok(rows.every(r=>r.rich_message.html.length<24000));
     const again=await call(route+"/report/send-now","POST",{});
     assert.equal(again.status,409,"manual duplicate within one minute rejected");
     const result=await reports.drainReportOutbox(pool,4);
     assert.equal(result.claimed,2);
-    const sent=calls.filter(c=>c.method==="sendMessage" &&
-      /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(c.body.text||""));
+    const sent=calls.filter(c=>c.method==="sendRichMessage" &&
+      /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(c.body.rich_message?.html||""));
     assert.equal(sent.length,2);
     assert.ok(sent.every(c=>String(c.body.chat_id)==="-100700001"));
     assert.ok(!sent.some(c=>c.body.message_thread_id!=null),
       "merchant report messages must not go to internal forum topics");
-    assert.ok(!calls.some(c=>c.method==="sendMessage" &&
+    assert.ok(!calls.some(c=>["sendMessage","sendRichMessage"].includes(c.method) &&
       String(c.body.chat_id)==="-100999999" &&
-      /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(c.body.text||"")),
+      /(?:GOOGLE RANK REPORT|TRUST POSITIF REPORT)/.test(
+        c.body.text||c.body.rich_message?.html||"")),
       "Domain Radar operations must never receive a merchant report mirror");
-    assert.ok(sent.every(c=>c.body.reply_markup?.inline_keyboard?.[0]?.[0]?.url==="https://pentagon.quest"));
+    assert.ok(sent.every(c=>c.body.reply_markup?.inline_keyboard?.[0]?.[0]?.url.startsWith("https://pentagon.quest/?merchantTab=")));
+    assert.ok(sent.every(c=>c.body.protect_content===true));
+    assert.ok(sent.some(c=>/trust-positif|Defence Center/.test(c.body.reply_markup?.inline_keyboard?.[0]?.[0]?.text||"")));
+    assert.ok(sent.some(c=>/Google Rank/.test(c.body.reply_markup?.inline_keyboard?.[0]?.[0]?.text||"")));
     const testResult=await call(route+"/test","POST",{});
     assert.equal(testResult.status,200);
     assert.equal(String(calls.at(-1).body.chat_id),"-100700001");
