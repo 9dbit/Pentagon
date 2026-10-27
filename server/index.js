@@ -26,6 +26,7 @@ const { verifyTestUser } = require("./testAccountAuth");
 const { customerTenantForEmail, currentViewerTenant, currentMerchantTenant, customerViewerFirewall, isStaleMerchantDemoSession } = require("./customerViewerAuth");
 const { createCustomerViewerRouter } = require("./customerViewerRoutes");
 const { createMerchantAdminRouter } = require("./merchantAdminRoutes");
+const { createMerchantSignupIntake } = require("./merchantSignupIntake");
 const { createMerchantTelegramHubRouter, telegramHubWebhookRouter, verifyWebhookSecret } = require("./telegramHub");
 const { createPermanentGroupAdminRouter, createPermanentGroupMerchantRouter } = require("./telegramPermanentGroups");
 const {createActivationRouter,prepareMerchantTenant} = require("./telegramMerchantActivation");
@@ -55,6 +56,8 @@ app.use(session({ store: new PgSessionStore(pool), name: "domain_radar_sid", sec
 // Deny every non-customer API for a viewer, including routes mounted before
 // normal admin middleware and future endpoints. Static assets remain public.
 app.use("/api", customerViewerFirewall);
+// Public, pending-only merchant application intake. Feature flag defaults OFF.
+app.use("/api/merchant-signup", createMerchantSignupIntake(pool));
 
 function requireAdmin(req, res, next) { if (req.session?.isCustomerViewer) return res.status(403).json({ error: "CUSTOMER_VIEW_ONLY" }); if (!adminPassword) return next(); if (req.session && req.session.isAdmin) return next(); return res.status(401).json({ error: "Unauthorized" }); }
 function getTenant(req) { return (req.session && req.session.tenant) || 'admin'; }
