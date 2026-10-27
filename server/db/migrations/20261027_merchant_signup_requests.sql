@@ -11,6 +11,17 @@ CREATE TABLE IF NOT EXISTS merchant_signup_requests (
   created_at TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   updated_at TIMESTAMPTZ NOT NULL DEFAULT NOW()
 );
+ALTER TABLE merchant_signup_requests ENABLE ROW LEVEL SECURITY;
 REVOKE ALL ON merchant_signup_requests FROM PUBLIC;
+DO $ BEGIN
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='anon') THEN
+   EXECUTE 'REVOKE ALL ON merchant_signup_requests FROM anon';
+ END IF;
+ IF EXISTS (SELECT 1 FROM pg_roles WHERE rolname='authenticated') THEN
+   EXECUTE 'REVOKE ALL ON merchant_signup_requests FROM authenticated';
+ END IF;
+END $;
+-- The server-side database connection uses its own privileged role;
+-- no client-facing policy exists for pending signup requests.
 CREATE INDEX IF NOT EXISTS merchant_signup_requests_status_created_idx
  ON merchant_signup_requests(status, created_at DESC);
