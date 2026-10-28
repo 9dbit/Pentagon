@@ -7,6 +7,7 @@ import {
 } from "lucide-react";
 import "./MerchantAdminPage.css";
 import MerchantNodeCardV2 from "./MerchantNodeCardV2";
+import RankMonitoringPanel from "./RankMonitoringPanel";
 import MerchantTelegramHub from "./MerchantTelegramHub";
 import MerchantTelegramGroupSettings from "./MerchantTelegramGroupSettings";
 
@@ -209,7 +210,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           </div>)}{!ownDomains.length && <div className="maEmpty">Belum ada domain yang cocok.</div>}</div>
         </section>}
 
-        {page === "keywords" && <section className="maPanel">
+        {page === "keywords" && <><RankMonitoringPanel audience="merchant"/><section className="maPanel">
           <div className="maPanelHead"><div><h2>Google Rank & Whitelist</h2><p>Kelola keyword dan whitelist domain merchant.</p></div>
             <button className="maPrimary" type="button" onClick={() => setShowKeywordForm(v => !v)}><Plus size={16}/> Keyword</button></div>
           {showKeywordForm && <form className="maForm" onSubmit={async e => {
@@ -234,7 +235,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
               </select><button className="maPill" disabled={busy || !linkFor[item.id]}><Plus size={14}/> Tambah Whitelist</button>
             </form>
           </div>)}{!data.keywords.length && <div className="maEmpty">Belum ada keyword untuk merchant ini.</div>}</div>
-        </section>}
+        </section></>}
 
         {page === "nodes" && <section className="maNodePageV2">
           <div className="maNodePageHead">

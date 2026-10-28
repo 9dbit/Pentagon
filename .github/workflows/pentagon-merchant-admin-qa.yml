@@ -36,6 +36,10 @@ on:
       - "src/App.jsx"
       - "src/MerchantAdminPage.*"
       - "src/MerchantNodeCardV2.jsx"
+      - "src/GoogleRankReport.jsx"
+      - "src/RankMonitoringPanel.*"
+      - "src/rankMonitoring.mjs"
+      - "scripts/test-pentagon-rank-monitoring.mjs"
       - "scripts/test-pentagon-merchant-admin*"
       - "scripts/test-pentagon-merchant-ops.cjs"
       - "scripts/test-pentagon-merchant-telegram-routing.cjs"
@@ -137,6 +141,8 @@ jobs:
           node scripts/test-pentagon-android-heartbeat-recovery.cjs
           node scripts/test-pentagon-merchant-session-migration.cjs
           node scripts/test-pentagon-node-health-v2.cjs
+          node scripts/test-pentagon-rank-monitoring.mjs
+          node scripts/test-pentagon-report-layout.cjs
       - name: Isolated PostgreSQL viewer and merchant tenant firewall
         run: |
           node scripts/test-pentagon-customer-viewer-pg.cjs
