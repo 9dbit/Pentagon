@@ -26,7 +26,7 @@ function fixture({ failFirst = false, firstQueryGate } = {}) {
   function load(file, extra = {}) {
     const router = Object.fromEntries(["get", "post", "patch", "delete"].map(method =>
       [method, (route, handler) => { routes[`${file}:${method}:${route}`] = handler; }]));
-    const mocks = { express: { Router: () => router }, axios: {}, "./db": { pool: db },
+    const mocks = { express: { Router: () => router }, axios: {}, "./nodeDiagnostics": require("../server/nodeDiagnostics"), "./db": { pool: db },
       crypto: require("node:crypto"), "./telegram": { sendTelegram() { throw new Error("Unexpected Telegram call"); } }, ...extra };
     const module = { exports: {} };
     vm.runInNewContext(fs.readFileSync(path.join(__dirname, "../server", file), "utf8"), {
@@ -97,4 +97,26 @@ test("failed cold setup cannot authenticate or dispatch a task", async () => {
   await assert.rejects(f.poll(), /fixture schema unavailable/);
   assert.equal(f.queries.some(q => /secret_key=|FOR UPDATE SKIP LOCKED/.test(q.sql)), false);
   assert.equal((await f.poll()).status, 200);
+});
+
+
+test("busy heartbeat updates real telemetry but never claims or expires a task", async () => {
+  const f=fixture(); await f.tasks.ensureTaskTable(); f.queries.length=0;
+  const r=await f.poll({busy:true,telemetry:{battery_percent:80,diagnostics:{schema_version:1,task_busy:true,task_phase:"dns",secret_key:"must-not-persist",events:[{event:"TASK_START",at:"2026-10-29T00:00:00Z",duration_ms:0,token:"secret"}]}}});
+  assert.equal(r.response.busy,true);assert.equal(r.response.task,null);
+  assert.equal(f.queries.filter(q=>/FOR UPDATE SKIP LOCKED|EXPIRED_BEFORE_POLL/.test(q.sql)).length,0);
+  const write=f.queries.find(q=>/INSERT INTO node_telemetry/.test(q.sql));
+  assert.ok(write);const d=JSON.parse(write.args[18]);assert.equal(d.task_phase,"dns");assert.equal(d.task_busy,true);
+  assert.equal(JSON.stringify(d).includes("secret"),false);
+  assert.equal((await f.poll({busy:true,network_ok:false})).response.waiting,true);
+  const count=f.queries.length;assert.equal((await f.poll({busy:true,secret_key:"bad"})).status,401);
+  assert.equal(f.queries.slice(count).some(q=>/UPDATE|INSERT/.test(q.sql)),false);
+});
+
+test("diagnostics reject invalid types, discard arbitrary text and bound event history",()=>{
+  const {normalizeDiagnostics:n}=require("../server/nodeDiagnostics");
+  assert.equal(n(null),null);assert.equal(n({schema_version:2}),null);
+  const d=n({schema_version:1,service_running:"true",effective_poll_ms:"3000",last_ack_age_ms:-1,task_phase:"token",last_error_code:"Bearer secret",ip:"private",events:Array.from({length:30},()=>({event:"POLL_ERROR",at:"invalid",duration_ms:Infinity,raw:"secret"}))});
+  assert.equal(d.service_running,null);assert.equal(d.effective_poll_ms,null);assert.equal(d.last_ack_age_ms,null);
+  assert.equal(d.events.length,20);assert.equal(d.events[0].at,null);assert.equal(d.last_error_code,"UNKNOWN");assert.equal(JSON.stringify(d).includes("secret"),false);
 });

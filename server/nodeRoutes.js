@@ -1,6 +1,7 @@
 const express = require("express");
 const axios = require("axios");
 const { pool } = require("./db");
+const { normalizeDiagnostics } = require("./nodeDiagnostics");
 
 const router = express.Router();
 
@@ -68,6 +69,8 @@ async function initializeNodeTable() {
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS cellular_available BOOLEAN");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_id INT");
   await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS subscription_reason TEXT");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS diagnostics JSONB");
+  await pool.query("ALTER TABLE node_telemetry ADD COLUMN IF NOT EXISTS diagnostics_received_at TIMESTAMPTZ");
 }
 
 function cleanBase(url) {
@@ -233,6 +236,24 @@ router.get("/", async (req, res, next) => {
   } catch (err) {
     next(err);
   }
+});
+
+router.get("/:id/diagnostics", async (req, res, next) => {
+  try {
+    await ensureNodeTable();
+    if (!/^[1-9][0-9]*$/.test(req.params.id)) return res.status(400).json({ error: "INVALID_NODE_ID" });
+    const { rows } = await pool.query(
+      "SELECT n.provider_name,t.user_agent,t.last_seen_at,t.diagnostics,t.diagnostics_received_at " +
+      "FROM provider_nodes n LEFT JOIN node_telemetry t ON t.node_id=n.id WHERE n.id=$1 AND n.tenant=$2",
+      [req.params.id, req.tenant || "admin"]
+    );
+    if (!rows[0]) return res.status(404).json({ error: "NODE_NOT_FOUND" });
+    const row = rows[0];
+    res.set("Cache-Control", "private, no-store");
+    return res.json({ provider_name: row.provider_name, last_seen_at: row.last_seen_at,
+      app_version: /^PentagonProviderNode\/[0-9.]+$/.test(row.user_agent || "") ? row.user_agent.split("/")[1] : null,
+      diagnostics_received_at: row.diagnostics_received_at, diagnostics: normalizeDiagnostics(row.diagnostics) });
+  } catch (error) { next(error); }
 });
 
 router.get("/presets", async (req, res) => {

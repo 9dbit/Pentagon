@@ -3,6 +3,7 @@ const { randomUUID } = require("crypto");
 const { pool } = require("./db");
 const { ensureNodeTable } = require("./nodeRoutes");
 const { sendTelegram } = require("./telegram");
+const { normalizeDiagnostics } = require("./nodeDiagnostics");
 
 const router = express.Router();
 const LOW_BATTERY_THRESHOLD = Number(process.env.NODE_LOW_BATTERY_THRESHOLD || 25);
@@ -142,15 +143,16 @@ async function upsertTelemetry(node, telemetryRaw, req) {
   const telemetry = normalizeTelemetry(telemetryRaw || {});
   const ip = req.headers["cf-connecting-ip"] || req.headers["x-forwarded-for"] || req.socket?.remoteAddress || "";
   const userAgent = req.headers["user-agent"] || "";
+  const diagnostics = normalizeDiagnostics(telemetryRaw?.diagnostics);
 
   await pool.query(
     `INSERT INTO node_telemetry (
         node_id, battery_percent, is_charging, battery_status, battery_health, battery_temperature_c,
         signal_percent, signal_dbm, signal_asu, signal_level, signal_label, network_operator, network_type_label,
         cellular_available, subscription_id, subscription_reason,
-        ip, user_agent, last_seen_at
+        ip, user_agent, last_seen_at, diagnostics, diagnostics_received_at
       )
-      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW())
+      VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15,$16,$17,$18,NOW(),$19::jsonb,CASE WHEN $19::jsonb IS NULL THEN NULL ELSE NOW() END)
       ON CONFLICT (node_id) DO UPDATE SET
         battery_percent=EXCLUDED.battery_percent,
         is_charging=EXCLUDED.is_charging,
@@ -169,7 +171,9 @@ async function upsertTelemetry(node, telemetryRaw, req) {
         subscription_reason=EXCLUDED.subscription_reason,
         ip=EXCLUDED.ip,
         user_agent=EXCLUDED.user_agent,
-        last_seen_at=NOW()`,
+        last_seen_at=NOW(),
+        diagnostics=COALESCE(EXCLUDED.diagnostics,node_telemetry.diagnostics),
+        diagnostics_received_at=COALESCE(EXCLUDED.diagnostics_received_at,node_telemetry.diagnostics_received_at)`,
     [
       node.id,
       telemetry.battery_percent,
@@ -188,7 +192,8 @@ async function upsertTelemetry(node, telemetryRaw, req) {
       telemetry.subscription_id,
       telemetry.subscription_reason,
       String(ip).slice(0, 200),
-      String(userAgent).slice(0, 300)
+      String(userAgent).slice(0, 300),
+      diagnostics === null ? null : JSON.stringify(diagnostics)
     ]
   );
 
@@ -348,6 +353,10 @@ router.post("/poll", async (req, res, next) => {
 
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason=$1, last_ping_at=NOW() WHERE id=$2", [req.body.network_reason || "network matched", node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);
+
+    // Busy APKs still authenticate and report real telemetry, but may not take
+    // another task. Old APKs omit the field and retain their existing protocol.
+    if (req.body.busy === true) return res.json({ ok: true, task: null, busy: true });
 
     // Old unclaimed scans must not monopolize a newly connected APK.
     await pool.query(

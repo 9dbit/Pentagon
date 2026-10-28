@@ -34,6 +34,8 @@ on:
       - "scripts/test-pentagon-polling-heartbeat.cjs"
       - "scripts/test-pentagon-poll-schema-setup.cjs"
       - "server/agentPollRoutes.js"
+      - "server/nodeDiagnostics.js"
+      - "scripts/test-pentagon-node-diagnostics-pg.cjs"
       - "scripts/test-pentagon-node-task-safety-pg.cjs"
       - "server/index.js"
       - "src/TrustPositif*"
@@ -129,6 +131,8 @@ jobs:
         run: node scripts/test-pentagon-node-task-safety-pg.cjs
       - name: Polling queue and manual ping preserve device heartbeat
         run: node --test scripts/test-pentagon-polling-heartbeat.cjs scripts/test-pentagon-poll-schema-setup.cjs
+      - name: PostgreSQL busy heartbeat and private diagnostics
+        run: node scripts/test-pentagon-node-diagnostics-pg.cjs
       - name: PostgreSQL TRADEVICEPC two-warning authoritative status and recovery policy
         run: node scripts/test-pentagon-trustpositif-trigger-policy-pg.cjs
       - name: Postgres durable TrustPositif notification outbox

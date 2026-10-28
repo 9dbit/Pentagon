@@ -38,5 +38,6 @@ class Prefs {
         put(c, "install_id", created);
         return created;
     }
-    static int pollMs(Context c) { try { return Integer.parseInt(get(c, "poll_ms", "3000")); } catch(Exception e) { return 3000; } }
+    static int configuredPollMs(Context c) { try { return Integer.parseInt(get(c, "poll_ms", "3000")); } catch(Exception e) { return 3000; } }
+    static int pollMs(Context c) { return Math.max(3000,Math.min(15000,configuredPollMs(c))); }
 }
