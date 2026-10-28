@@ -133,7 +133,7 @@ async function evaluateTriggeredPolicy(domainRow,results,activeNodes,options={})
     confirmedBlocked:false,confirmedRecovered:false,confirmedNormalized:false,
     suspectedWarning:warnings.length>=2 && old!=="blocked",
     holdBlocked:old==="blocked" && !(delisted && triggerComplete),
-    awaitingCollector:warnings.length>=2 && !triggerComplete,
+    awaitingCollector:warnings.length>=2 && !(sourceValid && triggerComplete),
     source:sourceValid?updated.registry_source:"tradevicepc_pending",
     verifiedAt:sourceValid?updated.registry_checked_at:null,
     detectedAt:updated.detected_at||updated.registry_triggered_at||null,
