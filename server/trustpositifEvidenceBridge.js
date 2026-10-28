@@ -1,9 +1,10 @@
 "use strict";
 
 // Trusted source-relay for a PC that can download the official Komdigi
-// registry when Railway has no egress. This stores ONLY registry-membership
-// evidence. ISP BLOCKED verdicts, domain status changes, alerts and Telegram
-// delivery remain behind the existing two-provider confirmation gate.
+// registry when Railway has no egress. Import verifies and stores registry
+// evidence first; after commit a separate reconciler may immediately commit
+// BLOCKED only with fresh server-recorded two-provider WARNING evidence.
+// Registry delisting alone never labels a broken network NORMAL.
 const express=require("express");
 const crypto=require("node:crypto");
 const {pool}=require("./db");
@@ -119,6 +120,7 @@ async function importEvidence(body,db=pool){
   if(!monitored.length)return {ok:false,error:"SOURCE_INVENTORY_EMPTY",statusCode:409};
   const client=await db.connect();
   let accepted=0,listed=0;
+  const applied=[];
   try{
     await client.query("BEGIN");
     await client.query("SELECT pg_advisory_xact_lock(hashtext('pentagon_trustpositif_source_bridge'))");
@@ -148,7 +150,10 @@ async function importEvidence(body,db=pool){
       ].join(" "),[row.tenant,row.domain,row.listed,validation.at,source,row.lookup_key,
         body.source_sha256,body.source_bytes,body.source_entries,matchKind]);
       accepted+=result.rowCount||0;
-      if(result.rowCount&&row.listed)listed++;
+      if(result.rowCount){
+        applied.push(row);
+        if(row.listed)listed++;
+      }
     }
     await client.query([
       "INSERT INTO trustpositif_registry_bridge_audit",
@@ -162,8 +167,22 @@ async function importEvidence(body,db=pool){
     await client.query("ROLLBACK").catch(()=>{});
     throw e;
   }finally{client.release();}
+  // The source import is already committed. Reconciliation revalidates source
+  // provenance, tenant, fresh node quorum and performs atomic CAS transitions.
+  // Errors cannot roll back the valid snapshot or cause duplicate downloads.
+  let reconciliation={status:"policy_disabled",examined:0,blocked:0,delisted:0,errors:0};
+  if(String(process.env.TRUSTPOSITIF_STATUS_POLICY||"").toLowerCase()==="tradevicepc_triggered"){
+    try{
+      reconciliation=await require("./trustpositifEvidenceReconciler")
+        .reconcileVerifiedSnapshot(applied,db);
+    }catch(err){
+      reconciliation={status:"error",examined:applied.length,blocked:0,delisted:0,errors:1};
+      console.warn("[TrustPositif Immediate] reconcile unavailable code="+
+        String(err.code||"RECONCILE_ERROR").replace(/[^A-Z0-9_]/gi,"").slice(0,50));
+    }
+  }
   return {ok:true,status:"verified_evidence_imported",inventory:monitored.length,
-    accepted,listed,source_checked_at:validation.at.toISOString()};
+    accepted,listed,source_checked_at:validation.at.toISOString(),reconciliation};
 }
 router.use(requireBridge);
 router.get("/inventory",async(req,res)=>{
@@ -181,7 +200,8 @@ router.post("/evidence",async(req,res)=>{
     const result=await importEvidence(req.body);
     if(!result.ok)return res.status(result.statusCode||422).json(result);
     console.log("[TrustPositif Bridge] verified official source snapshot accepted="+result.accepted+
-      " registry_listed="+result.listed+" (not ISP-confirmed blocked)");
+      " registry_listed="+result.listed+" immediate_blocked="+
+      (result.reconciliation?.blocked||0)+" delisted="+(result.reconciliation?.delisted||0));
     res.status(200).json(result);
   }catch(e){
     console.warn("[TrustPositif Bridge] ingestion paused",String(e.code||"DATABASE_UNAVAILABLE").slice(0,45));

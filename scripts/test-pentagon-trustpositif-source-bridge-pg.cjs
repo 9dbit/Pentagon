@@ -28,12 +28,21 @@ async function main(){
     await testdb.query("CREATE SCHEMA IF NOT EXISTS bridge_fixture");
     await testdb.query("CREATE TABLE bridge_fixture.domains ("+
       "id SERIAL PRIMARY KEY,domain TEXT UNIQUE NOT NULL,tenant TEXT NOT NULL,"+
-      "is_active BOOLEAN NOT NULL DEFAULT TRUE,global_status TEXT DEFAULT 'warning')");
+      "project_name TEXT DEFAULT '',is_active BOOLEAN NOT NULL DEFAULT TRUE,"+
+      "global_status TEXT DEFAULT 'warning',last_status TEXT DEFAULT 'unknown',"+
+      "last_checked_at TIMESTAMPTZ)");
     await testdb.query("CREATE TABLE bridge_fixture.rank_keyword_groups ("+
       "id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,is_active BOOLEAN DEFAULT TRUE)");
     await testdb.query("CREATE TABLE bridge_fixture.rank_keyword_domains ("+
       "id SERIAL PRIMARY KEY,group_id INTEGER REFERENCES bridge_fixture.rank_keyword_groups(id),"+
       "domain TEXT NOT NULL,is_whitelisted BOOLEAN NOT NULL DEFAULT FALSE)");
+    await testdb.query("CREATE TABLE bridge_fixture.provider_nodes ("+
+      "id INTEGER PRIMARY KEY,name TEXT,provider_name TEXT,is_active BOOLEAN DEFAULT TRUE)");
+    await testdb.query("INSERT INTO provider_nodes(id,name,provider_name) VALUES "+
+      "(10,'Node A','ISP A'),(20,'Node B','ISP B')");
+    await testdb.query("CREATE TABLE bridge_fixture.alerts ("+
+      "id SERIAL PRIMARY KEY,domain_id INTEGER REFERENCES bridge_fixture.domains(id),"+
+      "old_status TEXT,new_status TEXT,message TEXT,sent_to_telegram BOOLEAN DEFAULT FALSE)");
     await testdb.query("CREATE TABLE bridge_fixture.trustpositif_registry_bridge_audit("+
       "id BIGSERIAL PRIMARY KEY,source_sha256 TEXT,source_url TEXT,source_bytes BIGINT,"+
       "source_entries BIGINT,source_checked_at TIMESTAMPTZ,inventory_count INT,"+
@@ -76,7 +85,7 @@ async function main(){
       assert.equal(validateEvidence(tenant,monitored).ok,false);
     });
     await test("signed source evidence writes registry fields, not BLOCKED",async()=>{
-      const out=await importEvidence(payload(monitored),testdb);
+      const out=await importEvidence(payload(monitored,new Date(now.getTime()-120000).toISOString()),testdb);
       assert.equal(out.ok,true);assert.equal(out.accepted,2);assert.equal(out.listed,2);
       const {rows}=await testdb.query(
         "SELECT d.domain,d.global_status,m.registry_listed,m.registry_checked_at,"+
@@ -103,12 +112,69 @@ async function main(){
         "SELECT COUNT(*)::int AS n FROM trustpositif_registry_bridge_audit")).rows[0].n,1);
     });
     await test("older contradictory snapshot cannot clear more recent evidence",async()=>{
-      const earlier=payload(monitored,new Date(now.getTime()-60000).toISOString());
+      const earlier=payload(monitored,new Date(now.getTime()-180000).toISOString());
       earlier.matches.forEach(x=>x.listed=false);
       const out=await importEvidence(earlier,testdb);
       assert.equal(out.accepted,0);
       assert.ok((await testdb.query("SELECT registry_listed,registry_snapshot_sha256 FROM trustpositif_domain_monitor"))
         .rows.every(x=>x.registry_listed===true && x.registry_snapshot_sha256==="b".repeat(64)));
+    });
+    await test("authenticated post-trigger PC registry import immediately blocks only the two-warning domain",async()=>{
+      const earlier=new Date(Date.now()-60000);
+      const warningVotes=[
+        {id:10,name:"Node A",provider:"ISP A",status:"warning",reason:"HTTP error: SSL handshake"},
+        {id:20,name:"Node B",provider:"ISP B",status:"warning",reason:"HTTP timeout at target"}
+      ];
+      await testdb.query(
+        "UPDATE trustpositif_domain_monitor SET registry_triggered_at=$1,"+
+        "last_anomaly_at=$1,anomaly_nodes=$2::jsonb WHERE tenant='merchant_a' "+
+        "AND domain='alpha.example'",[earlier,JSON.stringify(warningVotes)]);
+      await testdb.query(
+        "UPDATE trustpositif_domain_monitor SET registry_triggered_at=$1,"+
+        "last_anomaly_at=$1,anomaly_nodes=$2::jsonb WHERE tenant='merchant_a' "+
+        "AND domain='www.example.com'",[earlier,JSON.stringify([warningVotes[0]])]);
+
+      const oldPolicy=process.env.TRUSTPOSITIF_STATUS_POLICY;
+      process.env.TRUSTPOSITIF_STATUS_POLICY="tradevicepc_triggered";
+      try{
+        const confirmedAt=new Date();
+        const found=payload(monitored,confirmedAt.toISOString());
+        found.source_sha256="c".repeat(64);
+        const blocked=await importEvidence(found,testdb);
+        assert.equal(blocked.reconciliation.status,"complete");
+        assert.equal(blocked.reconciliation.blocked,1);
+        const rows=(await testdb.query(
+          "SELECT domain,global_status FROM domains ORDER BY domain")).rows;
+        assert.equal(rows.find(x=>x.domain==="alpha.example").global_status,"blocked");
+        assert.equal(rows.find(x=>x.domain==="www.example.com").global_status,"warning");
+        const monitor=(await testdb.query(
+          "SELECT listed,detected_at FROM trustpositif_domain_monitor "+
+          "WHERE domain='alpha.example'")).rows[0];
+        assert.equal(monitor.listed,true);
+        assert.ok(monitor.detected_at);
+        const afterBlock=await testdb.query(
+          "SELECT event_type,status FROM trustpositif_notification_outbox");
+        assert.equal(afterBlock.rows.length,1);
+        assert.equal(afterBlock.rows[0].event_type,"BLOCKED");
+        assert.equal(afterBlock.rows[0].status,"pending");
+
+        const delisted=payload(monitored,new Date(confirmedAt.getTime()+1000).toISOString());
+        delisted.source_sha256="d".repeat(64);
+        delisted.matches.find(x=>x.domain==="alpha.example").listed=false;
+        const recovered=await importEvidence(delisted,testdb);
+        assert.equal(recovered.reconciliation.delisted,1);
+        assert.equal((await testdb.query(
+          "SELECT global_status FROM domains WHERE domain='alpha.example'"
+        )).rows[0].global_status,"warning",
+          "A negative registry snapshot cannot claim network NORMAL");
+        const queue=await testdb.query(
+          "SELECT event_type FROM trustpositif_notification_outbox ORDER BY id");
+        assert.deepEqual(queue.rows.map(x=>x.event_type),
+          ["BLOCKED","REGISTRY_DELISTED"]);
+      }finally{
+        if(oldPolicy===undefined)delete process.env.TRUSTPOSITIF_STATUS_POLICY;
+        else process.env.TRUSTPOSITIF_STATUS_POLICY=oldPolicy;
+      }
     });
     await test("HTTP route rejects missing or invalid secrets",async()=>{
       const app=express();app.use("/api/internal/trustpositif/bridge",router);
@@ -126,7 +192,7 @@ async function main(){
       }finally{server.close();delete process.env.TRUSTPOSITIF_SOURCE_BRIDGE_KEY;}
     });
     const source=fs.readFileSync(path.join(__dirname,"../server/trustpositifEvidenceBridge.js"),"utf8");
-    await test("bridge never sends Telegram or changes domain global status",async()=>{
+    await test("bridge never directly sends Telegram or bypasses atomic transition",async()=>{
       assert.doesNotMatch(source,/UPDATE\s+domains\s+SET/i);
       assert.doesNotMatch(source,/INSERT\s+INTO\s+(?:alerts|trustpositif_notification_outbox)/i);
       assert.doesNotMatch(source,/sendTelegram\s*\(/);
