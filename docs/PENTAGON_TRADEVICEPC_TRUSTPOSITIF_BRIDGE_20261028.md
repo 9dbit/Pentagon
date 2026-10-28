@@ -4,12 +4,14 @@ Updated: 2026-10-28 (Asia/Jakarta)
 
 ## Purpose
 Provide official Komdigi `domains_isp` exact membership evidence when the Railway
-worker times out downloading the approximately 223 MB file. The source bridge
-does **not** change a domain's network `global_status`, report a verified
-provider block, send alert messages, change tenant ownership, or send Telegram.
-
-A `BLOCKED` transition still requires two independent credible ISP node
-filtering observations plus exact official registry membership.
+worker times out downloading the approximately 223 MB file. The source bridge authenticates and imports full-snapshot evidence first.
+A separate post-import reconciler can change `global_status` directly to
+`blocked` only when there are two recent genuine WARNING observations from
+different ISP nodes, a verified TRADEVICEPC exact registry match, and a
+post-trigger snapshot. It atomically queues a tenant-qualified alert.
+A verified registry negative changes a previously confirmed `blocked`
+domain to `warning`; only two further independent healthy WORKING cycles
+can restore `normal`. Bridge authentication alone never proves a block.
 
 ## Production verified
 - TRADEVICEPC remote access: online.
@@ -25,7 +27,10 @@ filtering observations plus exact official registry membership.
 - Windows task: `PENTAGON-TrustPositif-Registry-Sync`
 - Script: `C:\Users\MARKSTUDIOS\AppData\Local\Pentagon\TrustPositifBridge\run-trustpositif-source-bridge.ps1`
 - Python worker: `trustpositif-source-bridge.py` in the same directory.
-- Schedule: 02:30, 08:30, 14:30 and 20:30 WIB daily.
+- Schedule: every 5 minutes (adjusted and verified on TRADEVICEPC 28 Oct 2026).
+  Each poll checks the small `scan_required` flag; the full ~223 MB
+  registry is fetched only following a two-node trigger or a blocked-domain
+  recovery recheck.
 - Windows principal: `MARKSTUDIOS`, Interactive; task execution requires this
   user's logon session. Do **not** claim it runs before login unless the
   task principal has been explicitly reconfigured and tested.
@@ -42,9 +47,11 @@ filtering observations plus exact official registry membership.
    and must match HTTP Content-Length when provided.
 4. The backend revalidates membership inventory, exact canonical lookup keys,
    bearer authorization, timestamp freshness, and row count.
-5. Backend updates only `trustpositif_domain_monitor.registry_*` fields,
-   including collector, snapshot SHA-256, byte count, line count, and
-   alias/exact match provenance.
+5. The initial import transaction updates only
+   `trustpositif_domain_monitor.registry_*` fields. After commit,
+   reconciliation separately rechecks source provenance, active tenant
+   whitelist and 2-provider node quorum before making atomic status/alert
+   transitions. This does not bypass the original quorum gate.
 6. Source failure, truncated response or incomplete inventory leaves existing
    evidence unchanged. Older verified snapshots cannot overwrite newer ones.
 7. Direct Railway snapshots must clear previously stored PC provenance so
