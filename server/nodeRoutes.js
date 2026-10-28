@@ -281,8 +281,9 @@ router.post("/:id/ping", async (req, res, next) => {
 
       if (result.mode === "polling") {
         const polling = await getPollingNodeHealth(req.params.id);
-        health = polling.health;
-        reason = polling.reason;
+        // This reads stored telemetry; it does not contact the device. Keep
+        // agent-owned health/SIM state and the actual heartbeat time intact.
+        return res.json({ ...result, health: polling.health, reason: polling.reason });
       }
 
       await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
@@ -292,7 +293,9 @@ router.post("/:id/ping", async (req, res, next) => {
       );
       res.json({ ...result, health, reason });
     } catch (err) {
-      await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [req.params.id]);
+      if (!String(rows[0].endpoint_url || "").toLowerCase().startsWith("poll://")) {
+        await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [req.params.id]);
+      }
       res.json({ ok: false, error: err.message });
     }
   } catch (err) {

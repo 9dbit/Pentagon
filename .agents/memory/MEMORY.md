@@ -1,1 +1,2 @@
 - [Demo tenant isolation pattern](demo-tenant-isolation.md) — tenant='demo' column on all data tables; getTenant(req)/requireNotDemo middleware in index.js; demoSeed.js must call ensureRankTables() before seeding rank data
+- [Polling node heartbeat ownership](polling-node-heartbeat.md) — queue outcomes and manual ping cannot overwrite authenticated agent health or timestamps.
