@@ -7,6 +7,8 @@ on:
   pull_request:
     paths:
       - "server/trustpositifWatch.js"
+      - "server/trustpositifTriggerPolicy.js"
+      - "scripts/test-pentagon-trustpositif-trigger-policy-pg.cjs"
       - "server/trustpositifRegistrySync.js"
       - "server/trustpositifEvidenceBridge.js"
       - "scripts/trustpositif-source-bridge.py"
@@ -82,6 +84,8 @@ jobs:
       - name: Check monitoring modules
         run: |
           node --check server/trustpositifWatch.js
+          node --check server/trustpositifTriggerPolicy.js
+          node --check scripts/test-pentagon-trustpositif-trigger-policy-pg.cjs
           node --check server/trustpositifRegistrySync.js
           node --check server/trustpositifEvidenceBridge.js
           node --check scripts/test-pentagon-trustpositif-source-bridge-pg.cjs
@@ -117,6 +121,8 @@ jobs:
         run: node scripts/test-pentagon-trustpositif-source-bridge-pg.cjs
       - name: PostgreSQL mobile checker late-result safety
         run: node scripts/test-pentagon-node-task-safety-pg.cjs
+      - name: PostgreSQL TRADEVICEPC two-warning authoritative status and recovery policy
+        run: node scripts/test-pentagon-trustpositif-trigger-policy-pg.cjs
       - name: Postgres durable TrustPositif notification outbox
         run: node scripts/test-pentagon-trustpositif-outbox-pg.cjs
       - name: PostgreSQL whitelist reconciliation readiness (strictly read only)
