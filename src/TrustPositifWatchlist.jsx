@@ -128,7 +128,7 @@ export default function TrustPositifWatchlist() {
       <div>
         <span className="tpWatchEyebrow">AUTOMATIC DOMAIN DEFENCE</span>
         <h2>Whitelist monitoring</h2>
-        <p>Dua node provider berbeda yang melaporkan WARNING menjadi pemicu. TRADEVICEPC menentukan
+        <p>Minimal {data?.min_nodes || 2} node provider berbeda yang melaporkan WARNING menjadi pemicu. TRADEVICEPC menentukan
           BLOCKED lewat exact-match registry resmi. NORMAL hanya setelah registry tidak terdaftar
           dan dua provider membuktikan koneksi pulih dalam dua siklus.</p>
       </div>
@@ -248,7 +248,6 @@ export default function TrustPositifWatchlist() {
               <div><b>Collector:</b> {row.registry_collector || "Not available"}</div>
               <div><b>Warning trigger:</b> {displayTime(row.registry_triggered_at)}</div>
               <div><b>Recovery checks:</b> {row.recovery_streak || 0}/2 consecutive provider cycles</div>
-              {row.registry_snapshot_sha256 && <div><b>Verified snapshot:</b> SHA-256 {row.registry_snapshot_sha256.slice(0,16)}…</div>
               <div><b>Registry checked:</b> {displayTime(row.registry_checked_at)}</div>
               <div><b>Registry collector:</b> {row.registry_collector || "Not recorded"} · {row.registry_match_kind || "—"}</div>
               {row.registry_snapshot_sha256 && <div><b>Snapshot SHA-256:</b> <code>{row.registry_snapshot_sha256.slice(0,16)}…</code></div>}
