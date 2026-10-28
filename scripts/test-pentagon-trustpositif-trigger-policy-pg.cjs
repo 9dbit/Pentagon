@@ -96,7 +96,7 @@ async function main(){
     const r=await policy.evaluateTriggeredPolicy(domain,warnings,nodes,{
       db,now:new Date(t0.getTime()+4000)});
     assert.equal(r.confirmedBlocked,false);
-    assert.equal(r.awaitingCollector,false,"snapshot may exist, but authority is not valid");
+    assert.equal(r.awaitingCollector,true,"Railway snapshot cannot satisfy TRADEVICEPC authority");
     assert.equal(r.checked,false);
   });
   await check("post-trigger TRADEVICEPC exact membership becomes BLOCKED without node.blocked",async()=>{
