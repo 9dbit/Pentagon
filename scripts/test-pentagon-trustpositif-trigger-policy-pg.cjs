@@ -10,6 +10,7 @@ if(process.env.CI!=="true" ||
   console.error("LOCAL_CI_POSTGRES_REQUIRED: never run against production");
   process.exit(3);
 }
+process.env.TRUSTPOSITIF_STATUS_POLICY="tradevicepc_triggered";
 const db=new Pool({connectionString:process.env.DATABASE_URL,ssl:false,
   options:"-c search_path=tradevicepc_trigger_policy_ci"});
 const sha="a".repeat(64);
