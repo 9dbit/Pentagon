@@ -4,7 +4,20 @@ const { pool } = require("./db");
 
 const router = express.Router();
 
-async function ensureNodeTable() {
+// Schema setup is process-local and shared by concurrent first requests.
+// A failed setup is retryable; no request may proceed before it succeeds.
+let nodeTableReady;
+function ensureNodeTable() {
+  if (!nodeTableReady) {
+    nodeTableReady = initializeNodeTable().catch(error => {
+      nodeTableReady = undefined;
+      throw error;
+    });
+  }
+  return nodeTableReady;
+}
+
+async function initializeNodeTable() {
   await pool.query(`
     CREATE TABLE IF NOT EXISTS provider_nodes (
       id SERIAL PRIMARY KEY,
@@ -19,6 +32,7 @@ async function ensureNodeTable() {
       created_at TIMESTAMP DEFAULT NOW()
     )
   `);
+  await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
 
   await pool.query(`
     CREATE TABLE IF NOT EXISTS node_telemetry (
@@ -286,7 +300,6 @@ router.post("/:id/ping", async (req, res, next) => {
         return res.json({ ...result, health: polling.health, reason: polling.reason });
       }
 
-      await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
       await pool.query(
         "UPDATE provider_nodes SET last_health_status=$1, last_health_reason=$2, last_ping_at=NOW() WHERE id=$3",
         [health, reason, req.params.id]

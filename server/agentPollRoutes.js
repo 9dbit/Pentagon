@@ -8,7 +8,20 @@ const router = express.Router();
 const LOW_BATTERY_THRESHOLD = Number(process.env.NODE_LOW_BATTERY_THRESHOLD || 25);
 const LOW_BATTERY_ALERT_COOLDOWN_MINUTES = Number(process.env.NODE_LOW_BATTERY_ALERT_COOLDOWN_MINUTES || 60);
 
-async function ensureTaskTable() {
+// Do not issue dozens of DDL round trips on every authenticated poll/result.
+// Concurrent callers await the same initialization, and failures can retry.
+let taskTableReady;
+function ensureTaskTable() {
+  if (!taskTableReady) {
+    taskTableReady = initializeTaskTable().catch(error => {
+      taskTableReady = undefined;
+      throw error;
+    });
+  }
+  return taskTableReady;
+}
+
+async function initializeTaskTable() {
   await ensureNodeTable();
   await pool.query(`
     CREATE TABLE IF NOT EXISTS provider_node_tasks (
@@ -328,13 +341,11 @@ router.post("/poll", async (req, res, next) => {
 
     if (req.body.network_ok === false) {
       const reason = String(req.body.network_reason || "wrong network").slice(0, 200);
-      await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
       await pool.query("UPDATE provider_nodes SET last_health_status='waiting', last_health_reason=$1, last_ping_at=NOW() WHERE id=$2", [reason, node.id]);
       await upsertTelemetry(node, req.body.telemetry || {}, req);
       return res.json({ ok: true, task: null, waiting: true, reason });
     }
 
-    await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason=$1, last_ping_at=NOW() WHERE id=$2", [req.body.network_reason || "network matched", node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);
 
@@ -420,7 +431,6 @@ router.post("/result", async (req, res, next) => {
       return res.json({ok:true,ignored:true,reason:"TASK_NO_LONGER_ACTIVE"});
     // Raw node reports remain in the task journal. Only the trusted
     // scheduler may write global domain status / official BLOCKED transitions.
-    await pool.query("ALTER TABLE provider_nodes ADD COLUMN IF NOT EXISTS last_health_reason TEXT");
     await pool.query("UPDATE provider_nodes SET last_health_status='online', last_health_reason='result submitted', last_ping_at=NOW() WHERE id=$1", [node.id]);
     await upsertTelemetry(node, req.body.telemetry || {}, req);
     res.json({ ok: true });
