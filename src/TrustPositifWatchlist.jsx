@@ -56,6 +56,17 @@ const workerLabel = worker => {
   return "Aktif, menunggu siklus";
 };
 const chooseText = node => [node.name || ("Node "+node.id),node.provider || "",node.status || "",node.reason || ""].filter(Boolean).join(" · ");
+// "TRADEVICEPC" remains a stable authenticated collector ID in storage.
+// Only user-facing Pentagon copy uses the AI Checker display name.
+const collectorDisplayName = value => value === "TRADEVICEPC" ? "AI Checker" : (value || "Not available");
+const sourceDisplayName = (value,fallback="Not checked") => {
+  const source=String(value || "").trim();
+  if (!source) return fallback;
+  const snapshot=source.match(/^komdigi-domains_isp-tradevicepc-sha256:([a-f0-9]+)$/i);
+  if (snapshot) return "AI Checker · Komdigi domains_isp · SHA-256 "+snapshot[1]+"…";
+  if (source==="tradevicepc_collector_authoritative") return "AI Checker · authoritative source";
+  return source.replace(/tradevicepc/gi,"AI Checker");
+};
 
 export default function TrustPositifWatchlist() {
   const [data,setData] = useState(null);
@@ -115,7 +126,7 @@ export default function TrustPositifWatchlist() {
     });
   },[all,filter,statusFilter,projectFilter,providerFilter,tenantFilter]);
   const counts = all.reduce((obj,row)=>{const key=classify(row).key;obj[key]=(obj[key]||0)+1;return obj;},{});
-  const recentPcEvidence=all.filter(row=>row.registry_collector==="TRADEVICEPC" &&
+  const recentAiCheckerEvidence=all.filter(row=>row.registry_collector==="TRADEVICEPC" &&
     row.registry_checked_at && since(row.registry_checked_at)<12*3600000).length;
   const nodeHealth=data?.node_health || {};
   const delivery=data?.notification_delivery || {};
@@ -128,7 +139,7 @@ export default function TrustPositifWatchlist() {
       <div>
         <span className="tpWatchEyebrow">AUTOMATIC DOMAIN DEFENCE</span>
         <h2>Whitelist monitoring</h2>
-        <p>Minimal {data?.min_nodes || 2} node provider berbeda yang melaporkan WARNING menjadi pemicu. TRADEVICEPC menentukan
+        <p>Minimal {data?.min_nodes || 2} node provider berbeda yang melaporkan WARNING menjadi pemicu. AI Checker memverifikasi registry resmi untuk menentukan
           BLOCKED lewat exact-match registry resmi. NORMAL hanya setelah registry tidak terdaftar
           dan dua provider membuktikan koneksi pulih dalam dua siklus.</p>
       </div>
@@ -182,8 +193,8 @@ export default function TrustPositifWatchlist() {
       <span>Delivered: <b>{delivery.sent ?? "—"}</b></span>
       <span>Needs review: <b>{delivery.attention ?? "—"}</b></span>
       <span>Registry belum diperiksa: <b>{data?.summary?.registry_unchecked ?? "—"}</b></span>
-      <span>TRADEVICEPC verified registry: <b>{recentPcEvidence}</b></span>
-      <span>Railway direct source: <b>{data?.worker?.registry_sync?.lastResult || "—"}</b></span>
+      <span>AI Checker verified registry: <b>{recentAiCheckerEvidence}</b></span>
+      <span>Railway direct source: <b>{sourceDisplayName(data?.worker?.registry_sync?.lastResult,"—")}</b></span>
       <span>Dashboard refreshed: {displayTime(data?.generated_at)}</span>
     </p>
     {error && <p className="tpWatchError" role="status">{error}</p>}
@@ -244,17 +255,17 @@ export default function TrustPositifWatchlist() {
             <div className="tpWatchDetailBody">
               <div><b>Official registry:</b> {row.registry_listed===true ? "LISTED · exact source match" :
                 row.registry_listed===false ? "NOT LISTED (snapshot)" : "NOT CHECKED"}</div>
-              <div><b>Registry source:</b> {row.registry_source || "Not checked"}</div>
-              <div><b>Collector:</b> {row.registry_collector || "Not available"}</div>
+              <div><b>Registry source:</b> {sourceDisplayName(row.registry_source)}</div>
+              <div><b>Collector:</b> {collectorDisplayName(row.registry_collector)}</div>
               <div><b>Warning trigger:</b> {displayTime(row.registry_triggered_at)}</div>
               <div><b>Recovery checks:</b> {row.recovery_streak || 0}/2 consecutive provider cycles</div>
               <div><b>Registry checked:</b> {displayTime(row.registry_checked_at)}</div>
-              <div><b>Registry collector:</b> {row.registry_collector || "Not recorded"} · {row.registry_match_kind || "—"}</div>
+              <div><b>Registry collector:</b> {row.registry_collector ? collectorDisplayName(row.registry_collector) : "Not recorded"} · {row.registry_match_kind || "—"}</div>
               {row.registry_snapshot_sha256 && <div><b>Snapshot SHA-256:</b> <code>{row.registry_snapshot_sha256.slice(0,16)}…</code></div>}
               {row.registry_snapshot_bytes && <div><b>Snapshot:</b> {Number(row.registry_snapshot_bytes).toLocaleString("id-ID")} bytes · {Number(row.registry_snapshot_entries||0).toLocaleString("id-ID")} entries</div>}
               <div><b>Registry lookup key:</b> {row.registry_lookup_domain || "Not checked"}{row.registry_lookup_domain && row.registry_lookup_domain!==row.domain ? " (www alias uses parent lookup)" : ""}</div>
               {row.registry_last_error && <div><b>Registry sync:</b> {row.registry_last_error}</div>}
-              <div><b>BLOCKED confirmation source:</b> {row.source || "Awaiting 2 provider signals"}</div>
+              <div><b>BLOCKED confirmation source:</b> {sourceDisplayName(row.source,"Awaiting 2 provider signals")}</div>
               <div><b>Verified at:</b> {displayTime(row.verified_at)}</div>
               <div><b>First node anomaly:</b> {displayTime(row.first_anomaly_at)}</div>
               <div><b>First blocked:</b> {displayTime(row.detected_at)}</div>

@@ -66,6 +66,13 @@ function wib(value) {
   }) + " WIB";
 }
 
+function publicRegistrySource(value) {
+  const raw=String(value || "");
+  const pcSha=raw.match(/^komdigi-domains_isp-tradevicepc-sha256:([a-f0-9]+)$/i);
+  if (pcSha) return "AI Checker · Komdigi domains_isp · SHA-256 "+pcSha[1]+"…";
+  return (raw || "Not available").replace(/tradevicepc/gi,"AI Checker");
+}
+
 function formatEventMessage({ domain, tenant, project, eventType, nodes = [], confirmedAt, detectedAt, source, newStatus }) {
   const blocked = eventType === "BLOCKED";
   const uniqueProviders = [...new Set(nodes.map(n => String(n.provider || "").trim()).filter(Boolean))];
@@ -74,7 +81,7 @@ function formatEventMessage({ domain, tenant, project, eventType, nodes = [], co
     blocked ? "🚨 <b>PENTAGON SECURITY ALERT</b>" : "🛡️ <b>PENTAGON TRUSTPOSITIF UPDATE</b>",
     "",
     "<b>Status:</b> " + (blocked
-      ? "BLOCKED (2-node WARNING trigger + TRADEVICEPC official registry match)"
+      ? "BLOCKED (2-node WARNING trigger + AI Checker official registry match)"
       : newStatus==="working"
         ? "REGISTRY DELISTED (independent network recovery verified)"
         : "REGISTRY DELISTED (network not yet cleared)"),
@@ -87,9 +94,9 @@ function formatEventMessage({ domain, tenant, project, eventType, nodes = [], co
     "<b>Nodes:</b> " + escapeHtml(names.join(", ") || "Not available"),
     "<b>Providers:</b> " + escapeHtml(uniqueProviders.join(", ") || "Not available"),
     "<b>TrustPositif:</b> " + (blocked
-      ? "Verified TRADEVICEPC exact-match snapshot; node warnings were trigger only"
+      ? "Verified AI Checker exact-match snapshot; node warnings were trigger only"
       : "Exact official registry delisting; network requires separate WORKING confirmation"),
-    "<b>Source:</b> " + escapeHtml(source || "Not available"),
+    "<b>Source:</b> " + escapeHtml(publicRegistrySource(source)),
     "<b>Severity:</b> " + (blocked ? "High" : "Informational"),
     "",
     blocked ? "Action: Review Pentagon Defence Center." :

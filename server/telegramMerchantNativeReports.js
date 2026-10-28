@@ -88,7 +88,7 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
   const schedule=esc(period(intervalMinutes));
   const protection="Status Working adalah keterjangkauan jaringan, bukan bukti bebas blokir. " +
     "Dua provider dengan hasil WARNING memicu pemeriksaan. " +
-    "TRADEVICEPC memutuskan BLOCKED dari registry resmi; NORMAL memerlukan recovery jaringan independen. " +
+    "AI Checker memverifikasi registry resmi untuk BLOCKED; NORMAL memerlukan recovery jaringan independen. " +
     "Unknown/Stale bukan berarti aman.";
   return renderPages(rows,(batch,part,total)=>{
     const countInfo=total>1?"<p><b>Bagian "+part+"/"+total+"</b></p>":"";

@@ -750,8 +750,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
           [oldStatus,newStatus,domain.id,domain.tenant]);
         if(updated.rowCount){
           const explanation=registryCheck.confirmedNormalized
-            ? "NORMAL: registry not listed by TRADEVICEPC and two independent provider scans returned WORKING twice."
-            : "WARNING: two independent provider warnings; awaiting a post-trigger TRADEVICEPC registry match.";
+            ? "NORMAL: registry not listed by AI Checker and two independent provider scans returned WORKING twice."
+            : "WARNING: two independent provider warnings; awaiting a post-trigger AI Checker registry match.";
           await pool.query(
             "INSERT INTO alerts(domain_id,old_status,new_status,message,sent_to_telegram) "+
             "VALUES($1,$2,$3,$4,FALSE)",
@@ -1127,7 +1127,7 @@ function startScopedTrustPositifScheduler() {
     registryTick.unref?.();
   }else{
     registrySyncHealth.lastResult="tradevicepc_collector_authoritative";
-    console.log("[TrustPositif Registry] TRADEVICEPC authoritative policy; Railway direct source downloader disabled");
+    console.log("[TrustPositif Registry] AI Checker authoritative policy; Railway direct source downloader disabled");
   }
   // Independent delivery ticker: retries definite failures even when there
   // are not enough healthy checker nodes to run a scan.
