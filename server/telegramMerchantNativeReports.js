@@ -47,7 +47,7 @@ function statusStyle(status){
   if(status==="CONFIRMED BLOCKED")return {rich:"🚨 Blocked",fallback:"🚨 CONFIRMED BLOCKED"};
   if(status==="BLOCKED / REVIEW")return {rich:"🔴 Review",fallback:"🔴 BLOCKED / REVIEW"};
   if(status==="REGISTRY LISTED / ISP PENDING")
-    return {rich:"🛡️ Registry listed",fallback:"🛡️ REGISTRY LISTED / ISP PENDING"};
+    return {rich:"🛡️ Listed · trigger pending",fallback:"🛡️ REGISTRY LISTED / ISP PENDING"};
   if(status==="WARNING")return {rich:"⚠️ Warning",fallback:"⚠️ WARNING"};
   if(status==="STALE")return {rich:"⌛ Stale",fallback:"⌛ STALE"};
   if(status==="WORKING")return {rich:"✅ Working",fallback:"✅ WORKING"};
@@ -87,8 +87,8 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
   const stamp=esc(wib(now));
   const schedule=esc(period(intervalMinutes));
   const protection="Status Working adalah keterjangkauan jaringan, bukan bukti bebas blokir. " +
-    "Terdaftar registry belum berarti dua ISP memblokir akses. " +
-    "Blocked terkonfirmasi membutuhkan bukti registry resmi dan minimal dua provider independen. " +
+    "Dua provider dengan hasil WARNING memicu pemeriksaan. " +
+    "TRADEVICEPC memutuskan BLOCKED dari registry resmi; NORMAL memerlukan recovery jaringan independen. " +
     "Unknown/Stale bukan berarti aman.";
   return renderPages(rows,(batch,part,total)=>{
     const countInfo=total>1?"<p><b>Bagian "+part+"/"+total+"</b></p>":"";
@@ -96,7 +96,7 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
       "</b> · "+stamp+"</p>"+countInfo+
       "<p><b>"+rows.length+"</b> Domains · <b>"+flagged+
       "</b> Confirmed Blocked · <b>"+listedPending+
-      "</b> Registry Listed (ISP pending) · <b>"+health.healthy+"/"+health.total+
+      "</b> Registry Listed (warning trigger pending) · <b>"+health.healthy+"/"+health.total+
       "</b> Healthy Providers</p>"+
       "<p>⚠️ Review/Warning: <b>"+warning+"</b> · Unknown/Stale: <b>"+unknown+"</b></p>"+
       "<h4>DOMAIN MONITORING</h4>";
