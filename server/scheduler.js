@@ -677,7 +677,7 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     }
 
     const registryCheck = await maybeAddProviderRegistryResult(domain, results, nodes);
-    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked && !registryCheck.confirmedRecovered) {
+    if (options.trustpositifOnly && !registryCheck.confirmedBlocked && !registryCheck.holdBlocked && !registryCheck.confirmedRecovered && !registryCheck.confirmedNormalized && !registryCheck.suspectedWarning) {
       // Persist actual per-provider observations for diagnosis even when
       // consensus is missing. This must NOT modify global_status, alerts,
       // official evidence, or send Telegram messages.
@@ -706,8 +706,12 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     const effectiveResults = domainResults.length ? domainResults : results;
 
     const newStatus = registryCheck.confirmedBlocked || registryCheck.holdBlocked
-      ? "blocked" : registryCheck.confirmedRecovered
-        ? "warning" : calculateGlobalStatus(effectiveResults);
+      ? "blocked" : registryCheck.confirmedNormalized
+        ? "working" : registryCheck.confirmedRecovered || registryCheck.suspectedWarning
+          ? "warning" : (
+            String(process.env.TRUSTPOSITIF_STATUS_POLICY||"").toLowerCase()==="tradevicepc_triggered" &&
+            calculateGlobalStatus(effectiveResults)==="blocked"
+              ? "warning" : calculateGlobalStatus(effectiveResults));
     const oldStatus = domain.global_status || "unknown";
 
     if (!options.trustpositifOnly && normalizeStatus(newStatus) !== "blocked") {
@@ -715,7 +719,8 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
       await clearRecurringAlert(domain.id);
     }
 
-    const decision = registryCheck.confirmedBlocked || registryCheck.confirmedRecovered
+    const decision = registryCheck.confirmedBlocked || registryCheck.confirmedRecovered ||
+      registryCheck.confirmedNormalized || registryCheck.suspectedWarning
       ? { apply: true, value: newStatus, count: 1, max: 1 }
       : decide(domain.id, oldStatus, newStatus, retryLimit);
 
@@ -732,17 +737,35 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
         await pool.query("UPDATE domains SET last_checked_at=NOW() WHERE id=$1", [domain.id]);
         return;
       }
-      // The scoped worker can only change status after exact official evidence.
-      // Persist the state, alert and outbox item atomically, BEFORE any Telegram I/O.
+      // BLOCKED requires post-trigger TRADEVICEPC registry evidence.
+      // Pending WARNING and fully recovered WORKING update the dashboard
+      // without pretending to have a new official block event.
       const eventType = registryCheck.confirmedBlocked ? "BLOCKED" :
         registryCheck.confirmedRecovered ? "REGISTRY_DELISTED" : null;
-      if (!eventType) return;
+      if (!eventType) {
+        if (!registryCheck.suspectedWarning && !registryCheck.confirmedNormalized) return;
+        const updated=await pool.query(
+          "UPDATE domains SET last_status=$1,global_status=$2,last_checked_at=NOW() "+
+          "WHERE id=$3 AND tenant=$4 AND is_active=TRUE AND COALESCE(global_status,'unknown')=$1 RETURNING id",
+          [oldStatus,newStatus,domain.id,domain.tenant]);
+        if(updated.rowCount){
+          const explanation=registryCheck.confirmedNormalized
+            ? "NORMAL: registry not listed by TRADEVICEPC and two independent provider scans returned WORKING twice."
+            : "WARNING: two independent provider warnings; awaiting a post-trigger TRADEVICEPC registry match.";
+          await pool.query(
+            "INSERT INTO alerts(domain_id,old_status,new_status,message,sent_to_telegram) "+
+            "VALUES($1,$2,$3,$4,FALSE)",
+            [domain.id,oldStatus,newStatus,explanation]);
+        }
+        return;
+      }
       const message = formatEventMessage({
         domain:domain.domain, tenant:domain.tenant, project:domain.project_name,
         eventType, nodes:registryCheck.nodes || [],
         confirmedAt:registryCheck.verifiedAt || registryCheck.evidence?.verified_at,
         detectedAt:registryCheck.detectedAt || null,
-        source:registryCheck.source
+        source:registryCheck.source,
+        newStatus
       });
       const queued = await enqueueTransition({ domain, oldStatus, newStatus, eventType, message });
       if (queued.queued) {
@@ -1097,10 +1120,15 @@ function startScopedTrustPositifScheduler() {
   startDigestWatchdog();
   // Registry membership discovery is independent of 2-ISP readiness, and
   // updates only the registry_* monitor fields. It never emits BLOCKED alerts.
-  const registryInitial=setTimeout(runScopedRegistryDiscovery,20000);
-  registryInitial.unref?.();
-  const registryTick=setInterval(runScopedRegistryDiscovery,300000);
-  registryTick.unref?.();
+  if(String(process.env.TRUSTPOSITIF_STATUS_POLICY||"").toLowerCase()!=="tradevicepc_triggered"){
+    const registryInitial=setTimeout(runScopedRegistryDiscovery,20000);
+    registryInitial.unref?.();
+    const registryTick=setInterval(runScopedRegistryDiscovery,300000);
+    registryTick.unref?.();
+  }else{
+    registrySyncHealth.lastResult="tradevicepc_collector_authoritative";
+    console.log("[TrustPositif Registry] TRADEVICEPC authoritative policy; Railway direct source downloader disabled");
+  }
   // Independent delivery ticker: retries definite failures even when there
   // are not enough healthy checker nodes to run a scan.
   const deliver = () => drainOutbox().then(result => {
