@@ -147,8 +147,10 @@ async function evaluateTriggeredPolicy(domainRow,results,activeNodes,options={})
       "source=$5,recovered_at=NULL,last_error='',updated_at=$4 "+
       "WHERE tenant=$1 AND domain=$2",
       [tenant,domain,updated.registry_checked_at,now,updated.registry_source]);
-    result.confirmedBlocked=true;
-    result.holdBlocked=false;
+    // Once the existing status is already BLOCKED, hold it without
+    // repeatedly generating fresh status transitions after node outages.
+    result.confirmedBlocked=old!=="blocked";
+    result.holdBlocked=old==="blocked";
     result.suspectedWarning=false;
     result.detectedAt=updated.detected_at||updated.registry_triggered_at||now;
     return result;
