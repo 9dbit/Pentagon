@@ -42,12 +42,15 @@ async function run() {
       const message=outbox.formatEventMessage({
         domain:"<alpha.example>",eventType:"BLOCKED",
         nodes:[{id:1,name:"Alpha & Beta",provider:"ISP A"},{id:2,name:"North",provider:"ISP B"}],
-        detectedAt:t0,confirmedAt:t0,source:"komdigi-domains_isp-exact"
+        detectedAt:t0,confirmedAt:t0,source:"komdigi-domains_isp-tradevicepc-sha256:"+"a".repeat(32)
       });
       assert.match(message,/&lt;alpha\.example&gt;/);
       assert.match(message,/Alpha &amp; Beta/);
       assert.match(message,/2/);
       assert.match(message,/WIB/);
+      assert.match(message,/AI Checker/);
+      assert.match(message,/Komdigi domains_isp/);
+      assert.doesNotMatch(message,/TRADEVICEPC/i);
     });
     let first;
     await check("blocked transition + dashboard alert + outbox commit atomically",async()=>{
