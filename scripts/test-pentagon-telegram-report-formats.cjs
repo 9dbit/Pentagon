@@ -56,6 +56,8 @@ check("Exact official registry listing never falsely claims ISP-confirmed BLOCKE
   safe(page,/TRUST POSITIF REPORT/);
   assert.match(page.join(""),/REGISTRY LISTED \/ ISP PENDING/);
   assert.match(page.join(""),/Registry listed:<\/b> 1/);
+  assert.match(page.join(""),/AI Checker registry/);
+  assert.doesNotMatch(page.join(""),/TRADEVICEPC/i);
   assert.doesNotMatch(page.join(""),/CONFIRMED BLOCKED<\/b>/);
 });
 check("Rank summary uses only stored positions and historical evidence",()=>{
