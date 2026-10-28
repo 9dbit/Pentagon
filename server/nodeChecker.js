@@ -56,20 +56,11 @@ async function checkViaPollingNode(domain, node) {
       Number(process.env.PENTAGON_NODE_CHECK_TIMEOUT_MS||90000)));
     const data = await waitForNodeTask(taskId, waitMs);
 
-    if (data.__polling_state === "timeout") {
-      await pool.query("UPDATE provider_nodes SET last_health_status='waiting', last_ping_at=NOW() WHERE id=$1", [node.id]);
-      return normalizeNodeResult(node, data, Date.now() - started);
-    }
-
-    if (data.__polling_state === "error") {
-      await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [node.id]);
-      return normalizeNodeResult(node, data, Date.now() - started);
-    }
-
-    await pool.query("UPDATE provider_nodes SET last_health_status='online', last_ping_at=NOW() WHERE id=$1", [node.id]);
+    // Queue completion is not a device heartbeat. Authenticated agent poll /
+    // result handlers own polling-node health, including SIM validation. A
+    // timeout or an older completed task must not overwrite their newer state.
     return normalizeNodeResult(node, data, Date.now() - started);
   } catch (err) {
-    await pool.query("UPDATE provider_nodes SET last_health_status='offline', last_ping_at=NOW() WHERE id=$1", [node.id]).catch(() => {});
     return {
       node_id: node.id,
       checker_type: `node:${node.network_type || "provider"}`,

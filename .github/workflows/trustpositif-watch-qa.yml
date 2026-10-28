@@ -30,6 +30,8 @@ on:
       - "scripts/test-pentagon-customer-viewer-pg.cjs"
       - "scripts/test-pentagon-test-account-auth.cjs"
       - "server/nodeChecker.js"
+      - "server/nodeRoutes.js"
+      - "scripts/test-pentagon-polling-heartbeat.cjs"
       - "server/agentPollRoutes.js"
       - "scripts/test-pentagon-node-task-safety-pg.cjs"
       - "server/index.js"
@@ -92,6 +94,8 @@ jobs:
           python -m py_compile scripts/trustpositif-source-bridge.py
           node --check server/trustpositifRoutes.js
           node --check server/nodeChecker.js
+          node --check server/nodeRoutes.js
+          node --check scripts/test-pentagon-polling-heartbeat.cjs
           node --check server/agentPollRoutes.js
           node --check scripts/test-pentagon-node-task-safety-pg.cjs
           node --check server/scheduler.js
@@ -121,6 +125,8 @@ jobs:
         run: node scripts/test-pentagon-trustpositif-source-bridge-pg.cjs
       - name: PostgreSQL mobile checker late-result safety
         run: node scripts/test-pentagon-node-task-safety-pg.cjs
+      - name: Polling queue and manual ping preserve device heartbeat
+        run: node --test scripts/test-pentagon-polling-heartbeat.cjs
       - name: PostgreSQL TRADEVICEPC two-warning authoritative status and recovery policy
         run: node scripts/test-pentagon-trustpositif-trigger-policy-pg.cjs
       - name: Postgres durable TrustPositif notification outbox
