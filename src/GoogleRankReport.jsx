@@ -1,5 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, CircleAlert, Plus, RefreshCw, Search, Pencil, Trash2, X } from "lucide-react";
+import RankMonitoringPanel from "./RankMonitoringPanel";
 
 // Presentation-only report. Reads and mutations remain in existing Dashboard handlers.
 const positive = x => Number.isFinite(Number(x)) && Number(x) > 0 ? Number(x) : null;
@@ -61,6 +62,7 @@ export default function GoogleRankReport({
         <button className="reportBtn reportBtnPrimary" type="button" onClick={onCheckAll} disabled={isDemo || !groups.length}><RefreshCw size={15} aria-hidden="true" /> Check all ranks</button>
       </div>
     </header>
+    <RankMonitoringPanel audience="admin"/>
     <section className="rankReportMetrics" aria-label="Google Rank summary">
       <Metric label="Keyword groups" value={summary.groups} />
       <Metric label="Tracked domains" value={summary.domains} />
