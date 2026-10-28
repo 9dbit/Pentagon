@@ -96,7 +96,7 @@ function trustPositifReportPages(tenant,domainRows,providerRows=[],observationRo
       "<b>"+esc(flag)+"</b>\n   Last checked: "+
       esc(wib(flag==="REGISTRY LISTED / ISP PENDING"?r.registry_checked_at:r.last_checked_at));
     if(flag==="REGISTRY LISTED / ISP PENDING")
-      line+="\n   Official registry: exact match · waiting for 2 independent ISP signals";
+      line+="\n   TRADEVICEPC registry: exact match · waiting for 2 valid WARNING triggers";
     if(["WARNING","BLOCKED / REVIEW","CONFIRMED BLOCKED"].includes(flag)){
       const checks=observations.get(Number(r.domain_id))||[];
       if(checks.length)line+="\n   Network evidence: "+esc(checks.join(" • "));
@@ -108,8 +108,8 @@ function trustPositifReportPages(tenant,domainRows,providerRows=[],observationRo
   });
   const footer=[
     "<i>WORKING describes network reachability, not an official registry clearance.",
-    "REGISTRY LISTED means official source membership, NOT proof that two ISPs block access.",
-    "CONFIRMED BLOCKED requires two independent providers and an exact official TrustPositif match.",
+    "REGISTRY LISTED means official source membership, not an automatic block without a warning trigger.",
+    "BLOCKED requires 2 valid independent WARNING triggers followed by a TRADEVICEPC official registry match.",
     "Unknown/stale does not mean safe. Review evidence in Pentagon Defence Center.</i>"
   ];
   return pages(header,lines,footer);

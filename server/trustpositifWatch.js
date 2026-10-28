@@ -1,6 +1,7 @@
 "use strict";
-// Automatic watch: two independent healthy provider-node findings are needed
-// before an EXACT local indexed Komdigi registry lookup can confirm a block.
+// Legacy quorum policy remains available for isolated regression tests.
+ // Production can select two valid warning triggers followed by TRADEVICEPC's
+ // signed official registry evidence, independent of node block classification.
 const { pool } = require("./db");
 const { normalizeDomain } = require("./checker");
 const { isProductionTenant, TENANT_SQL, NON_PRODUCTION_SQL } = require("./customerWhitelistSync");
@@ -69,6 +70,9 @@ async function ensureMonitorTable(db = pool) {
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_match_kind TEXT NOT NULL DEFAULT ''");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_last_error TEXT NOT NULL DEFAULT ''");
   await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_retry_after TIMESTAMPTZ");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS registry_triggered_at TIMESTAMPTZ");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS recovery_streak INTEGER NOT NULL DEFAULT 0");
+  await db.query("ALTER TABLE trustpositif_domain_monitor ADD COLUMN IF NOT EXISTS recovery_last_at TIMESTAMPTZ");
   // Created through backend SQL inside public schema: enable RLS even though
   // client-facing Data API grants are not needed for this private monitor log.
   await db.query("ALTER TABLE trustpositif_domain_monitor ENABLE ROW LEVEL SECURITY");
@@ -113,6 +117,9 @@ function makeOfficialEvidence(state, nodes, cached) {
 }
 
 async function checkAfterNodeConsensus(domainRow, results, activeNodes, options = {}) {
+  if(String(process.env.TRUSTPOSITIF_STATUS_POLICY||"").toLowerCase()==="tradevicepc_triggered")
+    return require("./trustpositifTriggerPolicy").evaluateTriggeredPolicy(
+      domainRow,results,activeNodes,options);
   const nodes = reliableNodeAnomalies(results, activeNodes);
   const domain = normalizeDomain(domainRow?.domain);
   if (!domain || domain.length > 253 || !/^[a-z0-9][a-z0-9.-]*[.][a-z]{2,}$/.test(domain))
@@ -249,7 +256,8 @@ async function listWatchlist(tenant = "admin", db = pool) {
     "s.registry_listed,s.registry_checked_at,s.registry_source,s.registry_lookup_domain,",
     "s.registry_last_error,s.registry_retry_after,",
     "s.registry_snapshot_sha256,s.registry_snapshot_bytes,s.registry_snapshot_entries,",
-    "s.registry_collector,s.registry_match_kind",
+    "s.registry_collector,s.registry_match_kind,s.registry_triggered_at,",
+    "s.recovery_streak,s.recovery_last_at",
     "FROM registry r LEFT JOIN domains d ON LOWER(TRIM(d.domain))=r.domain AND d.tenant=r.tenant",
     "LEFT JOIN trustpositif_domain_monitor s ON s.domain=r.domain AND s.tenant=r.tenant",
     "ORDER BY CASE WHEN s.listed=TRUE AND d.global_status='blocked' THEN 0",

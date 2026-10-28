@@ -104,6 +104,12 @@ def main():
     if inventory.get("ok") is not True:
         raise RuntimeError("INVENTORY_NOT_READY")
     rows = inventory.get("domains", [])
+    # Cheap authenticated poll every few minutes. The large official registry
+    # is downloaded only AFTER two valid independent warning signals (or
+    # periodic recheck for an already BLOCKED domain).
+    if inventory.get("scan_required") is False:
+        print("SOURCE_BRIDGE_IDLE_NO_TRIGGER")
+        return
     if not rows:
         print("SOURCE_BRIDGE_NO_WHITELISTED_PRODUCTION_DOMAINS")
         return

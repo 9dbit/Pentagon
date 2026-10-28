@@ -17,9 +17,12 @@ function classify(row) {
   const recent = since(row.last_anomaly_at) < 20 * 60 * 1000;
   if (!row.monitored) return {key:"off",text:"Monitor nonaktif"};
   if (row.listed === true && row.global_status === "blocked") return {key:"blocked",text:"BLOCKED"};
-  if (row.recovered_at && row.listed === false) return {key:"recovered",text:"Delisted / recovery registry"};
+  if (row.recovered_at && row.listed === false && row.global_status === "working")
+    return {key:"healthy",text:"NORMAL · koneksi dua provider pulih"};
+  if (row.recovered_at && row.listed === false)
+    return {key:"recovered",text:"Delisted · menunggu koneksi normal"};
   if (row.registry_listed === true && row.listed !== true)
-    return {key:"registry",text:"Terdaftar registry · menunggu bukti 2 ISP"};
+    return {key:"registry",text:"Terdaftar registry · menunggu pemicu 2 WARNING"};
   if (recent && votes >= 2 && (row.last_error || row.listed == null))
     return {key:"verifying",text:"Verifying / menunggu registry"};
   if (recent && votes > 0 && row.listed !== true) return {key:"suspected",text:"Suspected / sinyal jaringan"};
@@ -125,8 +128,9 @@ export default function TrustPositifWatchlist() {
       <div>
         <span className="tpWatchEyebrow">AUTOMATIC DOMAIN DEFENCE</span>
         <h2>Whitelist monitoring</h2>
-        <p>Domain monitor aktif dan seluruh domain whitelist Google Rank. Status BLOCKED hanya setelah
-          minimal {data?.min_nodes || 2} node dari provider independen serta pencocokan exact registry Komdigi.</p>
+        <p>Minimal {data?.min_nodes || 2} node provider berbeda yang melaporkan WARNING menjadi pemicu. TRADEVICEPC menentukan
+          BLOCKED lewat exact-match registry resmi. NORMAL hanya setelah registry tidak terdaftar
+          dan dua provider membuktikan koneksi pulih dalam dua siklus.</p>
       </div>
       <button type="button" className="tpWatchRefreshButton" disabled={loading} onClick={load}>
         <RefreshCw size={14}/>{loading ? "Memuat..." : "Refresh"}
@@ -168,7 +172,7 @@ export default function TrustPositifWatchlist() {
     <div className="tpWatchMetrics">
       <div><span>Domain whitelist</span><strong>{data?.summary?.total ?? "—"}</strong></div>
       <div><span>Aktif dimonitor</span><strong>{data?.summary?.monitored ?? "—"}</strong></div>
-      <div><span>Registry listed · menunggu ISP</span><strong>{data?.summary?.registry_pending_isp ?? (counts.registry||0)}</strong></div>
+      <div><span>Registry listed · menunggu trigger</span><strong>{data?.summary?.registry_pending_isp ?? (counts.registry||0)}</strong></div>
       <div><span>Suspected / verifying</span><strong>{(counts.suspected || 0)+(counts.verifying || 0)}</strong></div>
       <div><span>Blocked</span><strong className="tpWatchBadNumber">{counts.blocked || 0}</strong></div>
       <div><span>Registry delisted</span><strong>{counts.recovered || 0}</strong></div>
@@ -196,7 +200,7 @@ export default function TrustPositifWatchlist() {
       <label><span>Status</span><select aria-label="Filter status" value={statusFilter}
         onChange={e=>resetFilters(setStatusFilter,e.target.value)}>
         <option value="all">Semua status</option>
-        <option value="blocked">Blocked</option><option value="registry">Registry listed · ISP pending</option><option value="suspected">Suspected</option>
+        <option value="blocked">Blocked</option><option value="registry">Registry listed · 2 warning pending</option><option value="suspected">Suspected</option>
         <option value="verifying">Verifying</option><option value="recovered">Registry delisted</option>
         <option value="healthy">Tidak terdaftar</option><option value="unknown">Unknown</option>
         <option value="off">Monitor nonaktif</option>
@@ -241,6 +245,9 @@ export default function TrustPositifWatchlist() {
               <div><b>Official registry:</b> {row.registry_listed===true ? "LISTED · exact source match" :
                 row.registry_listed===false ? "NOT LISTED (snapshot)" : "NOT CHECKED"}</div>
               <div><b>Registry source:</b> {row.registry_source || "Not checked"}</div>
+              <div><b>Collector:</b> {row.registry_collector || "Not available"}</div>
+              <div><b>Warning trigger:</b> {displayTime(row.registry_triggered_at)}</div>
+              <div><b>Recovery checks:</b> {row.recovery_streak || 0}/2 consecutive provider cycles</div>
               <div><b>Registry checked:</b> {displayTime(row.registry_checked_at)}</div>
               <div><b>Registry collector:</b> {row.registry_collector || "Not recorded"} · {row.registry_match_kind || "—"}</div>
               {row.registry_snapshot_sha256 && <div><b>Snapshot SHA-256:</b> <code>{row.registry_snapshot_sha256.slice(0,16)}…</code></div>}

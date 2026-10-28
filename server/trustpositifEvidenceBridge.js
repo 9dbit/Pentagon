@@ -57,6 +57,33 @@ async function inventory(db=pool){
   }
   return valid;
 }
+async function scanRequired(db=pool){
+  // In the two-warning policy, TRADEVICEPC polls cheaply but downloads the
+  // ~223 MB official registry only when an independent-node warning has
+  // triggered a new lookup, or when a blocked domain needs a delisting audit.
+  if(String(process.env.TRUSTPOSITIF_STATUS_POLICY||"").toLowerCase()!=="tradevicepc_triggered")
+    return true;
+  await ensureMonitorTable(db);
+  const {rows}=await db.query([
+    "SELECT EXISTS(SELECT 1 FROM domains d",
+    "JOIN trustpositif_domain_monitor m",
+    "ON m.tenant=d.tenant AND m.domain=LOWER(TRIM(d.domain))",
+    "WHERE d.is_active=TRUE AND d.tenant~$1 AND d.tenant!~*$2",
+    "AND EXISTS (SELECT 1 FROM rank_keyword_domains k",
+    "JOIN rank_keyword_groups g ON g.id=k.group_id",
+    "WHERE g.tenant=d.tenant AND g.is_active=TRUE AND k.is_whitelisted=TRUE",
+    "AND LOWER(TRIM(k.domain))=LOWER(TRIM(d.domain)))",
+    "AND (",
+    "(m.registry_triggered_at IS NOT NULL",
+    "AND (m.registry_checked_at IS NULL OR m.registry_checked_at<m.registry_triggered_at",
+    "OR m.registry_checked_at<NOW()-INTERVAL '6 hours'))",
+    "OR (d.global_status='blocked'",
+    "AND (m.registry_checked_at IS NULL OR m.registry_checked_at<NOW()-INTERVAL '6 hours'))",
+    ") LIMIT 1) AS needed"
+  ].join(" "),[TENANT_SQL,NON_PRODUCTION_SQL]);
+  return rows[0]?.needed===true;
+}
+
 function validateEvidence(body,monitored,now=Date.now()){
   if(!body || body.source_url!==SOURCE_URL || body.source_http!==200 ||
      !/^[a-f0-9]{64}$/.test(String(body.source_sha256||"")) ||
@@ -142,7 +169,8 @@ router.use(requireBridge);
 router.get("/inventory",async(req,res)=>{
   try{
     const domains=await inventory();
-    res.json({ok:true,source_url:SOURCE_URL,domains});
+    const scan_required=await scanRequired();
+    res.json({ok:true,source_url:SOURCE_URL,scan_required,domains});
   }catch(e){
     console.warn("[TrustPositif Bridge] inventory unavailable",String(e.code||"DATABASE_UNAVAILABLE").slice(0,45));
     res.status(503).json({error:"SOURCE_INVENTORY_UNAVAILABLE"});
@@ -160,4 +188,4 @@ router.post("/evidence",async(req,res)=>{
     res.status(503).json({error:"SOURCE_BRIDGE_INGEST_UNAVAILABLE"});
   }
 });
-module.exports={router,inventory,validateEvidence,importEvidence,SOURCE_URL};
+module.exports={router,inventory,scanRequired,validateEvidence,importEvidence,SOURCE_URL};
