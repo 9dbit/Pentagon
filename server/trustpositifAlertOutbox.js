@@ -66,23 +66,29 @@ function wib(value) {
   }) + " WIB";
 }
 
-function formatEventMessage({ domain, tenant, project, eventType, nodes = [], confirmedAt, detectedAt, source }) {
+function formatEventMessage({ domain, tenant, project, eventType, nodes = [], confirmedAt, detectedAt, source, newStatus }) {
   const blocked = eventType === "BLOCKED";
   const uniqueProviders = [...new Set(nodes.map(n => String(n.provider || "").trim()).filter(Boolean))];
   const names = nodes.map(n => n.name || String(n.id)).filter(Boolean);
   return [
     blocked ? "🚨 <b>PENTAGON SECURITY ALERT</b>" : "🛡️ <b>PENTAGON TRUSTPOSITIF UPDATE</b>",
     "",
-    "<b>Status:</b> " + (blocked ? "BLOCKED (official registry + node quorum)" : "REGISTRY DELISTED (network not yet cleared)"),
+    "<b>Status:</b> " + (blocked
+      ? "BLOCKED (2-node WARNING trigger + TRADEVICEPC official registry match)"
+      : newStatus==="working"
+        ? "REGISTRY DELISTED (independent network recovery verified)"
+        : "REGISTRY DELISTED (network not yet cleared)"),
     "<b>Domain:</b> <code>" + escapeHtml(domain) + "</code>",
     "<b>Customer:</b> " + escapeHtml(tenant || "admin"),
     "<b>Project:</b> " + escapeHtml(project || "Not available"),
     "<b>First detected:</b> " + escapeHtml(wib(detectedAt)),
     "<b>Confirmed:</b> " + escapeHtml(wib(confirmedAt)),
-    "<b>Confirmed nodes:</b> " + String(nodes.length),
+    "<b>Warning trigger nodes:</b> " + String(nodes.length),
     "<b>Nodes:</b> " + escapeHtml(names.join(", ") || "Not available"),
     "<b>Providers:</b> " + escapeHtml(uniqueProviders.join(", ") || "Not available"),
-    "<b>TrustPositif:</b> " + (blocked ? "Exact indexed registry match" : "Exact indexed registry delisting"),
+    "<b>TrustPositif:</b> " + (blocked
+      ? "Verified TRADEVICEPC exact-match snapshot; node warnings were trigger only"
+      : "Exact official registry delisting; network requires separate WORKING confirmation"),
     "<b>Source:</b> " + escapeHtml(source || "Not available"),
     "<b>Severity:</b> " + (blocked ? "High" : "Informational"),
     "",
