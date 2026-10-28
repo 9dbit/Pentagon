@@ -4,12 +4,16 @@ import android.content.Context;
 import android.net.Network;
 import org.json.JSONObject;
 
-import java.net.HttpURLConnection;
+import okhttp3.OkHttpClient;
+import okhttp3.Call;
+import okhttp3.Request;
+import okhttp3.Response;
+import java.util.concurrent.TimeUnit;
+import java.util.List;
 import java.net.InetAddress;
-import java.net.URL;
 
 class DomainChecker {
-    static JSONObject check(Context context, String domain, String provider, String networkMode) {
+    static JSONObject check(Context context, String domain, String provider, String networkMode, CheckContext control) {
         long started = System.currentTimeMillis();
         JSONObject r = new JSONObject();
         String clean = domain == null ? "" : domain.replaceFirst("^https?://", "").replaceFirst("/.*$", "").trim().toLowerCase();
@@ -29,42 +33,41 @@ class DomainChecker {
             return buildResult(r, provider, networkMode, status, http, finalUrl, dns, started, reason, cell);
         }
 
+        final StringBuilder resolved = new StringBuilder();
+        long httpStarted = android.os.SystemClock.elapsedRealtime();
         try {
-            InetAddress[] addrs = network != null ? network.getAllByName(clean) : InetAddress.getAllByName(clean);
-            StringBuilder sb = new StringBuilder();
-            for (InetAddress a : addrs) {
-                if (sb.length() > 0) sb.append(", ");
-                sb.append(a.getHostAddress());
+            control.check();
+            if (requireCellular && !AutoProvisioner.providerFromOperator(cell.operator).equalsIgnoreCase(provider)) {
+                return buildResult(r, provider, networkMode, "warning", 0, "", "", started,
+                        "PROVIDER_IDENTITY_NOT_VERIFIED", cell);
             }
-            dns = sb.toString();
-        } catch (Exception e) {
-            status = "warning";
-            reason = "DNS error: " + e.getClass().getSimpleName();
-        }
-
-        HttpURLConnection conn = null;
-        try {
-            URL url = new URL("https://" + clean);
-            conn = (HttpURLConnection) (network != null ? network.openConnection(url) : url.openConnection());
-            conn.setInstanceFollowRedirects(true);
-            conn.setConnectTimeout(18000);
-            conn.setReadTimeout(18000);
-            conn.setRequestProperty("User-Agent", "PentagonProviderNode/" + BuildConfig.VERSION_NAME + " " + provider);
-            http = conn.getResponseCode();
-            finalUrl = conn.getURL().toString();
-
-            if (http >= 500 || http == 403 || http == 451 || http == 429) {
-                status = "warning";
-                reason = "HTTP " + http;
-            } else if (!"warning".equals(status)) {
-                status = "working";
-                reason = "OK";
+            OkHttpClient.Builder builder = new OkHttpClient.Builder()
+                    .connectTimeout(12, TimeUnit.SECONDS).readTimeout(15, TimeUnit.SECONDS)
+                    .callTimeout(35, TimeUnit.SECONDS).retryOnConnectionFailure(false)
+                    .followSslRedirects(false).connectionPool(new okhttp3.ConnectionPool(0, 1, TimeUnit.SECONDS))
+                    .dns(host -> {
+                        List<InetAddress> addresses=NetworkDns.resolve(network,host);
+                        for(InetAddress address:addresses) {
+                            if(resolved.length()<500) { if(resolved.length()>0)resolved.append(", "); resolved.append(address.getHostAddress()); }
+                        }
+                        return addresses;
+                    });
+            if(network!=null)builder.socketFactory(network.getSocketFactory());
+            Call call=builder.build().newCall(new Request.Builder().url("https://"+clean)
+                    .header("User-Agent", "PentagonProviderNode/"+BuildConfig.VERSION_NAME+" "+provider).build());
+            control.attach(call); control.check(); NodeDiagnostics.phase("http");
+            try(Response response=call.execute()) {
+                http=response.code(); finalUrl=response.request().url().toString();
+                if(http>=500 || http==403 || http==451 || http==429 || http>=300 && http<400) {
+                    status="warning"; reason="HTTP "+http;
+                }
             }
-        } catch (Exception e) {
-            status = "warning";
-            reason = "HTTP error: " + e.getClass().getSimpleName() + ": " + safe(e.getMessage());
+        } catch(Exception e) {
+            status="warning";
+            reason="HTTP error: "+e.getClass().getSimpleName()+": "+safe(e.getMessage());
         } finally {
-            if (conn != null) conn.disconnect();
+            dns=resolved.toString();
+            NodeDiagnostics.timing("http",android.os.SystemClock.elapsedRealtime()-httpStarted);
         }
 
         return buildResult(r, provider, networkMode, status, http, finalUrl, dns, started, reason, cell);

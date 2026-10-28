@@ -22,9 +22,9 @@ COPY --from=build /src/app/build/outputs/apk/release/app-release-unsigned.apk /o
 COPY release-entrypoint.sh release-server.py /opt/release/
 ENV PATH=/opt/android-build-tools:${PATH}
 ENV PORT=8080
-ENV VERSION_CODE=176
-ENV VERSION_NAME=1.7.6
+ENV VERSION_CODE=177
+ENV VERSION_NAME=1.7.7
 ENV PACKAGE_NAME=com.pentagon.providernode
-ENV RELEASE_NOTES="Pentagon Provider Node 1.7.6: Android 15 background service compatibility, verified Railway heartbeats, SIM provider diagnostics, and safer polling recovery."
+ENV RELEASE_NOTES="Pentagon Provider Node 1.7.7: independent busy heartbeats, bounded checks, private diagnostics, and actual charging state."
 EXPOSE 8080
 CMD ["bash", "/opt/release/release-entrypoint.sh"]

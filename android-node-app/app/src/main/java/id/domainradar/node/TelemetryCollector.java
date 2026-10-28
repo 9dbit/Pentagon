@@ -18,7 +18,7 @@ class TelemetryCollector {
             BatteryManager bm = (BatteryManager)c.getSystemService(Context.BATTERY_SERVICE);
             int pct = bm == null ? -1 : bm.getIntProperty(BatteryManager.BATTERY_PROPERTY_CAPACITY);
             o.put("battery_percent", pct >= 0 ? pct : JSONObject.NULL);
-            o.put("is_charging", false);
+            o.put("is_charging", bm == null ? JSONObject.NULL : bm.isCharging());
             o.put("battery_status", "android");
             o.put("battery_health", "unknown");
             o.put("battery_temperature_c", JSONObject.NULL);

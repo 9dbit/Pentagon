@@ -43,12 +43,12 @@ check("Prior Replit base URLs safely move to Railway",()=>{
   assert.match(prefs,/https:\/\/pentagon-web-production\.up\.railway\.app/);
 });
 check("Android APK version increments without replacing node app ID",()=>{
-  assert.match(build,/versionCode 176/);
-  assert.match(build,/versionName '1\.7\.6'/);
+  assert.match(build,/versionCode 177/);
+  assert.match(build,/versionName '1\.7\.7'/);
   assert.match(build,/applicationId 'com\.pentagon\.providernode'/);
-  assert.match(docker,/ENV VERSION_CODE=176/);
-  assert.match(docker,/ENV VERSION_NAME=1\.7\.6/);
-  assert.match(docker,/1\.7\.6: Android 15 background service compatibility/);
+  assert.match(docker,/ENV VERSION_CODE=177/);
+  assert.match(docker,/ENV VERSION_NAME=1\.7\.7/);
+  assert.match(docker,/1\.7\.7: independent busy heartbeats/);
 });
 check("Android 15 continuous monitoring is not declared as six-hour dataSync FGS",()=>{
   assert.match(manifest,/android\.permission\.FOREGROUND_SERVICE_SPECIAL_USE/);

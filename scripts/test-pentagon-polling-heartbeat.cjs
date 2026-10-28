@@ -83,6 +83,7 @@ for (const outcome of ["fresh", "stale", "lookup failure"]) {
     const router = Object.fromEntries(["get", "post", "patch", "delete"].map(method =>
       [method, (route, handler) => { handlers[`${method} ${route}`] = handler; }]));
     load("nodeRoutes.js", {
+      "./nodeDiagnostics": require("../server/nodeDiagnostics"),
       express: { Router: () => router },
       axios: { get() { throw new Error("Polling ping must not contact an HTTP agent"); } },
       "./db": { pool: { async query(sql) {
