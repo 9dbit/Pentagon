@@ -1,6 +1,6 @@
 import React, { useMemo, useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, CircleAlert, Plus, RefreshCw, Search, Pencil, Trash2, X } from "lucide-react";
-import RankMonitoringPanel from "./RankMonitoringPanel";
+import WhitelistRankResults from "./WhitelistRankResults";
 
 // Presentation-only report. Reads and mutations remain in existing Dashboard handlers.
 const positive = x => Number.isFinite(Number(x)) && Number(x) > 0 ? Number(x) : null;
@@ -10,7 +10,7 @@ const scanDate = date => !date || !Number.isFinite(new Date(date).getTime())
 
 export function rankDomains(group) {
   const domains = Array.isArray(group?.domains) ? group.domains.filter(d => d && d.is_whitelisted) : [];
-  return domains.length ? domains : [{ domain:group?.domain || "Not specified", last_position:group?.last_position, last_page:group?.last_page }];
+  return domains;
 }
 
 function Metric({ label, value, emphasis }) {
@@ -62,7 +62,6 @@ export default function GoogleRankReport({
         <button className="reportBtn reportBtnPrimary" type="button" onClick={onCheckAll} disabled={isDemo || !groups.length}><RefreshCw size={15} aria-hidden="true" /> Check all ranks</button>
       </div>
     </header>
-    <RankMonitoringPanel audience="admin"/>
     <section className="rankReportMetrics" aria-label="Google Rank summary">
       <Metric label="Keyword groups" value={summary.groups} />
       <Metric label="Tracked domains" value={summary.domains} />
@@ -127,17 +126,7 @@ export default function GoogleRankReport({
             <label className="rankReportWide">Domains<textarea rows={2} value={editRankForm.domains} onChange={e => onEditChange({ ...editRankForm, domains:e.target.value })} disabled={isDemo} /></label>
             <label className="rankReportWide">Target URL <small>(optional)</small><input value={editRankForm.target_url} onChange={e => onEditChange({ ...editRankForm, target_url:e.target.value })} disabled={isDemo} /></label>
             <div className="rankReportFormFooter"><span>Changes apply to this keyword group only.</span><button type="button" className="reportBtn reportBtnQuiet" onClick={onCancelEdit}>Cancel</button><button type="submit" className="reportBtn reportBtnPrimary" disabled={isDemo}>Save changes</button></div>
-          </form> : <div className="rankReportDomainRows" aria-label={"Ranking results for " + group.keyword}>
-            {domains.map((domain,i) => {
-              const position = positive(domain.last_position), page = positive(domain.last_page);
-              return <div className="rankReportDomainRow" key={group.id + "-" + (domain.domain || i)}>
-                <div className="rankReportDomainName"><strong>{domain.domain || "Domain not set"}</strong><span>{domain.is_whitelisted === false ? "Group reference" : "Tracked domain"}</span></div>
-                <div className="rankReportNumber"><span>Rank</span><strong>{position ? "#" + position : "—"}</strong></div>
-                <div className="rankReportNumber"><span>Page</span><strong>{page || "—"}</strong></div>
-                <span className={"rankReportMatch" + (position ? " matched" : "")}>{position ? "Found" : "Not recorded"}</span>
-              </div>;
-            })}
-          </div>}
+          </form> : <WhitelistRankResults domains={domains} keyword={group.keyword}/>}
         </article>;
       })}
     </div>

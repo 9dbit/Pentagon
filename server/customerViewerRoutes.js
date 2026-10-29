@@ -71,7 +71,11 @@ function createCustomerViewerRouter(db = pool) {
     const { rows } = await db.query(
       "SELECT g.keyword, g.project_name, g.last_checked_at," +
       "COUNT(DISTINCT d.domain)::int AS whitelisted_domains," +
-      "COALESCE(STRING_AGG(DISTINCT d.domain, ', ' ORDER BY d.domain),'') AS domains " +
+      "COALESCE(STRING_AGG(DISTINCT d.domain, ', ' ORDER BY d.domain),'') AS domains, " +
+      "COALESCE(json_agg(json_build_object('domain',d.domain, " +
+      "'last_position',k.last_position,'last_page',k.last_page, " +
+      "'last_status',k.last_status,'last_checked_at',k.last_checked_at) ORDER BY d.domain) " +
+      "FILTER (WHERE d.domain IS NOT NULL), '[]'::json) AS whitelist " +
       "FROM rank_keyword_groups g " +
       "LEFT JOIN rank_keyword_domains k ON k.group_id=g.id AND k.is_whitelisted=TRUE " +
       "LEFT JOIN domains d ON LOWER(TRIM(d.domain))=LOWER(TRIM(k.domain)) " +

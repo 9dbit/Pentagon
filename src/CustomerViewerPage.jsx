@@ -4,6 +4,7 @@ import {
   LogOut, RefreshCw, Search, ShieldCheck, ShieldAlert, Layers3
 } from "lucide-react";
 import "./CustomerViewerPage.css";
+import WhitelistRankResults from "./WhitelistRankResults";
 
 const timeWib = value => {
   if (!value || !Number.isFinite(new Date(value).getTime())) return "Belum diperiksa";
@@ -164,13 +165,14 @@ export default function CustomerViewerPage({ onLogout, accountEmail = "" }) {
       </section>}
 
       {page==="keywords" && <section className="cvContent">
-        <div className="cvSectionHeading"><div><h2>Keyword Brand</h2>
-          <p>Jumlah domain whitelist untuk setiap keyword.</p></div></div>
+        <div className="cvSectionHeading"><div><h2>Google Rank Report</h2>
+          <p>Halaman SERP dan posisi semua domain whitelist per keyword.</p></div></div>
         <div className="cvKeywordList">
-          {keywords.map((item,i)=><article className="cvKeywordRow" key={item.keyword+"-"+i}>
+          {keywords.map((item,i)=><article className="cvKeywordReport" key={item.keyword+"-"+i}>
             <div><b>{item.keyword}</b><span>{item.project_name||"Brand"}</span></div>
             <span>{item.whitelisted_domains} domain whitelist</span>
             <small>Last rank scan: {timeWib(item.last_checked_at)}</small>
+            <WhitelistRankResults domains={item.whitelist} keyword={item.keyword}/>
           </article>)}
           {!keywords.length && <p className="cvEmpty">{loading?"Memuat keyword...":"Belum ada keyword."}</p>}
         </div>

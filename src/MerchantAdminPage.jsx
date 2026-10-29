@@ -8,6 +8,7 @@ import {
 import "./MerchantAdminPage.css";
 import MerchantNodeCardV2 from "./MerchantNodeCardV2";
 import RankMonitoringPanel from "./RankMonitoringPanel";
+import WhitelistRankResults from "./WhitelistRankResults";
 import MerchantTelegramHub from "./MerchantTelegramHub";
 import MerchantTelegramGroupSettings from "./MerchantTelegramGroupSettings";
 
@@ -154,6 +155,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
         {notice && <div className="maFeedback" role="status"><CheckCircle2 size={17}/>{notice}</div>}
 
         {page === "overview" && <>
+          <RankMonitoringPanel audience="merchant"/>
           <div className="maMetrics">
             {[
               ["Domain terdaftar", overview.total, Globe2],
@@ -210,8 +212,8 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           </div>)}{!ownDomains.length && <div className="maEmpty">Belum ada domain yang cocok.</div>}</div>
         </section>}
 
-        {page === "keywords" && <><RankMonitoringPanel audience="merchant"/><section className="maPanel">
-          <div className="maPanelHead"><div><h2>Google Rank & Whitelist</h2><p>Kelola keyword dan whitelist domain merchant.</p></div>
+        {page === "keywords" && <section className="maPanel">
+          <div className="maPanelHead"><div><h2>Google Rank Report</h2><p>Halaman SERP dan posisi seluruh domain whitelist per keyword dari hasil pemeriksaan tersimpan.</p></div>
             <button className="maPrimary" type="button" onClick={() => setShowKeywordForm(v => !v)}><Plus size={16}/> Keyword</button></div>
           {showKeywordForm && <form className="maForm" onSubmit={async e => {
             e.preventDefault(); if (await act("/api/merchant/keywords", "POST", keywordForm, "Keyword berhasil ditambahkan.")) { setKeywordForm({ keyword: "", project_name: "" }); setShowKeywordForm(false); }
@@ -223,7 +225,8 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           <div className="maList">{data.keywords.map(item => <div className="maKeyword" key={item.id}>
             <div className="maKeywordTop"><div><h3>{item.keyword}</h3><small>{item.project_name || "Brand"} · Terakhir diperiksa {dateWib(item.last_checked_at)}</small></div>
               <button type="button" className="maPill" disabled={busy} onClick={() => act("/api/merchant/keywords/" + item.id, "PATCH", { is_active: !item.is_active }, "Status keyword diperbarui.")}>{item.is_active ? "Jeda" : "Aktifkan"}</button></div>
-            <div className="maChips">{(item.whitelist || []).map(d => <span key={d.domain}>{d.domain}<button type="button" title="Hapus whitelist" disabled={busy}
+            <WhitelistRankResults domains={item.whitelist} keyword={item.keyword}/>
+            <details><summary>Kelola whitelist</summary><div className="maChips">{(item.whitelist || []).map(d => <span key={d.domain}>{d.domain}<button type="button" title="Hapus whitelist" disabled={busy}
               onClick={() => act("/api/merchant/keywords/" + item.id + "/whitelist/" + encodeURIComponent(d.domain), "DELETE", undefined, "Domain dikeluarkan dari whitelist.")}><X size={12}/></button></span>)}</div>
             <form className="maLinkForm" onSubmit={async e => {
               e.preventDefault(); const domain = linkFor[item.id]; if (!domain) return;
@@ -233,9 +236,9 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
                 <option value="">Pilih domain milik merchant</option>
                 {data.domains.filter(d => d.is_active).map(d => <option value={d.domain} key={d.id}>{d.domain}</option>)}
               </select><button className="maPill" disabled={busy || !linkFor[item.id]}><Plus size={14}/> Tambah Whitelist</button>
-            </form>
+            </form></details>
           </div>)}{!data.keywords.length && <div className="maEmpty">Belum ada keyword untuk merchant ini.</div>}</div>
-        </section></>}
+        </section>}
 
         {page === "nodes" && <section className="maNodePageV2">
           <div className="maNodePageHead">
