@@ -17,3 +17,9 @@
 .whitelistSerp .whitelistCheckerCell{min-width:150px;line-height:1.5}
 .whitelistCheckerCell time,.whitelistCheckerCell small{display:block;margin-top:5px;font-size:10px;color:#93a1b4}
 .whitelistCheckerCell.working span{color:#86d6a6}.whitelistCheckerCell.warning span,.whitelistCheckerCell.listed span{color:#fbbf24}.whitelistCheckerCell.stale span{color:#94a3b8}
+.whitelistSerp .whitelistSerpTable thead th{overflow-wrap:normal;word-break:normal}
+.whitelistSerp .whitelistSerpTable th:nth-child(2),.whitelistSerp .whitelistSerpTable td:nth-child(2){min-width:90px}
+.whitelistSerp .whitelistSerpTable th:nth-child(3),.whitelistSerp .whitelistSerpTable td:nth-child(3){min-width:115px}
+.whitelistSerp .whitelistSerpTable th:nth-child(4),.whitelistSerp .whitelistSerpTable td:nth-child(4){min-width:160px}
+.whitelistSerp .whitelistSerpTable th:nth-child(5),.whitelistSerp .whitelistSerpTable td:nth-child(5){min-width:140px}
+.whitelistSerp .whitelistSerpTable th:nth-child(n+6){min-width:150px}
