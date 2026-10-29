@@ -11,6 +11,7 @@ const { createMerchantOperationsRouter } = require("./merchantOperationsRoutes")
 function createMerchantAdminRouter(db = pool) {
   const router = express.Router();
   router.use(requireMerchantAdmin);
+  router.use("/shield-link",require("./shieldLinkRoutes").createShieldLinkRouter(db,{merchant:true}));
   router.use(createMerchantOperationsRouter(db));
   router.use((req, res, next) => {
     res.set("Cache-Control", "private, no-store");
@@ -107,12 +108,14 @@ function createMerchantAdminRouter(db = pool) {
     return res.json(rows[0]);
   }));
 
+  router.get("/rank-checkers", safely(async (req,res)=>res.json(await require("./rankCheckerEvidence").rankCheckerEvidence(ownTenant(req),db))));
+
   router.get("/keywords", safely(async (req, res) => {
     const { rows } = await db.query(
       "SELECT g.id, g.keyword, g.project_name, g.is_active, g.last_checked_at, " +
       "COALESCE(json_agg(json_build_object('domain',d.domain, " +
       "'last_position',k.last_position,'last_page',k.last_page, " +
-      "'last_status',k.last_status,'last_checked_at',k.last_checked_at) ORDER BY d.domain) " +
+      "'last_status',k.last_status,'last_checked_at',k.last_checked_at AT TIME ZONE 'UTC') ORDER BY d.domain) " +
       "FILTER (WHERE d.domain IS NOT NULL AND k.is_whitelisted=TRUE), '[]'::json) AS whitelist " +
       "FROM rank_keyword_groups g " +
       "LEFT JOIN rank_keyword_domains k ON k.group_id=g.id AND k.is_whitelisted=TRUE " +

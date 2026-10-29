@@ -115,14 +115,14 @@ function trustPositifReportPages(tenant,domainRows,providerRows=[],observationRo
   return pages(header,lines,footer);
 }
 function rankState(row,now) {
-  if(!row.last_checked_at)return {text:"NOT CHECKED",position:null,delta:null,stale:false};
+  if(!row.last_checked_at||row.last_status==="pending"||new Date(row.last_checked_at)>now)return {text:"NOT CHECKED",position:null,delta:null,stale:false};
   if(!validAge(row.last_checked_at,now,24))
     return {text:"STALE",position:null,delta:null,stale:true};
   const p=Number(row.last_position);
   if(String(row.last_status||"").toLowerCase()==="not_found")
     return {text:"NOT FOUND",position:null,delta:null,stale:false};
-  if(!Number.isInteger(p)||p<1||p>100)
-    return {text:"NOT FOUND",position:null,delta:null,stale:false};
+  if(row.last_status!=="found"||typeof row.last_position==="boolean"||!Number.isInteger(p)||p<1||p>100)
+    return {text:"UNAVAILABLE",position:null,delta:null,stale:false};
   const prior=Number(row.previous_position);
   const validPrevious=row.previous_position!=null&&Number.isInteger(prior)&&prior>=1&&prior<=100;
   const d=validPrevious?prior-p:null;

@@ -43,6 +43,20 @@ test('report renders every whitelisted domain including not found and unscanned'
   for(const text of ['ranked.example','absent.example','pending.example','#13','Halaman SERP','Tidak ditemukan dalam hasil scan','Belum diperiksa'])assert.ok(html.includes(text),text);
   assert.equal((html.match(/scope="row"/g)||[]).length,3);
 });
+test('each checker column renders its own result and timestamp without copying SERP rank',()=>{
+  const code=require('esbuild').buildSync({entryPoints:['src/WhitelistRankResults.jsx'],bundle:true,write:false,
+    platform:'node',format:'cjs',external:['react'],loader:{'.css':'empty'}}).outputFiles[0].text;
+  const mod={exports:{}};new Function('require','module','exports',code)(require,mod,mod.exports);
+  const React=require('react'),{renderToStaticMarkup}=require('react-dom/server');
+  const html=renderToStaticMarkup(React.createElement(mod.exports.default,{keyword:'Fixture',domains:[
+    {domain:'ranked.example',last_position:13,last_page:2,last_status:'found',last_checked_at:'2020-01-01T00:00:00Z'}],
+    evidence:{nodes:[{key:'a',label:'Telkomsel',is_active:true},{key:'b',label:'XL',is_active:false}],domains:[
+      {domain:'ranked.example',node_results:{a:{text:'Warning jaringan',state:'warning',checked_at:'2020-01-01T00:00:00Z'},
+        b:{text:'Lama · Terjangkau',state:'stale',checked_at:'2019-01-01T00:00:00Z'}},
+        ai:{text:'Tercatat registry',state:'listed',checked_at:'2020-01-01T00:00:00Z'}}]}}));
+  for(const text of ['Telkomsel','XL','nonaktif','Warning jaringan','Lama · Terjangkau','AI Checker','Tercatat registry','Registry TrustPositif'])assert.ok(html.includes(text),text);
+  assert.equal((html.match(/#13/g)||[]).length,1);
+});
 test('monitoring stays on Overview while Google Rank renders SERP results',()=>{
   const merchant=fs.readFileSync('src/MerchantAdminPage.jsx','utf8');
   const rank=fs.readFileSync('src/GoogleRankReport.jsx','utf8');

@@ -4,7 +4,7 @@
 // dashboard-confirmed Telegram connection. No cross-tenant joins are allowed.
 const { pool } = require("./db");
 const { ensureTables, hubEnabled, tg } = require("./telegramHub");
-const {trustRows,providerRows,networkObservations,rankRows,rankSnapshots} = require("./telegramMerchantReportData");
+const {trustRows,providerRows,networkObservations,rankRows} = require("./telegramMerchantReportData");
 const {trustPositifNativePages,googleRankNativePages} = require("./telegramMerchantNativeReports");
 let ticking = false;
 
@@ -86,6 +86,7 @@ async function whitelistForTenant(tenant, db=pool) {
 async function queueMerchantReport(tenant, db=pool, options={}) {
   if(!hubEnabled())return 0;
   await ensureTables(db);
+  await require("./trustpositifWatch").ensureMonitorTable(db);
   const tx=await db.connect();
   try {
     await tx.query("BEGIN");
@@ -125,9 +126,8 @@ async function queueMerchantReport(tenant, db=pool, options={}) {
     }
     if(conn.rank_report){
       const ranking=await rankRows(tenant,tx);
-      const nodes=await providerRows(tx);
-      const snapshots=await rankSnapshots(tenant,tx);
-      for(const page of googleRankNativePages(tenant,ranking,nodes,snapshots,now,conn.interval_minutes))
+      const evidence=await require("./rankCheckerEvidence").rankCheckerEvidence(tenant,tx,now.getTime());
+      for(const page of googleRankNativePages(tenant,ranking,[],[],now,conn.interval_minutes,evidence))
         messages.push({kind:"google_rank",...page});
     }
     for(const item of messages){

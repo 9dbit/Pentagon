@@ -54,7 +54,7 @@ async function rankRows(tenant,db=pool){
   const {rows}=await db.query([
     "WITH active_groups AS (",
     "SELECT id,keyword,project_name,tenant FROM rank_keyword_groups",
-    "WHERE tenant=$1 AND is_active=TRUE ORDER BY id LIMIT 30)",
+    "WHERE tenant=$1 AND is_active=TRUE ORDER BY id)",
     "SELECT g.id AS group_id,g.keyword,g.project_name,LOWER(TRIM(k.domain)) AS domain,",
     "k.last_position,k.last_page,k.last_status,k.last_checked_at,",
     "d.label AS domain_label,prev.position AS previous_position",
@@ -74,7 +74,7 @@ async function rankRows(tenant,db=pool){
     "OR LOWER(rsr.host) LIKE '%.'||LOWER(TRIM(k.domain)))",
     "ORDER BY rsr.checked_at DESC,rsr.position ASC LIMIT 1",
     ") prev ON TRUE",
-    "ORDER BY g.id,LOWER(TRIM(k.domain)) LIMIT 400"
+    "ORDER BY g.id,LOWER(TRIM(k.domain))"
   ].join(" "),[tenant]);
   return rows;
 }

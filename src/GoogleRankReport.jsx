@@ -1,3 +1,4 @@
+import useRankCheckers from "./useRankCheckers";
 import React, { useMemo, useState } from "react";
 import { ArrowUpRight, Check, ChevronDown, CircleAlert, Plus, RefreshCw, Search, Pencil, Trash2, X } from "lucide-react";
 import WhitelistRankResults from "./WhitelistRankResults";
@@ -22,6 +23,7 @@ export default function GoogleRankReport({
   onOpenDefense, editingRank, editRankForm, onEditChange,
   onStartEdit, onSaveEdit, onCancelEdit, onDelete, isDemo = false
 }) {
+  const checkerEvidence=useRankCheckers("admin");
   const [query,setQuery] = useState("");
   const [attentionOnly,setAttentionOnly] = useState(false);
   const [showComposer,setShowComposer] = useState(false);
@@ -126,7 +128,7 @@ export default function GoogleRankReport({
             <label className="rankReportWide">Domains<textarea rows={2} value={editRankForm.domains} onChange={e => onEditChange({ ...editRankForm, domains:e.target.value })} disabled={isDemo} /></label>
             <label className="rankReportWide">Target URL <small>(optional)</small><input value={editRankForm.target_url} onChange={e => onEditChange({ ...editRankForm, target_url:e.target.value })} disabled={isDemo} /></label>
             <div className="rankReportFormFooter"><span>Changes apply to this keyword group only.</span><button type="button" className="reportBtn reportBtnQuiet" onClick={onCancelEdit}>Cancel</button><button type="submit" className="reportBtn reportBtnPrimary" disabled={isDemo}>Save changes</button></div>
-          </form> : <WhitelistRankResults domains={domains} keyword={group.keyword}/>}
+          </form> : <WhitelistRankResults domains={domains} evidence={checkerEvidence} keyword={group.keyword}/>}
         </article>;
       })}
     </div>

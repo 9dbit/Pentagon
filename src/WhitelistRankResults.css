@@ -12,3 +12,8 @@
 .whitelistSerp .whitelistSerpTable time{color:#a5b1c2;font-size:11px}
 .whitelistSerp p.whitelistSerpNote{font-size:11px;color:#93a1b4;line-height:1.65;margin:10px 0 0}
 @media(max-width:700px){.whitelistSerp .whitelistSerpTable th,.whitelistSerp .whitelistSerpTable td{padding:11px 10px}.whitelistSerp .whitelistSerpTable tbody th{min-width:150px}}
+
+.whitelistSerp .whitelistSerpTable th small{display:block;margin-top:5px;font-size:10px;font-weight:400;text-transform:none;letter-spacing:0;min-width:115px}
+.whitelistSerp .whitelistCheckerCell{min-width:150px;line-height:1.5}
+.whitelistCheckerCell time,.whitelistCheckerCell small{display:block;margin-top:5px;font-size:10px;color:#93a1b4}
+.whitelistCheckerCell.working span{color:#86d6a6}.whitelistCheckerCell.warning span,.whitelistCheckerCell.listed span{color:#fbbf24}.whitelistCheckerCell.stale span{color:#94a3b8}
