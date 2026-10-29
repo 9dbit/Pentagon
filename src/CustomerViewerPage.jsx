@@ -1,3 +1,4 @@
+import useRankCheckers from "./useRankCheckers";
 import React, { useEffect, useMemo, useState } from "react";
 import {
   ArrowUpRight, Bell, CheckCircle2, Clock3, Globe2, LockKeyhole,
@@ -31,6 +32,7 @@ async function requestCustomer(url) {
 }
 
 export default function CustomerViewerPage({ onLogout, accountEmail = "" }) {
+  const checkerEvidence=useRankCheckers("customer");
   const [page,setPage] = useState("domains");
   const [search,setSearch] = useState("");
   const [overview,setOverview] = useState({});
@@ -172,7 +174,7 @@ export default function CustomerViewerPage({ onLogout, accountEmail = "" }) {
             <div><b>{item.keyword}</b><span>{item.project_name||"Brand"}</span></div>
             <span>{item.whitelisted_domains} domain whitelist</span>
             <small>Last rank scan: {timeWib(item.last_checked_at)}</small>
-            <WhitelistRankResults domains={item.whitelist} keyword={item.keyword}/>
+            <WhitelistRankResults evidence={checkerEvidence} domains={item.whitelist} keyword={item.keyword}/>
           </article>)}
           {!keywords.length && <p className="cvEmpty">{loading?"Memuat keyword...":"Belum ada keyword."}</p>}
         </div>

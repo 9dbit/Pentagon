@@ -280,6 +280,8 @@ router.post("/keywords", async (req, res, next) => { try { await ensureRankTable
 router.delete("/keywords/:id", async (req, res, next) => { try { await ensureRankTables(); await pool.query("DELETE FROM rank_keyword_groups WHERE id=$1", [req.params.id]); await pool.query("DELETE FROM rank_keywords WHERE id=$1", [req.params.id]).catch(() => {}); res.json({ ok: true }); } catch (err) { next(err); } });
 router.get("/results", async (req, res, next) => { try { await ensureRankTables(); const tenant = req.tenant || 'admin'; const { rows } = await pool.query("SELECT r.id, r.group_id, r.keyword, r.host AS domain, r.position, r.page, r.link AS matched_url, r.title, r.snippet, r.classification, r.reason, r.checked_at, r.node_id FROM rank_scan_results r JOIN rank_keyword_groups g ON g.id = r.group_id WHERE g.tenant=$1 ORDER BY r.checked_at DESC, r.position ASC LIMIT 1000", [tenant]); res.json(rows); } catch (err) { next(err); } });
 
+router.get("/checker-evidence", async(req,res,next)=>{try{res.set("Cache-Control","private, no-store");res.json(await require("./rankCheckerEvidence").rankCheckerEvidence(req.tenant||"admin"));}catch(e){next(e);}});
+
 router.get("/node-positions", async (req, res, next) => {
   try {
     await ensureRankTables();

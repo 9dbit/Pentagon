@@ -12,6 +12,11 @@ on:
       - "server/trustpositifWatch.js"
       - "server/telegramMerchantRankScanner.js"
       - "server/rankRoutes.js"
+      - "server/rankCheckerEvidence.js"
+      - "server/shieldLink*"
+      - "src/ShieldLinkPage.*"
+      - "src/useRankCheckers.js"
+      - "scripts/test-pentagon-shield-rank*"
       - "server/telegramPermanentGroups.js"
       - "server/telegramMerchantActivation.js"
       - "server/telegramMerchantAutoProvisioner.js"
@@ -146,12 +151,14 @@ jobs:
           node scripts/test-pentagon-node-health-v2.cjs
           node scripts/test-pentagon-rank-monitoring.mjs
           node scripts/test-pentagon-whitelist-serp.mjs
+          node scripts/test-pentagon-shield-rank.cjs
           node scripts/test-pentagon-report-layout.cjs
       - name: Isolated PostgreSQL viewer and merchant tenant firewall
         run: |
           node scripts/test-pentagon-customer-viewer-pg.cjs
           node scripts/test-pentagon-merchant-admin-pg.cjs
           node scripts/test-pentagon-telegram-hub-pg.cjs
+          node scripts/test-pentagon-shield-rank-pg.cjs
       - name: Compile merchant dashboard and existing production UI
         run: |
           node scripts/test-pentagon-node-health-ui.cjs

@@ -684,10 +684,10 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
       for (const r of results.filter(x=>String(x.checker_type||"").startsWith("node:"))) {
         await pool.query(
           "INSERT INTO check_results "+
-          "(domain_id,checker_type,provider_name,status,http_status,final_url,dns_result,latency_ms,reason,reason_type) "+
-          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)",
+          "(domain_id,checker_type,provider_name,status,http_status,final_url,dns_result,latency_ms,reason,reason_type,node_id) "+
+          "VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)",
           [domain.id,r.checker_type,r.provider_name,r.status,r.http_status,r.final_url,
-           r.dns_result,r.latency_ms,r.reason,classifyReasonType(r)]
+           r.dns_result,r.latency_ms,r.reason,classifyReasonType(r),r.node_id||null]
         );
       }
       return;
@@ -696,9 +696,9 @@ async function checkOneDomain(domain, proxies, nodes, retryLimit, options = {}) 
     for (const r of results) {
       await pool.query(
         `INSERT INTO check_results
-        (domain_id, checker_type, provider_name, status, http_status, final_url, dns_result, latency_ms, reason, reason_type)
-        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10)`,
-        [domain.id, r.checker_type, r.provider_name, r.status, r.http_status, r.final_url, r.dns_result, r.latency_ms, r.reason, classifyReasonType(r)]
+        (domain_id, checker_type, provider_name, status, http_status, final_url, dns_result, latency_ms, reason, reason_type, node_id)
+        VALUES ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11)`,
+        [domain.id, r.checker_type, r.provider_name, r.status, r.http_status, r.final_url, r.dns_result, r.latency_ms, r.reason, classifyReasonType(r), r.node_id || null]
       );
     }
 

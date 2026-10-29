@@ -1,3 +1,5 @@
+import ShieldLinkPage from "./ShieldLinkPage";
+import useRankCheckers from "./useRankCheckers";
 import React, { useCallback, useEffect, useMemo, useState } from "react";
 import {
   Activity, Bell, CheckCircle2, CircleAlert, Clock3, ExternalLink,
@@ -35,6 +37,7 @@ const NAV = [
   { key: "overview", text: "Overview", icon: LayoutDashboard },
   { key: "domains", text: "Domain", icon: Globe2 },
   { key: "keywords", text: "Google Rank", icon: Layers3 },
+  { key: "shieldlink", text: "Shieldlink", icon: ShieldCheck },
   { key: "nodes", text: "Node Health", icon: Wifi },
   { key: "trust", text: "Trust Positif", icon: ShieldCheck },
   { key: "direct", text: "Direct Checker", icon: Activity },
@@ -50,6 +53,7 @@ const statusText = value => ({
 const n = value => Number(value) || 0;
 
 export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
+  const checkerEvidence=useRankCheckers("merchant");
   // Links in Telegram buttons resolve to this merchant's own authenticated
   // dashboard tab. Do not take a tenant or domain selector from the URL.
   const [page, setPage] = useState(() => {
@@ -154,6 +158,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
         {error && <div className="maFeedback maError" role="alert"><CircleAlert size={17}/>{error}</div>}
         {notice && <div className="maFeedback" role="status"><CheckCircle2 size={17}/>{notice}</div>}
 
+        {page === "shieldlink" && <ShieldLinkPage audience="merchant"/>}
         {page === "overview" && <>
           <RankMonitoringPanel audience="merchant"/>
           <div className="maMetrics">
@@ -225,7 +230,7 @@ export default function MerchantAdminPage({ onLogout, accountEmail = "" }) {
           <div className="maList">{data.keywords.map(item => <div className="maKeyword" key={item.id}>
             <div className="maKeywordTop"><div><h3>{item.keyword}</h3><small>{item.project_name || "Brand"} · Terakhir diperiksa {dateWib(item.last_checked_at)}</small></div>
               <button type="button" className="maPill" disabled={busy} onClick={() => act("/api/merchant/keywords/" + item.id, "PATCH", { is_active: !item.is_active }, "Status keyword diperbarui.")}>{item.is_active ? "Jeda" : "Aktifkan"}</button></div>
-            <WhitelistRankResults domains={item.whitelist} keyword={item.keyword}/>
+            <WhitelistRankResults evidence={checkerEvidence} domains={item.whitelist} keyword={item.keyword}/>
             <details><summary>Kelola whitelist</summary><div className="maChips">{(item.whitelist || []).map(d => <span key={d.domain}>{d.domain}<button type="button" title="Hapus whitelist" disabled={busy}
               onClick={() => act("/api/merchant/keywords/" + item.id + "/whitelist/" + encodeURIComponent(d.domain), "DELETE", undefined, "Domain dikeluarkan dari whitelist.")}><X size={12}/></button></span>)}</div>
             <form className="maLinkForm" onSubmit={async e => {

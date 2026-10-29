@@ -135,106 +135,76 @@ function trustPositifNativePages(tenant,domainRows=[],providers=[],observations=
     return assertLengths(rich,fallback);
   });
 }
-function rankedGroups(rows,now){
-  const groups=new Map();
-  for(const r of rows){
-    const key=String(r.group_id);
-    if(!groups.has(key))groups.set(key,{id:key,keyword:clip(r.keyword,115),candidates:[]});
-    groups.get(key).candidates.push({row:r,state:rankState(r,now)});
-  }
-  return [...groups.values()].map(g=>{
-    g.candidates.sort((a,b)=>{
-      const ap=a.state.position,bp=b.state.position;
-      if(ap!=null&&bp!=null)return ap-bp;
-      if(ap!=null)return -1;
-      if(bp!=null)return 1;
-      return String(a.row.domain).localeCompare(String(b.row.domain));
-    });
-    return {...g,best:g.candidates[0]||null};
-  });
-}
 function deltaText(state){
   if(state.delta==null)return "—";
   if(state.delta>0)return "▲ +"+state.delta;
   if(state.delta<0)return "▼ −"+Math.abs(state.delta);
   return "● 0";
 }
-function recentSnapshots(selected,nodes,snapshots,now){
-  if(!selected?.best)return null;
-  const target=String(selected.id)+"|"+String(selected.best.row.domain).toLowerCase();
-  const labels=new Map(nodes.map(n=>[String(n.id),
-    clip(n.provider_name||"NODE",16).toUpperCase()]));
-  const positions=new Map();
-  for(const r of snapshots){
-    if(String(r.group_id)+"|"+String(r.domain).toLowerCase()!==target)continue;
-    if(!validAge(r.checked_at,now,0.5))continue;
-    const label=r.node_id==null?"VPS":labels.get(String(r.node_id));
-    const position=Number(r.position);
-    if(label&&Number.isInteger(position)&&position>=1&&position<=100&&!positions.has(label))
-      positions.set(label,"#"+position);
+function googleRankNativePages(tenant,rankingRows=[],nodes=[],snapshots=[],now=new Date(),intervalMinutes=60,evidence={}){
+  // Each whitelist relationship is a row. Never replace it with a keyword's
+  // best domain. Network and registry evidence are NOT SIM-sourced SERP ranks.
+  const byDomain=new Map((evidence.domains||[]).map(d=>[d.domain.toLowerCase(),d]));
+  const checkerNodes=evidence.nodes||nodes.map((n,i)=>({key:"unavailable-"+i,label:n.provider_name||"Node",is_active:n.is_active!==false}));
+  const checkerColumns=[...checkerNodes,{key:"ai",label:"AI Checker",is_active:true}];
+  const columnGroups=[];
+  for(let i=0;i<checkerColumns.length;i+=4)columnGroups.push(checkerColumns.slice(i,i+4));
+  const name=esc(clip(String(tenant).toUpperCase(),65)),stamp=esc(wib(now));
+  const schedule=esc(period(intervalMinutes));
+  const keywords=new Set(rankingRows.map(r=>String(r.group_id))).size;
+  const note="Node: akses jaringan. AI Checker: registry TrustPositif. Bukan rank Google dari SIM. "+
+    "Lama/Belum diperiksa bukan berarti aman; tidak ditemukan hanya berlaku pada hasil scan.";
+  function cellsFor(row,columns){
+    const d=byDomain.get(String(row.domain).toLowerCase());
+    return columns.map(col=>{
+      const r=col.key==="ai"?d?.ai:d?.node_results?.[col.key];
+      return {label:col.label+(col.is_active?"":" (nonaktif)"),text:r?.text||"Belum diperiksa",
+        time:r?.checked_at?wib(r.checked_at):"—",historical:r?.attribution==="provider_history"};
+    });
   }
-  if(!positions.size)return null;
-  return clip(selected.keyword,70)+": "+
-    [...positions.entries()].slice(0,4).map(([k,v])=>k+" "+v).join(" · ");
-}
-function googleRankNativePages(tenant,rankingRows=[],nodes=[],snapshots=[],now=new Date(),intervalMinutes=60){
-  const groups=rankedGroups(rankingRows,now);
-  const positioned=groups.filter(g=>g.best?.state.position!=null);
-  const top3=positioned.filter(g=>g.best.state.position<=3).length;
-  const top10=positioned.filter(g=>g.best.state.position<=10).length;
-  const rising=positioned.filter(g=>g.best.state.delta>0).length;
-  const falling=positioned.filter(g=>g.best.state.delta<0).length;
-  const name=esc(clip(String(tenant).toUpperCase(),65));
-  const stamp=esc(wib(now)),schedule=esc(period(intervalMinutes));
-  const snapshot=recentSnapshots(positioned[0]||groups[0],nodes,snapshots,now);
-  const note="N/D berarti posisi terbaru belum tersedia atau scan stale. "+
-    "Pergerakan hanya dihitung dari snapshot historis valid; tidak ada angka estimasi.";
-  return renderPages(groups,(batch,part,total)=>{
-    const partLine=total>1?"<p><b>Bagian "+part+"/"+total+"</b></p>":"";
-    const head="<h3>📊 GOOGLE RANK REPORT</h3><p><b>"+name+
-      "</b> · "+stamp+"</p>"+partLine+
-      "<p><b>"+groups.length+"</b> Keywords · <b>"+rankingRows.length+
-      "</b> Domain Links · <b>"+positioned.length+"</b> Valid Positions</p>"+
-      "<p>Top 3: <b>"+top3+"</b> · Top 10: <b>"+top10+
-      "</b> · ▲ "+rising+" · ▼ "+falling+"</p>"+
-      "<h4>KEYWORD POSITION TABLE</h4>";
-    const trs=batch.length?batch.map(g=>{
-      const st=g.best?.state;
-      const position=st?.position==null?"N/D":"#"+st.position;
-      const diff=st?deltaText(st):"—";
-      return "<tr><td>"+cell(g.keyword)+"</td><td align=\"center\">"+
-        esc(position)+"</td><td align=\"center\">"+esc(diff)+"</td></tr>";
-    }).join(""):"<tr><td colspan=\"3\">Belum ada keyword/domain yang memenuhi syarat</td></tr>";
-    const table="<table bordered striped><tr><th>Keyword</th><th>Position</th><th>Δ Rank</th></tr>"+trs+"</table>";
-    const snapshotNote=snapshot&&part===1?
-      "<p><b>Checker snapshot:</b> "+esc(snapshot)+"</p>":"";
-    const foot="<p>ℹ️ "+esc(note)+"</p>"+
-      "<footer>Source: Google SERP snapshots · Setiap "+schedule+
-      " · Detail di Pentagon Google Rank</footer>";
-    const rich=head+table+snapshotNote+foot;
-    const fallback=[
-      "<b>📊 GOOGLE RANK REPORT</b>",
-      "<b>Merchant:</b> "+name+" · "+stamp,
-      total>1?"<b>Bagian "+part+"/"+total+"</b>":null,
-      "<b>Keywords:</b> "+groups.length+" | <b>Domain links:</b> "+rankingRows.length+
-        " | <b>Valid:</b> "+positioned.length,
-      "<b>Top 3:</b> "+top3+" | <b>Top 10:</b> "+top10+" | ▲ "+rising+" ▼ "+falling,
-      "",
-      "<b>KEYWORD POSITION TABLE</b>",
-      ...(batch.length?batch.map(g=>{
-        const st=g.best?.state;
-        return "<b>"+cell(g.keyword)+"</b> · "+
-          (st?.position==null?"N/D":"#"+st.position)+" · "+
-          esc(st?deltaText(st):"—");
-      }):["Belum ada keyword/domain yang memenuhi syarat"]),
-      snapshot&&part===1?"<b>Checker snapshot:</b> "+esc(snapshot):null,
-      "",
-      "<i>"+esc(note)+"</i>",
-      "Source: Google SERP snapshots · Setiap "+schedule
-    ].filter(x=>x!==null).join("\n");
-    return assertLengths(rich,fallback);
+  function render(batch,columns,part,total){
+    const mark=total>1?"Bagian "+part+"/"+total:"";
+    const head="<h3>📊 GOOGLE RANK REPORT</h3><p><b>"+name+"</b> · "+stamp+"</p>"+
+      (mark?"<p><b>"+mark+"</b></p>":"")+"<p><b>"+keywords+"</b> Keywords · <b>"+rankingRows.length+"</b> Domain Links</p>";
+    const trs=batch.map(row=>{
+      const state=rankState(row,now);
+      const page=state.position!=null&&Number.isInteger(Number(row.last_page))&&Number(row.last_page)>0?String(row.last_page):"—";
+      const rank=state.position==null?state.text:"#"+state.position+(state.delta!=null?" "+deltaText(state):"");
+      const checks=cellsFor(row,columns);
+      return {rich:"<tr><td>"+cell(row.keyword)+"<br>"+cell(row.domain)+"</td><td>"+esc(page)+
+        "</td><td>"+esc(rank)+"<br>"+esc(wib(row.last_checked_at))+"</td>"+
+        checks.map(c=>"<td>"+esc(c.text)+"<br>"+esc(c.time)+(c.historical?"<br>Riwayat provider":"")+"</td>").join("")+"</tr>",
+        plain:"<b>"+cell(row.keyword)+"</b> · <code>"+cell(row.domain)+"</code>\nGoogle: halaman "+esc(page)+" · "+esc(rank)+
+        " · "+esc(wib(row.last_checked_at))+"\n"+checks.map(c=>esc(c.label)+": "+esc(c.text)+" · "+esc(c.time)+(c.historical?" (riwayat provider)":"")).join("\n")};
+    });
+    const header="<tr><th>Keyword / Domain</th><th>Halaman SERP</th><th>Rank Google / waktu</th>"+
+      columns.map(c=>"<th>"+cell(c.label)+(c.key==="ai"?"<br>Registry":"<br>Jaringan")+"</th>").join("")+"</tr>";
+    const rich=head+"<table bordered striped>"+header+(trs.length?trs.map(t=>t.rich).join(""):
+      '<tr><td colspan="'+(3+columns.length)+'">Belum ada domain whitelist aktif</td></tr>')+"</table><p>"+esc(note)+
+      "</p><footer>Source: saved Google SERP + node checks + registry · Setiap "+schedule+"</footer>";
+    const fallback=["<b>📊 GOOGLE RANK REPORT</b>",name+" · "+stamp,mark,
+      keywords+" Keywords · "+rankingRows.length+" Domain Links",...trs.map(t=>t.plain),
+      trs.length?"":"Belum ada domain whitelist aktif","<i>"+esc(note)+"</i>","Setiap "+schedule].filter(Boolean).join("\n\n");
+    return {rich_message:{html:rich,skip_entity_detection:true},message:fallback};
+  }
+  const batches=[];
+  for(const columns of columnGroups){
+    let batch=[];
+    for(const row of rankingRows){
+      const candidate=render([...batch,row],columns,99999,99999);
+      if(batch.length&&(batch.length>=ROWS_PER_PAGE||candidate.message.length>3500||candidate.rich_message.html.length>22000)){
+        batches.push({batch,columns});batch=[];
+      }
+      batch.push(row);
+    }
+    if(batch.length||!rankingRows.length)batches.push({batch,columns});
+  }
+  return batches.map(({batch,columns},i)=>{
+    const page=render(batch,columns,i+1,batches.length);
+    return assertLengths(page.rich_message.html,page.message);
   });
 }
+
 module.exports={
   ROWS_PER_PAGE,minsSince,providerHealth,statusStyle,deltaText,
   trustPositifNativePages,googleRankNativePages

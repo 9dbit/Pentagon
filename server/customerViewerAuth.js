@@ -10,7 +10,7 @@ const MAX_VIEWERS = 24;
 const VIEWER_PATHS = new Set([
   "GET /api/auth/me", "POST /api/auth/logout", "GET /api/health",
   "GET /api/customer/overview", "GET /api/customer/domains",
-  "GET /api/customer/keywords", "GET /api/customer/alerts"
+  "GET /api/customer/rank-checkers", "GET /api/customer/keywords", "GET /api/customer/alerts"
 ]);
 
 function isEligibleCustomerTenant(value) {

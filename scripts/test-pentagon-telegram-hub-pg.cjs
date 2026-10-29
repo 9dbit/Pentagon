@@ -96,7 +96,7 @@ async function main(){
   await pool.query("CREATE TABLE rank_keyword_domains(id SERIAL PRIMARY KEY,group_id INT NOT NULL,domain TEXT NOT NULL,is_whitelisted BOOLEAN DEFAULT FALSE,last_position INTEGER,last_page INTEGER,last_status TEXT DEFAULT 'pending',last_checked_at TIMESTAMP)");
   await pool.query("CREATE TABLE rank_scan_results(id SERIAL PRIMARY KEY,group_id INT NOT NULL,keyword TEXT,position INTEGER,page INTEGER,host TEXT,classification TEXT,checked_at TIMESTAMP DEFAULT NOW(),node_id INTEGER)");
   await pool.query("CREATE TABLE provider_nodes(id SERIAL PRIMARY KEY,tenant TEXT NOT NULL DEFAULT 'admin',provider_name TEXT,last_health_status TEXT,last_ping_at TIMESTAMP,is_active BOOLEAN DEFAULT TRUE)");
-  await pool.query("CREATE TABLE check_results(id SERIAL PRIMARY KEY,domain_id INTEGER,checker_type TEXT,provider_name TEXT,status TEXT,checked_at TIMESTAMP DEFAULT NOW())");
+  await pool.query("CREATE TABLE check_results(id SERIAL PRIMARY KEY,domain_id INTEGER,checker_type TEXT,provider_name TEXT,status TEXT,node_id INTEGER,checked_at TIMESTAMP DEFAULT NOW())");
   await pool.query("INSERT INTO domains(domain,tenant,global_status,last_checked_at,project_name,label) VALUES "+
     "('merchant-a.example.test','merchant_a','working',NOW(),'Merchant A','landing_page'),"+
     "('merchant-b.example.test','merchant_b','warning',NOW(),'Merchant B','ms')");
@@ -109,7 +109,7 @@ async function main(){
     "('admin','Telkomsel','online',NOW()),('admin','XL','online',NOW()),"+
     "('admin','Indosat','online',NOW())");
   await pool.query("INSERT INTO check_results(domain_id,checker_type,provider_name,status) VALUES "+
-    "(1,'node','Telkomsel','working'),(2,'node','XL','warning')");
+    "(1,'node:mobile','Telkomsel','working'),(2,'node:mobile','XL','warning')");
   await pool.query("INSERT INTO rank_scan_results(group_id,keyword,position,page,host,classification,checked_at,node_id) VALUES "+
     "(1,'Merchant A Official',5,1,'merchant-a.example.test','whitelisted',NOW()-INTERVAL '1 day',NULL),"+
     "(1,'Merchant A Official',3,1,'merchant-a.example.test','whitelisted',NOW()-INTERVAL '2 minutes',NULL),"+
@@ -308,7 +308,9 @@ async function main(){
     assert.match(rows[1].message,/Merchant A Official/);
     assert.match(rows[1].message,/#3/);
     assert.match(rows[1].message,/▲ \+2/);
-    assert.match(rows[1].message,/TELKOMSEL #4/);
+    assert.match(rows[1].message,/Telkomsel: Terjangkau/);
+    assert.match(rows[1].message,/AI Checker/);
+    assert.doesNotMatch(rows[1].message,/TELKOMSEL #4/);
     assert.ok(rows.every(r=>r.message.length<4096));
     assert.ok(rows.every(r=>typeof r.rich_message?.html==="string"));
     assert.ok(rows.every(r=>r.rich_message.html.includes("<table bordered striped>")));

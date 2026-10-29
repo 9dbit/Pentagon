@@ -22,7 +22,7 @@ async function main(){
   await db.query("CREATE SCHEMA IF NOT EXISTS pentagon_customer_viewer_ci");
   await db.query("CREATE TABLE domains (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,domain TEXT UNIQUE NOT NULL,project_name TEXT,label TEXT,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW())");
   await db.query("CREATE TABLE rank_keyword_groups (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,project_name TEXT,keyword TEXT,is_active BOOLEAN DEFAULT TRUE,last_checked_at TIMESTAMPTZ)");
-  await db.query("CREATE TABLE rank_keyword_domains (id SERIAL PRIMARY KEY,group_id INTEGER REFERENCES rank_keyword_groups(id),domain TEXT,is_whitelisted BOOLEAN DEFAULT TRUE,last_position INT,last_page INT,last_status TEXT DEFAULT 'pending',last_checked_at TIMESTAMPTZ)");
+  await db.query("CREATE TABLE rank_keyword_domains (id SERIAL PRIMARY KEY,group_id INTEGER REFERENCES rank_keyword_groups(id),domain TEXT,is_whitelisted BOOLEAN DEFAULT TRUE,last_position INT,last_page INT,last_status TEXT DEFAULT 'pending',last_checked_at TIMESTAMP)");
   await db.query("CREATE TABLE alerts (id SERIAL PRIMARY KEY,domain_id INTEGER REFERENCES domains(id),created_at TIMESTAMPTZ DEFAULT NOW(),old_status TEXT,new_status TEXT,message TEXT)");
 
   const ids=[];
@@ -93,7 +93,7 @@ async function main(){
   });
   await test("viewer SERP rows preserve all owned domains and reject cross-tenant links",async()=>{
     const group=(await db.query("SELECT id FROM rank_keyword_groups WHERE tenant=$1 ORDER BY id LIMIT 1",[tenant])).rows[0].id;
-    await db.query("UPDATE rank_keyword_domains SET last_position=23,last_page=3,last_status='found',last_checked_at=NOW() WHERE group_id=$1 AND domain='client-0.example'",[group]);
+    await db.query("UPDATE rank_keyword_domains SET last_position=23,last_page=3,last_status='found',last_checked_at=TIMESTAMP '2026-10-29 09:38:46' WHERE group_id=$1 AND domain='client-0.example'",[group]);
     await db.query("UPDATE rank_keyword_domains SET last_status='not_found',last_checked_at=NOW() WHERE group_id=$1 AND domain='client-1.example'",[group]);
     await db.query("INSERT INTO rank_keyword_domains(group_id,domain,is_whitelisted,last_position,last_page,last_status,last_checked_at) VALUES($1,'other.example',TRUE,1,1,'found',NOW())",[group]);
     const r=await request("/api/customer/keywords?tenant=other_client");
@@ -101,6 +101,9 @@ async function main(){
     assert.equal(rows.length,5);
     assert.equal(rows.find(x=>x.domain==='client-0.example').last_position,23);
     assert.equal(rows.find(x=>x.domain==='client-0.example').last_page,3);
+    const checkedAt=rows.find(x=>x.domain==='client-0.example').last_checked_at;
+    assert.match(checkedAt,/(?:Z|[+]00:00)$/);
+    assert.equal(new Date(checkedAt).toISOString(),'2026-10-29T09:38:46.000Z');
     assert.equal(rows.find(x=>x.domain==='client-1.example').last_status,'not_found');
     assert.equal(rows.find(x=>x.domain==='client-2.example').last_checked_at,null);
     assert.ok(!JSON.stringify(rows).includes('other.example'));
