@@ -5,6 +5,7 @@ const fs=require("fs");
 const path=require("path");
 const {pool}=require("./db");
 const {requireMerchantAdmin}=require("./customerViewerAuth");
+const {sendShieldStatus}=require("./shieldLinkStatus");
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const PUBLIC_BASE="https://pentagon.quest/s/";
 const schema=fs.readFileSync(path.join(__dirname,"shieldLinkSchema.sql"),"utf8");
@@ -21,24 +22,39 @@ function normalizedUrl(value) {
 }
 function text(value,max){if(typeof value!=="string"||value.length>max)fail("INVALID_FIELD");return value.trim();}
 function host(value){try{return new URL(value).hostname.replace(/^www\./,"").toLowerCase();}catch(_){return "";}}
-function eligible(domain,now=Date.now()) {
+function destinationStatus(domain,now=Date.now()) {
+  if(!domain)return {eligible:false,code:"not_owned",text:"Domain tidak terdaftar di project ini"};
+  if(domain.is_active!==true)return {eligible:false,code:"inactive",text:"Domain dinonaktifkan"};
+  if(domain.registry_listed===true)return {eligible:false,code:"registry_listed",text:"Tercatat di registry Trust Positif"};
+  if(domain.global_status==="blocked")return {eligible:false,code:"network_blocked",text:"Hasil monitoring: terblokir"};
   const stamp=domain?.last_checked_at?new Date(domain.last_checked_at).getTime():NaN;
-  return domain?.is_active===true&&domain.global_status==="working"&&
-    domain.registry_listed!==true&&Number.isFinite(stamp)&&stamp<=now&&now-stamp<=24*3600000;
+  if(!Number.isFinite(stamp))return {eligible:false,code:"unchecked",text:"Belum ada hasil jaringan yang valid"};
+  if(stamp>now)return {eligible:false,code:"invalid_timestamp",text:"Waktu pemeriksaan tidak valid"};
+  if(now-stamp>24*3600000)return {eligible:false,code:"stale",text:"Hasil jaringan lebih dari 24 jam"};
+  if(domain.global_status!=="working")return {eligible:false,code:"network_unverified",text:"Jaringan belum terverifikasi terjangkau"};
+  return {eligible:true,code:"ready",text:"Siap digunakan"};
+}
+function eligible(domain,now=Date.now()){return destinationStatus(domain,now).eligible;}
+function destinationChecks(link,stock,domains,now=Date.now()) {
+  const owned=new Map(domains.filter(d=>String(d.project_name||"")===link.project_name).map(d=>[String(d.domain).replace(/^www\./,"").toLowerCase(),d]));
+  return [{url:link.primary_url,role:"primary"},...stock.map(d=>({id:d.id,url:d.domain_url,role:"fallback"}))].map(item=>{
+    let url;try{url=normalizedUrl(item.url);}catch(_){return {...item,eligible:false,code:"invalid_url",text:"URL tujuan tidak valid"};}
+    const domain=owned.get(host(url));
+    return {...item,url,...destinationStatus(domain,now),last_checked_at:domain?.last_checked_at||null,registry_checked_at:domain?.registry_checked_at||null};
+  });
 }
 function selectTarget(link,stock,domains,now=Date.now()) {
   if(!link.is_active)return {url:null,reason:"paused"};
-  const owned=new Map(domains.filter(d=>String(d.project_name||"")===link.project_name).map(d=>[String(d.domain).replace(/^www\./,"").toLowerCase(),d]));
-  const candidates=[{url:link.primary_url,primary:true},...stock.map(d=>({url:d.domain_url,primary:false}))];
-  for(const item of candidates){
-    let url;try{url=normalizedUrl(item.url);}catch(_){continue;}
-    if(eligible(owned.get(host(url)),now))return {url,reason:item.primary?"primary":"fallback"};
-  }
-  return {url:null,reason:"no_verified_destination"};
+  const ready=destinationChecks(link,stock,domains,now).find(d=>d.eligible);
+  return ready?{url:ready.url,reason:ready.role}:{url:null,reason:"no_verified_destination"};
+}
+async function requireReady(link,stock,tenant,db){
+  const checks=destinationChecks(link,stock,await ownedDomains(tenant,db));
+  if(!checks.some(d=>d.eligible))throw Object.assign(new Error("NO_READY_DESTINATION"),{status:422,checks});
 }
 async function ownedDomains(tenant,db) {
   return (await db.query("SELECT d.domain,d.project_name,d.is_active,d.global_status,d.last_checked_at,"+
-    "m.registry_listed FROM domains d LEFT JOIN trustpositif_domain_monitor m "+
+    "m.registry_listed,m.registry_checked_at FROM domains d LEFT JOIN trustpositif_domain_monitor m "+
     "ON m.tenant=d.tenant AND m.domain=LOWER(TRIM(d.domain)) WHERE d.tenant=$1 ORDER BY d.domain",[tenant])).rows;
 }
 async function validateDestination(url,tenant,project,db){
@@ -66,7 +82,7 @@ function createShieldLinkRouter(db=pool,{merchant=false}={}) {
   const tenant=req=>merchant?req.merchantTenant:"admin";
   const safe=fn=>async(req,res)=>{try{await fn(req,res);}catch(e){
     const status=e.status||(e.code==="23505"?409:503);
-    res.status(status).json({error:e.status?e.message:status===409?"DUPLICATE_DESTINATION":"SHIELDLINK_UNAVAILABLE"});
+    res.status(status).json({error:e.status?e.message:status===409?"DUPLICATE_DESTINATION":"SHIELDLINK_UNAVAILABLE",...(e.checks?{destinations:e.checks}:{})});
   }};
   async function transaction(req,id,fn){
     if(id&&!UUID.test(id))fail("LINK_NOT_FOUND",404);
@@ -87,19 +103,22 @@ function createShieldLinkRouter(db=pool,{merchant=false}={}) {
     res.json({links:links.map(l=>{const fallback=stock.filter(d=>d.link_id===l.id);return {
       id:l.id,slug:l.slug,label:l.label,project_name:l.project_name,primary_url:l.primary_url,
       is_active:l.is_active,redirect_count:Number(l.redirect_count),last_redirect_at:l.last_redirect_at,
-      shortlink:PUBLIC_BASE+l.slug,domains:fallback,target:selectTarget(l,fallback,domains)
-    };}),project_domains:domains.map(d=>({...d,eligible:eligible(d)}))});
+      shortlink:PUBLIC_BASE+l.slug,domains:fallback,target:selectTarget(l,fallback,domains),destinations:destinationChecks(l,fallback,domains)
+    };}),project_domains:domains.map(d=>({...d,eligible:eligible(d),readiness:destinationStatus(d)}))});
   }));
   router.post("/",safe(async(req,res)=>{
     const label=text(req.body?.label||"",80),project=text(req.body?.project_name||"",120);
+    const active=req.body?.is_active===undefined?true:req.body.is_active;
+    if(typeof active!=="boolean")fail("INVALID_STATUS");
     const result=await transaction(req,null,async tx=>{
       const count=Number((await tx.query("SELECT COUNT(*) AS count FROM shield_links WHERE tenant=$1",[tenant(req)])).rows[0].count);
       if(count>=50)fail("SHIELDLINK_LIMIT",409);
       const primary=await validateDestination(req.body?.primary_url,tenant(req),project,tx);
+      if(active)await requireReady({project_name:project,primary_url:primary},[],tenant(req),tx);
       const id=crypto.randomUUID(),slug=crypto.randomBytes(9).toString("base64url");
-      await tx.query("INSERT INTO shield_links(id,tenant,slug,label,project_name,primary_url) VALUES($1,$2,$3,$4,$5,$6)",
-        [id,tenant(req),slug,label,project,primary]);
-      return {id,slug,shortlink:PUBLIC_BASE+slug};
+      await tx.query("INSERT INTO shield_links(id,tenant,slug,label,project_name,primary_url,is_active) VALUES($1,$2,$3,$4,$5,$6,$7)",
+        [id,tenant(req),slug,label,project,primary,active]);
+      return {id,slug,shortlink:PUBLIC_BASE+slug,is_active:active};
     });res.status(201).json(result);
   }));
   router.patch("/:id",safe(async(req,res)=>{
@@ -112,6 +131,10 @@ function createShieldLinkRouter(db=pool,{merchant=false}={}) {
       }
       if(Object.hasOwn(req.body||{},"primary_url")){
         args.push(await validateDestination(req.body.primary_url,tenant(req),link.project_name,tx));fields.push("primary_url=$"+args.length);
+      }
+      if((req.body?.is_active??link.is_active)&&(req.body?.is_active===true||Object.hasOwn(req.body||{},"primary_url"))){
+        const stock=(await tx.query("SELECT * FROM shield_link_domains WHERE link_id=$1 ORDER BY priority,created_at,id",[link.id])).rows;
+        await requireReady({...link,primary_url:req.body.primary_url||link.primary_url},stock,tenant(req),tx);
       }
       if(!fields.length)fail("NO_EDITABLE_FIELDS");
       args.push(link.id,tenant(req));
@@ -154,20 +177,20 @@ function createShieldRedirectRouter(db=pool){
   const router=express.Router();
   router.get("/:slug",async(req,res)=>{
     res.set({"Cache-Control":"no-store","Referrer-Policy":"no-referrer","X-Robots-Tag":"noindex, nofollow"});
-    if(!/^[a-zA-Z0-9_-]{8,40}$/.test(req.params.slug))return res.status(404).send("Link tidak ditemukan.");
+    if(!/^[a-zA-Z0-9_-]{8,40}$/.test(req.params.slug))return sendShieldStatus(res,"missing");
     let tx;
     try{
       tx=await db.connect();await tx.query("BEGIN");
       const link=(await tx.query("SELECT * FROM shield_links WHERE slug=$1 FOR UPDATE",[req.params.slug])).rows[0];
-      if(!link){await tx.query("ROLLBACK");return res.status(404).send("Link tidak ditemukan.");}
+      if(!link){await tx.query("ROLLBACK");return sendShieldStatus(res,"missing");}
       const domains=await ownedDomains(link.tenant,tx);
       const stock=(await tx.query("SELECT * FROM shield_link_domains WHERE link_id=$1 ORDER BY priority,created_at,id",[link.id])).rows;
       const target=selectTarget(link,stock,domains);
-      if(!target.url){await tx.query("ROLLBACK");res.set("Retry-After","60");return res.status(503).send("Tujuan belum tersedia. Silakan coba kembali nanti.");}
+      if(!target.url){await tx.query("ROLLBACK");return sendShieldStatus(res,target.reason==="paused"?"paused":"unavailable",req.params.slug);}
       if(req.method!=="HEAD")await tx.query("UPDATE shield_links SET redirect_count=redirect_count+1,last_redirect_at=NOW(),last_target_url=$1 WHERE id=$2",[target.url,link.id]);
       await tx.query("COMMIT");return res.redirect(302,target.url);
-    }catch(_){if(tx)await tx.query("ROLLBACK").catch(()=>{});return res.status(503).send("Layanan sementara tidak tersedia.");}
+    }catch(_){if(tx)await tx.query("ROLLBACK").catch(()=>{});return sendShieldStatus(res,"service",req.params.slug);}
     finally{tx?.release();}
   });return router;
 }
-module.exports={schema,initializeShieldSchema,createShieldLinkRouter,createShieldRedirectRouter,normalizedUrl,eligible,selectTarget};
+module.exports={schema,initializeShieldSchema,createShieldLinkRouter,createShieldRedirectRouter,normalizedUrl,eligible,selectTarget,destinationStatus,destinationChecks};
