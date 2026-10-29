@@ -37,6 +37,9 @@ on:
       - "src/MerchantAdminPage.*"
       - "src/MerchantNodeCardV2.jsx"
       - "src/GoogleRankReport.jsx"
+      - "src/WhitelistRankResults.*"
+      - "src/serpReading.mjs"
+      - "scripts/test-pentagon-whitelist-serp.mjs"
       - "src/RankMonitoringPanel.*"
       - "src/rankMonitoring.mjs"
       - "scripts/test-pentagon-rank-monitoring.mjs"
@@ -142,6 +145,7 @@ jobs:
           node scripts/test-pentagon-merchant-session-migration.cjs
           node scripts/test-pentagon-node-health-v2.cjs
           node scripts/test-pentagon-rank-monitoring.mjs
+          node scripts/test-pentagon-whitelist-serp.mjs
           node scripts/test-pentagon-report-layout.cjs
       - name: Isolated PostgreSQL viewer and merchant tenant firewall
         run: |

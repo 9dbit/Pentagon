@@ -36,13 +36,13 @@ const jsMatch=html.match(/src="(\/assets\/[^"]+\.js)"/);
 test("Vite index references hashed js asset",()=>{assert.ok(jsMatch);assert.ok(fs.existsSync(path.join(root,"dist",jsMatch[1])));});
 const compiledJs=fs.readFileSync(path.join(root,"dist",jsMatch[1]),"utf8");
 test("built JS contains both new report layouts",()=>{
- for(const marker of ["Keyword reports","rankReportDomainRow","Defence Center","Trusted domains"])assert.ok(compiledJs.includes(marker),marker);
+ for(const marker of ["Keyword reports","whitelistSerpTable","Halaman SERP","Rank keseluruhan","Defence Center","Trusted domains"])assert.ok(compiledJs.includes(marker),marker);
 });
 const cssFiles=fs.readdirSync(path.join(root,"dist","assets")).filter(f=>f.endsWith(".css"));
 test("built CSS includes responsive report",()=>{
  assert.ok(cssFiles.length);
  const css=cssFiles.map(f=>read("dist/assets/"+f)).join("\n");
- for(const marker of ["rankReportDomainRow","defenseMetrics","reportBtnPrimary"])assert.ok(css.includes(marker),marker);
+ for(const marker of ["whitelistSerpScroll","whitelistSerpTable","defenseMetrics","reportBtnPrimary"])assert.ok(css.includes(marker),marker);
 });
 test("existing Replit source preserved on disk",()=>assert.ok(fs.existsSync(path.join(root,"public","replit-index.html"))));
 console.log("PENTAGON_PRODUCTION_SHELL_TESTS_PASS="+pass);

@@ -22,7 +22,7 @@ async function main(){
     await db.query("CREATE SCHEMA IF NOT EXISTS pentagon_merchant_ci");
     await db.query("CREATE TABLE domains (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,domain TEXT UNIQUE NOT NULL,project_name TEXT,label TEXT,is_active BOOLEAN DEFAULT TRUE,global_status TEXT DEFAULT 'unknown',last_checked_at TIMESTAMPTZ,created_at TIMESTAMPTZ DEFAULT NOW())");
     await db.query("CREATE TABLE rank_keyword_groups (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,project_name TEXT,keyword TEXT,keyword_lc TEXT,is_active BOOLEAN DEFAULT TRUE,last_checked_at TIMESTAMPTZ,UNIQUE(keyword_lc,tenant))");
-    await db.query("CREATE TABLE rank_keyword_domains (id SERIAL PRIMARY KEY,group_id INT REFERENCES rank_keyword_groups(id),domain TEXT,is_whitelisted BOOLEAN DEFAULT TRUE,UNIQUE(group_id,domain))");
+    await db.query("CREATE TABLE rank_keyword_domains (id SERIAL PRIMARY KEY,group_id INT REFERENCES rank_keyword_groups(id),domain TEXT,is_whitelisted BOOLEAN DEFAULT TRUE,last_position INT,last_page INT,last_status TEXT DEFAULT 'pending',last_checked_at TIMESTAMPTZ,UNIQUE(group_id,domain))");
     await db.query("CREATE TABLE provider_nodes (id SERIAL PRIMARY KEY,tenant TEXT NOT NULL,provider_name TEXT,endpoint_url TEXT,secret_key TEXT,is_active BOOLEAN,last_health_status TEXT,last_ping_at TIMESTAMPTZ,network_type TEXT)");
     await db.query("CREATE TABLE node_telemetry (node_id INT PRIMARY KEY REFERENCES provider_nodes(id),last_seen_at TIMESTAMPTZ,ip TEXT,subscription_id INT,signal_level INT,signal_percent INT,signal_dbm INT,battery_percent INT,is_charging BOOLEAN,network_type_label TEXT)");
     await db.query("CREATE TABLE check_results (id SERIAL PRIMARY KEY,domain_id INT REFERENCES domains(id),provider_name TEXT,checker_type TEXT,status TEXT,checked_at TIMESTAMPTZ DEFAULT NOW(),latency_ms INT)");
@@ -105,12 +105,26 @@ async function main(){
       assert.equal(r.status,200);
       assert.equal(r.data.length,1);
       assert.equal(r.data[0].keyword,"OWN KEYWORD");
-      assert.deepEqual(r.data[0].whitelist,[{domain:"own.example"}]);
+      assert.deepEqual(r.data[0].whitelist,[{domain:"own.example",last_position:null,last_page:null,last_status:"pending",last_checked_at:null}]);
       assert.equal((await request("/api/merchant/keywords/"+alienGroup,{method:"PATCH",body:{keyword:"TAKEN"}})).status,404);
       assert.equal((await request("/api/merchant/keywords/"+group,{method:"PATCH",body:{is_active:false}})).status,200);
       const created=await request("/api/merchant/keywords",{method:"POST",body:{keyword:"New own keyword",tenant:"other_merchant"}});
       assert.equal(created.status,201);
       assert.equal((await db.query("SELECT tenant FROM rank_keyword_groups WHERE id=$1",[created.data.id])).rows[0].tenant,tenant);
+    });
+    await test("SERP report exposes each owned whitelist result without foreign results",async()=>{
+      await db.query("INSERT INTO domains(tenant,domain) VALUES($1,'unranked.example'),($1,'pending.example')",[tenant]);
+      await db.query("UPDATE rank_keyword_domains SET last_position=13,last_page=2,last_status='found',last_checked_at=NOW() WHERE group_id=$1",[group]);
+      await db.query("INSERT INTO rank_keyword_domains(group_id,domain,last_status,last_checked_at) VALUES($1,'unranked.example','not_found',NOW()),($1,'pending.example','pending',NULL),($1,'other.example','found',NOW())",[group]);
+      const r=await request("/api/merchant/keywords?tenant=other_merchant");
+      const rows=r.data.find(x=>x.id===group).whitelist;
+      assert.equal(rows.length,3);
+      assert.equal(rows.find(x=>x.domain==='own.example').last_position,13);
+      assert.equal(rows.find(x=>x.domain==='own.example').last_page,2);
+      assert.ok(rows.find(x=>x.domain==='own.example').last_checked_at);
+      assert.equal(rows.find(x=>x.domain==='unranked.example').last_status,'not_found');
+      assert.equal(rows.find(x=>x.domain==='pending.example').last_checked_at,null);
+      assert.ok(!JSON.stringify(rows).includes('other.example'));
     });
     await test("whitelist linking checks both group ownership and domain ownership",async()=>{
       assert.equal((await request("/api/merchant/keywords/"+group+"/whitelist",{method:"POST",body:{domain:"other.example"}})).status,404);

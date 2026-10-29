@@ -11,7 +11,7 @@ let pass=0;
 function check(label,fn){try{fn();pass++;}catch(error){throw Error("REPORT_UI_"+label+": "+error.message);}}
 check("new report is rendered at existing route",()=>{assert.match(app,/import GoogleRankReport from/);assert.match(app,/function renderRankPage\(\) \{ return <GoogleRankReport/);assert.match(app,/onCheckAll=\{checkAllRank\}/);assert.match(app,/onDelete=\{delRank\}/);});
 check("backend rank endpoints remain untouched",()=>{for(const part of ["/api/rank/keywords","/api/rank/check/","/api/rank/check-all"])assert.ok(app.includes(part));});
-check("no merged-cell rank table",()=>{assert.doesNotMatch(rank,/rowSpan|<table|<tr|<td/);assert.match(rank,/className="rankReportDomainRow"/);});
+check("no merged-cell rank table",()=>{assert.doesNotMatch(rank,/rowSpan|<table|<tr|<td/);assert.match(rank,/<WhitelistRankResults domains=\{domains\}/);});
 check("rank has hierarchy and readable metrics",()=>{for(const t of ["SEARCH VISIBILITY / REPORT","Keyword groups","Tracked domains","Domains ranked","Flagged results","Keyword reports"])assert.ok(rank.includes(t));});
 check("rank filter is accessible",()=>{assert.match(rank,/type="search"/);assert.match(rank,/aria-pressed=\{attentionOnly\}/);assert.match(rank,/visible\.map\(group/);});
 check("create and edit preserved",()=>{for(const t of ["onAdd","onSaveEdit","onStartEdit","onCancelEdit","onRankFormChange","onEditChange"])assert.ok(rank.includes(t));});

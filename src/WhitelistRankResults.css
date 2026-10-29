@@ -1,0 +1,14 @@
+.whitelistSerp{width:100%;max-width:100%;min-width:0;margin:16px 0;color:#e6ebf2;font-size:12px}
+.whitelistSerp .whitelistSerpScroll{max-width:100%;overflow-x:auto;overscroll-behavior-x:contain}
+.whitelistSerp .whitelistSerpScroll:focus-visible{outline:2px solid #f97316;outline-offset:2px}
+.whitelistSerp table.whitelistSerpTable{width:100%;min-width:680px;table-layout:auto;border-collapse:collapse;background:transparent;margin:0}
+.whitelistSerpTable caption{text-align:left;padding:0 0 12px;font-weight:650;color:#c9d3df}
+.whitelistSerp .whitelistSerpTable th,.whitelistSerp .whitelistSerpTable td{padding:13px 12px;border:0;border-bottom:1px solid #ffffff12;vertical-align:middle;text-align:left;white-space:normal;overflow-wrap:anywhere;background:transparent;color:#dce3ed;font-size:12px}
+.whitelistSerp .whitelistSerpTable thead th{font-size:10px;letter-spacing:.04em;font-weight:600;color:#93a1b4;text-transform:uppercase}
+.whitelistSerp .whitelistSerpTable tbody th{text-transform:none;letter-spacing:0;font-weight:650;min-width:175px}
+.whitelistSerp .whitelistSerpTable td.whitelistSerpNumber{color:#fb923c;font-size:18px;font-weight:700;white-space:nowrap}
+.whitelistSerp .whitelistSerpStatus{color:#a5b1c2;line-height:1.5}
+.whitelistSerp .whitelistSerpStatus.found{color:#86d6a6}
+.whitelistSerp .whitelistSerpTable time{color:#a5b1c2;font-size:11px}
+.whitelistSerp p.whitelistSerpNote{font-size:11px;color:#93a1b4;line-height:1.65;margin:10px 0 0}
+@media(max-width:700px){.whitelistSerp .whitelistSerpTable th,.whitelistSerp .whitelistSerpTable td{padding:11px 10px}.whitelistSerp .whitelistSerpTable tbody th{min-width:150px}}
