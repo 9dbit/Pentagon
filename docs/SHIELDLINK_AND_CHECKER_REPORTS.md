@@ -49,6 +49,17 @@ Redirects are 302 with `no-store` and `no-referrer`. GET increments one aggregat
 counter; HEAD does not. The feature stores no per-visitor IP/identity, although
 infrastructure access logs remain separate and this is not an anonymity service.
 
+The merchant sees a reason and network/registry timestamps for every configured
+destination, plus readiness beside available project domains. An active create
+or activation without an eligible destination returns 422 `NO_READY_DESTINATION`
+and does not write changes. Explicit `is_active: false` creates a draft so the
+merchant can configure fallback stock before activation. Existing active links
+that lose all eligible destinations remain unavailable until evidence recovers
+or the merchant configures an eligible destination; monitoring is never bypassed.
+Paused, missing, unavailable and service-error public responses use separate
+responsive status pages with no destination/tenant/registry details. Retry links
+contain only the validated slug, no visitor query parameters, scripts or trackers.
+
 Schema: `server/shieldLinkSchema.sql`. Additive and idempotent; RLS enabled on
 both new tables, with no anon/authenticated/Public grants. All operations flow
 through the guarded backend. Apply before deploying new writers. Rollback code

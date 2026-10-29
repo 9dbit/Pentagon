@@ -61,15 +61,30 @@ async function main(){try{
     assert.equal(e.domains[1].node_results[keyFor(1)].attribution,'provider_history');
   });
   let link,other;
-  await test('Merchant creates a stable shortlink for only its own active project domain',async()=>{
-    const r=await req('/api/merchant/shield-link',{method:'POST',body:{label:'Fixture',project_name:'A',primary_url:'https://primary.example/main'}});
+  await test('Unready links require an explicit draft; active creation reports the reason without inserting',async()=>{
+    const rejected=await req('/api/merchant/shield-link',{method:'POST',body:{project_name:'A',primary_url:'https://primary.example/main'}});
+    assert.equal(rejected.status,422);assert.equal(rejected.data.error,'NO_READY_DESTINATION');assert.equal(rejected.data.destinations[0].code,'registry_listed');
+    assert.equal((await db.query('SELECT COUNT(*)::int n FROM shield_links')).rows[0].n,0);
+    const r=await req('/api/merchant/shield-link',{method:'POST',body:{label:'Fixture',project_name:'A',primary_url:'https://primary.example/main',is_active:false}});
     assert.equal(r.status,201);link=r.data;assert.match(link.shortlink,/^https:\/\/pentagon\.quest\/s\//);
+    assert.equal(link.is_active,false);
+    const activation=await req('/api/merchant/shield-link/'+link.id,{method:'PATCH',body:{is_active:true}});assert.equal(activation.status,422);
+    assert.equal((await db.query('SELECT is_active FROM shield_links WHERE id=$1',[link.id])).rows[0].is_active,false);
     const f=await req('/api/merchant/shield-link',{method:'POST',body:{project_name:'B',primary_url:'https://foreign.example'}});assert.equal(f.status,400);
-    other=(await req('/api/merchant/shield-link',{who:'b',method:'POST',body:{project_name:'B',primary_url:'https://foreign.example'}})).data;
+    other=(await req('/api/merchant/shield-link',{who:'b',method:'POST',body:{project_name:'B',primary_url:'https://foreign.example',is_active:false}})).data;
     assert.ok(other.id);
+  });
+  await test('Healthy primary can be created active and invalid activation types are rejected',async()=>{
+    const r=await req('/api/merchant/shield-link',{method:'POST',body:{project_name:'A',primary_url:'https://first.example'}});
+    assert.equal(r.status,201);assert.equal(r.data.is_active,true);
+    assert.equal((await req('/s/'+r.data.slug,{method:'HEAD',who:'anon'})).status,302);
+    await req('/api/merchant/shield-link/'+r.data.id,{method:'DELETE'});
+    assert.equal((await req('/api/merchant/shield-link',{method:'POST',body:{project_name:'A',primary_url:'https://first.example',is_active:'false'}})).status,400);
   });
   await test('Foreign links cannot be read, edited, deleted, reordered or extended',async()=>{
     const r=await req('/api/merchant/shield-link?tenant=merchant_b');assert.equal(r.data.links.length,1);assert.equal(r.data.links[0].id,link.id);
+    assert.equal(r.data.links[0].destinations[0].code,'registry_listed');assert.ok(r.data.links[0].destinations[0].registry_checked_at);
+    assert.ok(!JSON.stringify(r.data).includes('foreign.example'));assert.equal(r.data.project_domains[0].readiness.code,'ready');
     for(const [suffix,method,body] of [['','PATCH',{label:'intrusion'}],['','DELETE',null],['/domains','POST',{domain_url:'https://first.example'}],['/order','PUT',{ids:[]}]])
       assert.equal((await req('/api/merchant/shield-link/'+other.id+suffix,{method,body})).status,404);
     assert.equal((await req('/api/merchant/shield-link/'+link.id,{method:'PATCH',body:{label:'x'},origin:'https://evil.example'})).status,403);
@@ -77,7 +92,9 @@ async function main(){try{
   });
   await test('Fallback order selects only fresh eligible owned destinations, with non-caching public redirect and exact count',async()=>{
     for(const domain of ['first.example','second.example'])assert.equal((await req('/api/merchant/shield-link/'+link.id+'/domains',{method:'POST',body:{domain_url:'https://'+domain+'/landing'}})).status,201);
+    assert.equal((await req('/api/merchant/shield-link/'+link.id,{method:'PATCH',body:{is_active:true}})).status,200);
     const listing=(await req('/api/merchant/shield-link')).data.links[0];assert.equal(listing.target.reason,'fallback');
+    assert.deepEqual(listing.destinations.map(d=>d.code),['registry_listed','ready','ready']);
     assert.equal(listing.target.url,'https://first.example/landing');
     const ids=listing.domains.map(d=>d.id).reverse();assert.equal((await req('/api/merchant/shield-link/'+link.id+'/order',{method:'PUT',body:{ids}})).status,200);
     let r=await req('/s/'+link.slug+'?url=https://foreign.example',{who:'anon',method:'HEAD'});assert.equal(r.status,302);assert.equal(r.headers.get('location'),'https://second.example/landing');
@@ -87,15 +104,22 @@ async function main(){try{
     await db.query("UPDATE domains SET last_checked_at=NOW()-INTERVAL '2 days' WHERE domain='second.example'");
     assert.equal((await req('/s/'+link.slug,{who:'anon'})).headers.get('location'),'https://first.example/landing');
     await db.query("UPDATE domains SET is_active=FALSE WHERE domain='first.example'");
-    assert.equal((await req('/s/'+link.slug,{who:'anon'})).status,503);
+    r=await req('/s/'+link.slug+'?url=https://evil.example',{who:'anon'});assert.equal(r.status,503);
+    assert.match(r.headers.get('content-type'),/text\/html/);assert.match(r.data,/<h1>Tujuan belum tersedia<\/h1>/);
+    assert.match(r.data,new RegExp('href="/s/'+link.slug+'"'));assert.equal(r.headers.get('retry-after'),'60');
+    assert.match(r.headers.get('content-security-policy'),/default-src 'none'/);
+    assert.doesNotMatch(r.data,/primary\.example|merchant_a|evil\.example|Trust Positif|<script/i);
+    const before=Number((await db.query('SELECT redirect_count FROM shield_links WHERE id=$1',[link.id])).rows[0].redirect_count);
+    assert.equal((await req('/s/'+link.slug,{who:'anon',method:'HEAD'})).data,'');
+    assert.equal(Number((await db.query('SELECT redirect_count FROM shield_links WHERE id=$1',[link.id])).rows[0].redirect_count),before);
   });
   await test('Primary recovery, pause, deletion and no-destination response preserve failover integrity',async()=>{
     await db.query("UPDATE trustpositif_domain_monitor SET registry_listed=FALSE WHERE tenant='merchant_a'");
     assert.equal((await req('/s/'+link.slug,{who:'anon'})).headers.get('location'),'https://primary.example/main');
     await req('/api/merchant/shield-link/'+link.id,{method:'PATCH',body:{is_active:false}});
-    assert.equal((await req('/s/'+link.slug,{who:'anon'})).status,503);
+    const paused=await req('/s/'+link.slug,{who:'anon'});assert.equal(paused.status,503);assert.match(paused.data,/<h1>Link sedang dijeda<\/h1>/);
     assert.equal((await req('/api/merchant/shield-link/'+link.id,{method:'DELETE'})).status,200);
-    assert.equal((await req('/s/'+link.slug,{who:'anon'})).status,404);
+    const missing=await req('/s/'+link.slug,{who:'anon'});assert.equal(missing.status,404);assert.match(missing.data,/<h1>Link tidak ditemukan<\/h1>/);
     assert.equal((await db.query('SELECT COUNT(*)::int n FROM shield_link_domains WHERE link_id=$1',[link.id])).rows[0].n,0);
     const rls=await db.query("SELECT relrowsecurity FROM pg_class c JOIN pg_namespace n ON n.oid=c.relnamespace WHERE n.nspname='pentagon_shield_ci' AND c.relname IN ('shield_links','shield_link_domains')");
     assert.equal(rls.rows.length,2);assert.ok(rls.rows.every(r=>r.relrowsecurity));
