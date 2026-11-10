@@ -6,6 +6,8 @@ import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Intent;
+import android.net.ConnectivityManager;
+import android.net.Network;
 import android.os.Build;
 import android.os.IBinder;
 import org.json.JSONObject;
@@ -13,19 +15,28 @@ import org.json.JSONObject;
 public class NodeService extends Service {
     private volatile boolean running = false;
     private Thread worker;
+    private final Object loopSignal = new Object();
+    private boolean reconnectRequested;
+    private ConnectivityManager connectivity;
+    private ConnectivityManager.NetworkCallback networkCallback;
+    private Network defaultNetwork;
+    private boolean networkObserved;
     private static final long TASK_LIMIT_MS = 40000L;
     private final SingleFlight<JSONObject> checks = new SingleFlight<>(android.os.SystemClock::elapsedRealtime,TASK_LIMIT_MS);
     static final String CHANNEL = "domain_radar_node";
+    static final String ACTION_RECONNECT = "id.domainradar.node.RECONNECT";
 
     @Override public void onCreate() {
         super.onCreate();
         createChannel();
         NodeDiagnostics.running(true);
+        watchDefaultNetwork();
     }
 
     @Override public int onStartCommand(Intent intent, int flags, int startId) {
         Prefs.putBool(this, "enabled", true);
         startForeground(88, notification("Starting " + Prefs.nodeName(this)));
+        if (intent != null && ACTION_RECONNECT.equals(intent.getAction())) requestReconnect(false);
         startLoop();
         return START_STICKY;
     }
@@ -35,21 +46,75 @@ public class NodeService extends Service {
         running = true;
         worker = new Thread(() -> {
             while (running) {
-                try { pollOnce(); }
+                try {
+                    boolean reconnect;
+                    synchronized (loopSignal) {
+                        reconnect = reconnectRequested;
+                        reconnectRequested = false;
+                    }
+                    if (reconnect) {
+                        // Run only between bounded API attempts. Do not cancel a
+                        // claimed task, discard its result, or spawn another loop.
+                        ApiClient.reconnect();
+                        NodeDiagnostics.event("TRANSPORT_RESET", 0);
+                        log("Reconnecting; waiting for server acknowledgement");
+                        updateNotification("Reconnecting; waiting server ACK");
+                    }
+                    pollOnce();
+                }
                 catch (Exception e) {
+                    if (!running) break;
                     NodeDiagnostics.pollError(e);
                     String reason = NodeDiagnostics.code(e);
                     Prefs.put(this, "last_poll_error", reason.substring(0, Math.min(220, reason.length())));
+                    Prefs.put(this, "last_poll_error_phase", ApiClient.failurePhase(e));
+                    Prefs.put(this, "last_poll_error_endpoint", ApiClient.endpointLabel(this));
                     Prefs.put(this, "last_poll_error_at", String.valueOf(System.currentTimeMillis()));
-                    log("Poll error: " + reason);
+                    log("Poll error: " + reason + " / " + ApiClient.failurePhase(e) + " / " + ApiClient.endpointLabel(this));
                 }
-                try { Thread.sleep(Prefs.pollMs(this)); } catch (InterruptedException ignored) { if(!running)break; }
+                synchronized (loopSignal) {
+                    try {
+                        if (running && !reconnectRequested) loopSignal.wait(Prefs.pollMs(this));
+                    } catch (InterruptedException ignored) { if (!running) break; }
+                }
             }
         }, "PentagonNodeLoop");
         worker.start();
     }
 
+    private void requestReconnect(boolean networkChanged) {
+        synchronized (loopSignal) {
+            reconnectRequested = true;
+            loopSignal.notifyAll();
+        }
+        NodeDiagnostics.event(networkChanged ? "NETWORK_CHANGE" : "RECONNECT_REQUESTED", 0);
+    }
+
+    private void watchDefaultNetwork() {
+        connectivity = (ConnectivityManager)getSystemService(CONNECTIVITY_SERVICE);
+        if (connectivity == null) return;
+        networkCallback = new ConnectivityManager.NetworkCallback() {
+            @Override public void onAvailable(Network network) {
+                boolean changed;
+                synchronized (loopSignal) {
+                    changed = networkObserved && !network.equals(defaultNetwork);
+                    defaultNetwork = network;
+                    networkObserved = true;
+                }
+                if (changed && running) requestReconnect(true);
+            }
+            @Override public void onLost(Network network) {
+                synchronized (loopSignal) {
+                    if (network.equals(defaultNetwork)) defaultNetwork = null;
+                }
+            }
+        };
+        try { connectivity.registerDefaultNetworkCallback(networkCallback); }
+        catch (RuntimeException ignored) { networkCallback = null; }
+    }
+
     private void pollOnce() throws Exception {
+        ApiClient.beginPoll(this);
         checks.tick();
         AutoProvisioner.Result provisioned = checks.busy() ? null : AutoProvisioner.ensure(this);
         if (provisioned != null && provisioned.changed) {
@@ -89,7 +154,9 @@ public class NodeService extends Service {
         // NOT merely that the Android service is enabled.
         Prefs.put(this, "last_poll_ok_ms", String.valueOf(System.currentTimeMillis()));
         Prefs.putBool(this, "last_poll_network_ok", networkOk);
+        Prefs.put(this, "last_poll_endpoint", ApiClient.endpointLabel(this));
         Prefs.put(this, "last_poll_error", "");
+        Prefs.put(this, "last_poll_error_phase", "none");
         Prefs.put(this, "last_poll_error_at", "");
         checks.tick();
         submitPending();
@@ -199,6 +266,10 @@ public class NodeService extends Service {
 
     @Override public void onDestroy() {
         running = false;
+        synchronized (loopSignal) { loopSignal.notifyAll(); }
+        if (connectivity != null && networkCallback != null) {
+            try { connectivity.unregisterNetworkCallback(networkCallback); } catch (RuntimeException ignored) {}
+        }
         NodeDiagnostics.running(false);
         checks.close();
         ApiClient.cancelAll();

@@ -1,30 +1,61 @@
 package id.domainradar.node;
 
 import android.content.Context;
+import org.json.JSONException;
 import org.json.JSONObject;
-import okhttp3.MediaType;
-import okhttp3.OkHttpClient;
-import okhttp3.Request;
-import okhttp3.RequestBody;
-import okhttp3.Response;
-import java.io.IOException;
-import java.util.concurrent.TimeUnit;
 
 class ApiClient {
-    private static final OkHttpClient CLIENT=new OkHttpClient.Builder()
-            .connectTimeout(10,TimeUnit.SECONDS).readTimeout(12,TimeUnit.SECONDS)
-            .writeTimeout(10,TimeUnit.SECONDS).callTimeout(15,TimeUnit.SECONDS)
-            .followRedirects(false).followSslRedirects(false).retryOnConnectionFailure(false).build();
+    private static final EndpointRecovery RECOVERY = new EndpointRecovery();
+    private static final ApiTransport TRANSPORT = new ApiTransport();
+    private static String previousPollOrigin;
+
+    static void beginPoll(Context context) {
+        EndpointRecovery.Attempt route = RECOVERY.beginPoll(Prefs.central(context));
+        if (previousPollOrigin != null && !previousPollOrigin.equals(route.origin)) {
+            TRANSPORT.reconnect();
+            NodeDiagnostics.event("ENDPOINT_SWITCH", 0);
+        }
+        previousPollOrigin = route.origin;
+    }
+
     static JSONObject post(Context c,String path,JSONObject body) throws Exception {
-        Request request=new Request.Builder().url(Prefs.central(c)+path)
-                .header("User-Agent","PentagonProviderNode/"+BuildConfig.VERSION_NAME)
-                .post(RequestBody.create(body.toString(),MediaType.get("application/json; charset=utf-8"))).build();
-        try(Response response=CLIENT.newCall(request).execute()) {
-            if(!response.isSuccessful())throw new IOException("HTTP_"+response.code());
-            if(response.body()==null)throw new IOException("ACK_REJECTED");
-            if(response.body().source().request(65537))throw new IOException("ACK_REJECTED");
-            return new JSONObject(response.body().string());
+        EndpointRecovery.Attempt route = RECOVERY.current(Prefs.central(c));
+        try {
+            String text = TRANSPORT.post(route, path, body.toString(),
+                    "PentagonProviderNode/" + BuildConfig.VERSION_NAME);
+            JSONObject response;
+            try { response = new JSONObject(text); }
+            catch (JSONException error) { throw ApiTransport.acknowledgement(route, "read"); }
+            boolean accepted = response.optBoolean("ok", false)
+                    || ("/api/agent/result".equals(path) && response.optBoolean("ignored", false));
+            if (!accepted) throw ApiTransport.acknowledgement(route, "read");
+            RECOVERY.succeeded(route);
+            return response;
+        } catch (ApiTransport.Failure failure) {
+            RECOVERY.failed(route, failure.kind);
+            throw failure;
         }
     }
-    static void cancelAll() { CLIENT.dispatcher().cancelAll(); }
+
+    static void reconnect() {
+        RECOVERY.reconnect();
+        TRANSPORT.reconnect();
+    }
+
+    static String endpointLabel(Context context) {
+        return RECOVERY.current(Prefs.central(context)).label;
+    }
+
+    static String failureCode(Exception error) {
+        return error instanceof ApiTransport.Failure ? ((ApiTransport.Failure) error).code : null;
+    }
+
+    static String failurePhase(Exception error) {
+        return error instanceof ApiTransport.Failure ? ((ApiTransport.Failure) error).phase : "none";
+    }
+
+    static void cancelAll() {
+        RECOVERY.reconnect();
+        TRANSPORT.cancelAll();
+    }
 }

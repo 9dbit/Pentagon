@@ -3,7 +3,9 @@
 // SIM identifiers or exception messages in the diagnostic projection.
 const PHASES = new Set(["idle", "claimed", "dns", "http", "result", "timeout", "cancelling", "error"]);
 const CODES = new Set(["NONE", "IO", "DNS", "TLS", "TIMEOUT", "CANCELLED", "AUTH", "HTTP", "ACK", "UNKNOWN"]);
-const EVENTS = new Set(["SERVICE_START", "SERVICE_STOP", "POLL_ERROR", "POLL_RECOVERED", "TASK_START", "DNS_DONE", "HTTP_DONE", "TASK_TIMEOUT", "TASK_ERROR", "RESULT_ACCEPTED", "RESULT_IGNORED", "RESULT_ERROR"]);
+const CONTROL_PHASES = new Set(["none", "unknown", "dns", "connect", "tls", "write", "response", "read"]);
+const CONTROL_ENDPOINTS = new Set(["railway", "pentagon", "configured"]);
+const EVENTS = new Set(["SERVICE_START", "SERVICE_STOP", "POLL_ERROR", "POLL_RECOVERED", "TASK_START", "DNS_DONE", "HTTP_DONE", "TASK_TIMEOUT", "TASK_ERROR", "RESULT_ACCEPTED", "RESULT_IGNORED", "RESULT_ERROR", "RECONNECT_REQUESTED", "TRANSPORT_RESET", "NETWORK_CHANGE", "ENDPOINT_SWITCH"]);
 function normalizeDiagnostics(raw) {
   if (!raw || typeof raw !== "object" || Array.isArray(raw) || raw.schema_version !== 1) return null;
   const out = { schema_version: 1 };
@@ -14,6 +16,8 @@ function normalizeDiagnostics(raw) {
   for (const key of ["service_running", "task_busy", "device_idle", "interactive", "power_save", "battery_optimization_exempt"]) out[key] = typeof raw[key] === "boolean" ? raw[key] : null;
   out.task_phase = PHASES.has(raw.task_phase) ? raw.task_phase : "idle";
   out.last_error_code = CODES.has(raw.last_error_code) ? raw.last_error_code : "UNKNOWN";
+  out.last_error_phase = CONTROL_PHASES.has(raw.last_error_phase) ? raw.last_error_phase : "unknown";
+  out.control_endpoint = CONTROL_ENDPOINTS.has(raw.control_endpoint) ? raw.control_endpoint : "unknown";
   out.last_result_state = ["none", "accepted", "ignored", "error"].includes(raw.last_result_state) ? raw.last_result_state : "none";
   out.events = (Array.isArray(raw.events) ? raw.events : []).slice(-20).filter(e => e && EVENTS.has(e.event)).map(e => ({
     event: e.event,
