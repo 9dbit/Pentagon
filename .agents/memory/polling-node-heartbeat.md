@@ -19,3 +19,11 @@ DDL out of warm agent poll/result paths: repeated trans-Pacific DB round trips
 were adding 12–16 seconds per poll. This does not cache authentication, node
 activity, telemetry, network validation or task claims; those run per request.
 Regression: `node --test scripts/test-pentagon-poll-schema-setup.cjs`.
+
+APK 1.7.8 keeps the configured central preference/identity intact and selects
+only the two fixed production HTTPS control endpoints in memory. Endpoint
+switches and manual/network reconnects apply at the next existing poll-loop
+boundary, never by replaying a POST or replacing the SingleFlight task/result.
+Custom endpoints remain isolated. Auth, HTTP, invalid ACK and TLS certificate
+failures cannot trigger fallback. Success requires a real protocol ACK; retry
+or pool reset alone never changes the heartbeat timestamp.

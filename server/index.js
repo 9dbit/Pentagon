@@ -17,6 +17,7 @@ const projectTelegramRoutes = require("./projectTelegramRoutes");
 const trustpositifRoutes = require("./trustpositifRoutes");
 const { router: nodeRoutes } = require("./nodeRoutes");
 const { router: agentPollRoutes } = require("./agentPollRoutes");
+const { createCloudReleaseHandlers } = require("./providerNodeRelease");
 const { getActiveNodes, checkViaNode } = require("./nodeChecker");
 const { loadSettings } = require("./settingsStore");
 const { sendTelegram, answerCallbackQuery, editMessageReplyMarkup } = require("./telegram");
@@ -102,24 +103,9 @@ app.get("/api/provider-node/releases/latest", async (req, res) => {
     return res.status(500).json({ error: err.message || "Release lookup failed" });
   }
 });
-app.get("/api/provider-node/releases/cloud/latest", async (req, res) => {
-  try {
-    res.set("Cache-Control", "no-store, no-cache, must-revalidate, max-age=0");
-    res.set("Pragma", "no-cache");
-    res.set("Expires", "0");
-    const base = String(process.env.PROVIDER_NODE_CLOUD_RELEASE_URL || "").replace(/\/+$/, "");
-    if (!base) return res.status(503).json({ error: "Cloud provider node release channel is not configured" });
-    const response = await axios.get(`${base}/latest.json?t=${Date.now()}`, {
-      timeout: 12000,
-      headers: { "Cache-Control": "no-cache", "Pragma": "no-cache", "User-Agent": "PentagonReleaseProxy/1.0" },
-      validateStatus: (status) => status >= 200 && status < 500
-    });
-    if (response.status !== 200) return res.status(502).json({ error: "Release service unavailable", upstream_status: response.status });
-    return res.json(response.data);
-  } catch (err) {
-    return res.status(502).json({ error: err.message || "Cloud release lookup failed" });
-  }
-});
+const cloudNodeRelease = createCloudReleaseHandlers();
+app.get("/api/provider-node/releases/cloud/latest", cloudNodeRelease.latest);
+app.get("/api/provider-node/releases/cloud/apk", cloudNodeRelease.apk);
 app.get("/api/scan-cycle-health", requireAdmin, (req, res) => { res.json(getScanCycleHealth()); });
 app.get("/api/auth/me", (req, res) => {
   res.set("Cache-Control", "private, no-store");

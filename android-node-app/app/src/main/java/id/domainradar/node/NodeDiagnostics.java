@@ -10,7 +10,7 @@ import java.util.ArrayDeque;
 
 final class NodeDiagnostics {
     private static final ArrayDeque<JSONObject> events=new ArrayDeque<>();
-    private static String phase="idle", error="NONE", result="none";
+    private static String phase="idle", error="NONE", result="none", errorPhase="none";
     private static long lastPollStart, pollGap, pollDuration, lastAck, dnsMs, httpMs;
     private static boolean running;
     private NodeDiagnostics() {}
@@ -26,9 +26,9 @@ final class NodeDiagnostics {
     static synchronized void pollAck() {
         pollDuration=SystemClock.elapsedRealtime()-lastPollStart; lastAck=SystemClock.elapsedRealtime();
         if(!"NONE".equals(error))event("POLL_RECOVERED",pollDuration);
-        error="NONE";
+        error="NONE"; errorPhase="none";
     }
-    static synchronized void pollError(Exception e) { error=code(e); event("POLL_ERROR",SystemClock.elapsedRealtime()-lastPollStart); }
+    static synchronized void pollError(Exception e) { error=code(e); errorPhase=ApiClient.failurePhase(e); event("POLL_ERROR",SystemClock.elapsedRealtime()-lastPollStart); }
     static synchronized void result(String value) { result=value; event("accepted".equals(value)?"RESULT_ACCEPTED":"ignored".equals(value)?"RESULT_IGNORED":"RESULT_ERROR",0); }
     static synchronized void event(String name,long duration) {
         try {
@@ -37,6 +37,8 @@ final class NodeDiagnostics {
         } catch(Exception ignored) {}
     }
     static String code(Exception e) {
+        String controlCode=ApiClient.failureCode(e);
+        if(controlCode!=null)return controlCode;
         if(e instanceof javax.net.ssl.SSLException)return "TLS";
         if(e instanceof java.net.UnknownHostException)return "DNS";
         if(e instanceof java.net.SocketTimeoutException || e instanceof java.util.concurrent.TimeoutException)return "TIMEOUT";
@@ -57,6 +59,7 @@ final class NodeDiagnostics {
             o.put("service_running",running); o.put("task_busy",busy); o.put("task_phase",phase);
             o.put("task_elapsed_ms",elapsed); o.put("dns_ms",dnsMs); o.put("http_ms",httpMs);
             o.put("last_error_code",error); o.put("last_result_state",result);
+            o.put("last_error_phase",errorPhase); o.put("control_endpoint",ApiClient.endpointLabel(c));
             PowerManager pm=(PowerManager)c.getSystemService(Context.POWER_SERVICE);
             if(pm!=null) {
                 o.put("device_idle",pm.isDeviceIdleMode()); o.put("interactive",pm.isInteractive());

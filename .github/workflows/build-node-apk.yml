@@ -6,6 +6,10 @@ on:
     paths:
       - 'android-node-app/**'
       - '.github/workflows/build-node-apk.yml'
+      - 'server/nodeDiagnostics.js'
+      - 'server/providerNodeRelease.js'
+      - 'scripts/test-pentagon-node-connection-diagnostics.cjs'
+      - 'scripts/test-pentagon-provider-node-release.cjs'
   push:
     paths:
       - 'android-node-app/**'
@@ -24,6 +28,9 @@ jobs:
         run: |
           node --check server/agentPollRoutes.js
           node --check server/trustpositifRoutes.js
+          node --test scripts/test-pentagon-node-connection-diagnostics.cjs
+          node --test scripts/test-pentagon-provider-node-release.cjs
+          node scripts/test-pentagon-android-heartbeat-recovery.cjs
 
       - name: Set up JDK
         uses: actions/setup-java@v4
@@ -49,5 +56,5 @@ jobs:
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: PentagonNode-v1.7.7-ci-debug-apk
+          name: PentagonNode-v1.7.8-ci-debug-apk
           path: android-node-app/app/build/outputs/apk/debug/app-debug.apk

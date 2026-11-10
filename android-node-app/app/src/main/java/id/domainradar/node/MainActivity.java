@@ -234,7 +234,7 @@ public class MainActivity extends Activity {
         spacerInside(card, 12);
 
         TextView start = action("▶  Start / Retry", true, ORANGE);
-        start.setOnClickListener(v -> autoConfigureAndStart());
+        start.setOnClickListener(v -> retryConnection());
 
         TextView stop = action("■  Stop Node", false, RED);
         stop.setOnClickListener(v -> {
@@ -323,6 +323,43 @@ public class MainActivity extends Activity {
         else startService(s);
     }
 
+    private void retryConnection() {
+        if (provisioning) return;
+        if (Prefs.nodeName(this).isEmpty() || Prefs.secret(this).isEmpty()) {
+            autoConfigureAndStart();
+            return;
+        }
+        // A reconnect reuses the provisioned identity and the existing service
+        // loop, including any cellular check/result currently in progress.
+        lastSetupError = "";
+        Prefs.putBool(this, "enabled", true);
+        Intent intent = new Intent(this, NodeService.class).setAction(NodeService.ACTION_RECONNECT);
+        if (Build.VERSION.SDK_INT >= 26) startForegroundService(intent);
+        else startService(intent);
+        toast("Reconnecting after the current request; waiting for server ACK.");
+        refreshStatus();
+    }
+
+    private String connectionErrorText(String code) {
+        String phase = Prefs.get(this, "last_poll_error_phase", "unknown");
+        String endpoint = Prefs.get(this, "last_poll_error_endpoint", "railway");
+        String label = "pentagon".equals(endpoint) ? "Pentagon" : "configured".equals(endpoint) ? "Configured server" : "Railway";
+        String reason;
+        if ("TIMEOUT".equals(code)) {
+            reason = "connect".equals(phase) ? "Connection timed out"
+                    : "dns".equals(phase) ? "DNS lookup timed out"
+                    : "tls".equals(phase) ? "Secure connection timed out"
+                    : "response".equals(phase) || "read".equals(phase) ? "Server response timed out" : "Request timed out";
+        } else if ("DNS".equals(code)) reason = "DNS lookup failed";
+        else if ("TLS".equals(code)) reason = "Secure connection failed";
+        else if ("AUTH".equals(code)) reason = "Server rejected credentials";
+        else if ("HTTP".equals(code)) reason = "Server returned an error";
+        else if ("ACK".equals(code)) reason = "Server acknowledgement invalid";
+        else if ("IO".equals(code)) reason = "Network connection interrupted";
+        else reason = code;
+        return reason + " · " + label;
+    }
+
     private void refreshStatus() {
         if (statusTitle == null) return;
         try {
@@ -365,7 +402,7 @@ public class MainActivity extends Activity {
             } else if (enabled && !lastPollError.isEmpty()) {
                 statusDot.setTextColor(RED);
                 statusTitle.setText("Polling Error");
-                statusSubtitle.setText(lastPollError.substring(0, Math.min(140, lastPollError.length())));
+                statusSubtitle.setText(connectionErrorText(lastPollError));
                 servicePill.setText("Server Not Connected");
                 servicePill.setTextColor(RED);
                 servicePill.setBackground(roundRect(Color.rgb(46, 24, 28), RED, 1, 18));
